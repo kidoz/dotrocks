@@ -37,6 +37,16 @@ internal ref struct ProtocolReader
         return _buffer[_position++];
     }
 
+    public readonly byte PeekByte()
+    {
+        if (_position >= _buffer.Length)
+        {
+            throw new MalformedPacketException("Unexpected end of packet while reading a byte.");
+        }
+
+        return _buffer[_position];
+    }
+
     public ReadOnlySpan<byte> ReadBytes(int count)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(count);
