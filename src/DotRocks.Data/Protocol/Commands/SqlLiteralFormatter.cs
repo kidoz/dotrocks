@@ -22,6 +22,7 @@ internal static class SqlLiteralFormatter
             float floatValue => FormatSingle(floatValue),
             double doubleValue => FormatDouble(doubleValue),
             decimal decimalValue => decimalValue.ToString(CultureInfo.InvariantCulture),
+            DotRocksDecimal dotRocksDecimalValue => dotRocksDecimalValue.ToString(),
             string stringValue => FormatString(stringValue),
             DateTime dateTimeValue => FormatString(
                 dateTimeValue.ToString("yyyy-MM-dd HH:mm:ss.FFFFFF", CultureInfo.InvariantCulture)

@@ -1,5 +1,6 @@
 using System.Data;
 using System.Diagnostics.CodeAnalysis;
+using DotRocks.Data;
 using Microsoft.EntityFrameworkCore.Storage;
 
 namespace DotRocks.EntityFrameworkCore.Storage;
@@ -27,6 +28,7 @@ internal sealed class DotRocksTypeMappingSource(
         [typeof(float)] = new FloatTypeMapping("float", DbType.Single),
         [typeof(double)] = new DoubleTypeMapping("double", DbType.Double),
         [typeof(decimal)] = new DecimalTypeMapping("decimal", DbType.Decimal, null, null),
+        [typeof(DotRocksDecimal)] = new DotRocksDecimalTypeMapping(),
         [typeof(string)] = new StringTypeMapping(
             "varchar",
             DbType.String,
@@ -36,8 +38,7 @@ internal sealed class DotRocksTypeMappingSource(
         [typeof(DateTime)] = new DateTimeTypeMapping("datetime", DbType.DateTime),
         [typeof(DateOnly)] = new DateOnlyTypeMapping("date", DbType.Date),
         [typeof(TimeOnly)] = new TimeOnlyTypeMapping("time", DbType.Time),
-        [typeof(Guid)] = new GuidTypeMapping("char(36)", DbType.Guid),
-        [typeof(byte[])] = new ByteArrayTypeMapping("varbinary", DbType.Binary, size: null),
+        [typeof(Guid)] = new DotRocksGuidTypeMapping(),
     };
 
     private static readonly RelationalTypeMapping JsonStringMapping = new StringTypeMapping(
@@ -70,7 +71,6 @@ internal sealed class DotRocksTypeMappingSource(
         ["date"] = ClrMappings[typeof(DateOnly)],
         ["time"] = ClrMappings[typeof(TimeOnly)],
         ["json"] = JsonStringMapping,
-        ["varbinary"] = ClrMappings[typeof(byte[])],
     };
 
     protected override RelationalTypeMapping? FindMapping(in RelationalTypeMappingInfo mappingInfo)
@@ -89,6 +89,21 @@ internal sealed class DotRocksTypeMappingSource(
         }
 
         if (
+            (
+                mappingInfo.StoreTypeNameBase is not null
+                && string.Equals(
+                    mappingInfo.StoreTypeNameBase,
+                    "varbinary",
+                    StringComparison.OrdinalIgnoreCase
+                )
+            )
+            || mappingInfo.ClrType == typeof(byte[])
+        )
+        {
+            return null;
+        }
+
+        if (
             string.Equals(
                 mappingInfo.StoreTypeNameBase,
                 "decimal",
@@ -99,6 +114,17 @@ internal sealed class DotRocksTypeMappingSource(
             return FindDecimalMapping(mappingInfo);
         }
 
+        Type? clrType = mappingInfo.ClrType;
+        clrType = clrType is null ? null : Nullable.GetUnderlyingType(clrType) ?? clrType;
+        if (
+            clrType is not null
+            && clrType != typeof(string)
+            && ClrMappings.TryGetValue(clrType, out RelationalTypeMapping? clrMapping)
+        )
+        {
+            return clrMapping;
+        }
+
         if (
             mappingInfo.StoreTypeNameBase is { } storeType
             && StoreTypeMappings.TryGetValue(storeType, out RelationalTypeMapping? storeMapping)
@@ -107,27 +133,31 @@ internal sealed class DotRocksTypeMappingSource(
             return storeMapping;
         }
 
-        Type? clrType = mappingInfo.ClrType;
         if (clrType is null)
         {
             return null;
         }
 
-        clrType = Nullable.GetUnderlyingType(clrType) ?? clrType;
         return ClrMappings.TryGetValue(clrType, out RelationalTypeMapping? mapping)
             ? mapping
             : null;
     }
 
-    private static DecimalTypeMapping? FindDecimalMapping(in RelationalTypeMappingInfo mappingInfo)
+    private static RelationalTypeMapping FindDecimalMapping(
+        in RelationalTypeMappingInfo mappingInfo
+    )
     {
         int? precision = mappingInfo.Precision;
-        if (precision > MaxExactDecimalPrecision)
+        string storeType = mappingInfo.StoreTypeName ?? "decimal";
+        Type? mappingClrType = mappingInfo.ClrType;
+        Type? clrType = mappingClrType is null
+            ? null
+            : Nullable.GetUnderlyingType(mappingClrType) ?? mappingClrType;
+        if (clrType == typeof(DotRocksDecimal) || precision > MaxExactDecimalPrecision)
         {
-            return null;
+            return new DotRocksDecimalTypeMapping(storeType, precision, mappingInfo.Scale);
         }
 
-        string storeType = mappingInfo.StoreTypeName ?? "decimal";
         return new DecimalTypeMapping(storeType, DbType.Decimal, precision, mappingInfo.Scale);
     }
 }

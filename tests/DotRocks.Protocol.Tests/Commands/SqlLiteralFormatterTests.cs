@@ -1,3 +1,4 @@
+using DotRocks.Data;
 using DotRocks.Data.Protocol.Commands;
 using Xunit;
 
@@ -30,6 +31,19 @@ public sealed class SqlLiteralFormatterTests
     public void Format_UsesInvariantDecimalSeparator()
     {
         Assert.Equal("1234.56", SqlLiteralFormatter.Format(1234.56m));
+    }
+
+    [Fact]
+    public void Format_FormatsDotRocksDecimalLosslessly()
+    {
+        DotRocksDecimal value = DotRocksDecimal.Parse(
+            "12345678901234567890123456789012345678.9000"
+        );
+
+        Assert.Equal(
+            "12345678901234567890123456789012345678.9000",
+            SqlLiteralFormatter.Format(value)
+        );
     }
 
     [Fact]

@@ -239,6 +239,31 @@ public sealed class DotRocksDataReaderTests
     }
 
     [Fact]
+    public void GetFieldValue_ConvertsDateTimeStringAndGuidValues()
+    {
+        using var reader = new DotRocksDataReader(
+            QueryResult.FromRows(
+                [
+                    Column("date_value", (byte)ColumnType.Date),
+                    Column("time_value", (byte)ColumnType.VarChar),
+                    Column("guid_value", (byte)ColumnType.VarChar),
+                ],
+                [
+                    [new DateTime(2026, 6, 19), "13:14:15", "9f4f591e-3db2-4879-856c-1c54b4241b76"],
+                ]
+            )
+        );
+
+        Assert.True(reader.Read());
+        Assert.Equal(new DateOnly(2026, 6, 19), reader.GetFieldValue<DateOnly>(0));
+        Assert.Equal(new TimeOnly(13, 14, 15), reader.GetFieldValue<TimeOnly>(1));
+        Assert.Equal(
+            Guid.Parse("9f4f591e-3db2-4879-856c-1c54b4241b76"),
+            reader.GetFieldValue<Guid>(2)
+        );
+    }
+
+    [Fact]
     public void ActiveReader_BlocksConnectionUntilCompleted()
     {
         using var connection = new DotRocksConnection();

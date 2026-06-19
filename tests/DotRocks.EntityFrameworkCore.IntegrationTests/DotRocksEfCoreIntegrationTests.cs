@@ -1,6 +1,7 @@
 using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using DotRocks.Data;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -190,6 +191,74 @@ public sealed class DotRocksEfCoreIntegrationTests
         {
             await DropWidgetTableAsync(context).ConfigureAwait(true);
         }
+    }
+
+    [Fact]
+    public async Task FromSqlRaw_MaterializesHighPrecisionDecimalAsDotRocksDecimal()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        await using var context = CreateLiveContext();
+
+        DotRocksDecimalRow row = await context
+            .DecimalRows.FromSqlRaw(
+                "SELECT CAST('1234567890123456789012345678901234.9000' AS DECIMAL(38, 4)) AS value"
+            )
+            .SingleAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+
+        Assert.Equal(DotRocksDecimal.Parse("1234567890123456789012345678901234.9000"), row.Value);
+    }
+
+    [Fact]
+    public async Task FromSqlRaw_ProjectingHighPrecisionDecimalToDecimalThrowsPrecisionLoss()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        await using var context = CreateLiveContext();
+
+        await Assert.ThrowsAsync<DotRocksPrecisionLossException>(() =>
+            context
+                .DecimalOverflowRows.FromSqlRaw(
+                    "SELECT CAST('1234567890123456789012345678901234.9000' AS DECIMAL(38, 4)) AS value"
+                )
+                .SingleAsync(TestContext.Current.CancellationToken)
+        );
+    }
+
+    [Fact]
+    public async Task FromSqlRaw_MaterializesDateOnlyTimeOnlyGuidAndJson()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        await using var context = CreateLiveContext();
+
+        ExtraTypeRow row = await context
+            .ExtraTypeRows.FromSqlRaw(
+                """
+                SELECT
+                    CAST('2026-06-19' AS DATE) AS date_value,
+                    '13:14:15' AS time_value,
+                    '9f4f591e-3db2-4879-856c-1c54b4241b76' AS guid_value,
+                    CAST('{{"kind":"alpha","n":1}}' AS JSON) AS json_value
+                """
+            )
+            .SingleAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+
+        Assert.Equal(new DateOnly(2026, 6, 19), row.DateValue);
+        Assert.Equal(new TimeOnly(13, 14, 15), row.TimeValue);
+        Assert.Equal(Guid.Parse("9f4f591e-3db2-4879-856c-1c54b4241b76"), row.GuidValue);
+        Assert.Equal("""{"kind": "alpha", "n": 1}""", row.JsonValue);
     }
 
     [Fact]
@@ -459,6 +528,113 @@ public sealed class DotRocksEfCoreIntegrationTests
         }
     }
 
+    [Fact]
+    public async Task LinqCapturedParameters_UseAtPlaceholdersAndReturnExpectedRows()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        await using var context = CreateLiveContext();
+        await EnsureWidgetTableAsync(context).ConfigureAwait(true);
+
+        try
+        {
+            int id = 2;
+            string name = "two";
+            decimal amount = 23.45m;
+            int? optionalScore = 20;
+            bool active = false;
+            IQueryable<int> query = context
+                .Widgets.Where(widget =>
+                    widget.Id == EF.Parameter(id)
+                    && widget.Name == EF.Parameter(name)
+                    && widget.Amount == EF.Parameter(amount)
+                    && widget.OptionalScore == EF.Parameter(optionalScore)
+                    && widget.Active == EF.Parameter(active)
+                )
+                .Select(widget => widget.Id);
+
+            string sql = query.ToQueryString();
+            Assert.Contains("SELECT", sql, StringComparison.Ordinal);
+
+            int value = await query
+                .SingleAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+
+            Assert.Equal(2, value);
+        }
+        finally
+        {
+            await DropWidgetTableAsync(context).ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
+    public async Task LinqContainsStringPredicatesDescendingDistinctAndAggregates_Translate()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        await using var context = CreateLiveContext();
+        await EnsureWidgetTableAsync(context).ConfigureAwait(true);
+
+        try
+        {
+            int[] ids = [1, 3];
+            List<string> inNames = await context
+                .Widgets.Where(widget => ids.Contains(widget.Id))
+                .OrderByDescending(widget => widget.Id)
+                .Select(widget => widget.Name)
+                .ToListAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+            List<string> stringMatches = await context
+                .Widgets.Where(widget =>
+                    widget.Name.StartsWith("tw")
+                    || widget.Name.EndsWith("ne")
+                    || widget.Name.Contains("wo")
+                    || widget.Name.Contains("hr")
+                )
+                .OrderBy(widget => widget.Id)
+                .Select(widget => widget.Name)
+                .ToListAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+            List<int> categories = await context
+                .Widgets.Select(widget => widget.Category)
+                .Distinct()
+                .OrderBy(category => category)
+                .ToListAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+            int min = await context
+                .Widgets.MinAsync(widget => widget.Id, TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+            int max = await context
+                .Widgets.MaxAsync(widget => widget.Id, TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+            int sum = await context
+                .Widgets.SumAsync(widget => widget.Id, TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+            double average = await context
+                .Widgets.AverageAsync(widget => widget.Id, TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+
+            Assert.Equal(["three", "one"], inNames);
+            Assert.Equal(["one", "two", "three"], stringMatches);
+            Assert.Equal([1, 2], categories);
+            Assert.Equal(1, min);
+            Assert.Equal(3, max);
+            Assert.Equal(6, sum);
+            Assert.Equal(2.0d, average);
+        }
+        finally
+        {
+            await DropWidgetTableAsync(context).ConfigureAwait(true);
+        }
+    }
+
     private static DotRocksTestContext CreateLiveContext() =>
         CreateContext(IntegrationTestEnvironment.ConnectionString);
 
@@ -554,9 +730,47 @@ public sealed class DotRocksEfCoreIntegrationTests
 
         public DbSet<DotRocksWidget> Widgets => Set<DotRocksWidget>();
 
+        public DbSet<DotRocksDecimalRow> DecimalRows => Set<DotRocksDecimalRow>();
+
+        public DbSet<DecimalOverflowRow> DecimalOverflowRows => Set<DecimalOverflowRow>();
+
+        public DbSet<ExtraTypeRow> ExtraTypeRows => Set<ExtraTypeRow>();
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             modelBuilder.Entity<DotRocksRow>().HasNoKey();
+            modelBuilder.Entity<DotRocksDecimalRow>().HasNoKey();
+            modelBuilder
+                .Entity<DotRocksDecimalRow>()
+                .Property(row => row.Value)
+                .HasColumnName("value")
+                .HasColumnType("decimal(38, 4)");
+            modelBuilder.Entity<DecimalOverflowRow>().HasNoKey();
+            modelBuilder
+                .Entity<DecimalOverflowRow>()
+                .Property(row => row.Value)
+                .HasColumnName("value");
+            modelBuilder.Entity<ExtraTypeRow>().HasNoKey();
+            modelBuilder
+                .Entity<ExtraTypeRow>()
+                .Property(row => row.DateValue)
+                .HasColumnName("date_value")
+                .HasColumnType("date");
+            modelBuilder
+                .Entity<ExtraTypeRow>()
+                .Property(row => row.TimeValue)
+                .HasColumnName("time_value")
+                .HasColumnType("time");
+            modelBuilder
+                .Entity<ExtraTypeRow>()
+                .Property(row => row.GuidValue)
+                .HasColumnName("guid_value")
+                .HasColumnType("char(36)");
+            modelBuilder
+                .Entity<ExtraTypeRow>()
+                .Property(row => row.JsonValue)
+                .HasColumnName("json_value")
+                .HasColumnType("json");
             modelBuilder
                 .Entity<DotRocksWidget>()
                 .ToTable(WidgetTableName, LinqDatabaseName)
@@ -615,6 +829,42 @@ public sealed class DotRocksEfCoreIntegrationTests
         public decimal Amount { get; set; }
 
         public int? OptionalScore { get; set; }
+    }
+
+    [SuppressMessage(
+        "Performance",
+        "CA1812:Avoid uninstantiated internal classes",
+        Justification = "EF Core materializes this entity through query projection."
+    )]
+    private sealed class DotRocksDecimalRow
+    {
+        public DotRocksDecimal Value { get; set; }
+    }
+
+    [SuppressMessage(
+        "Performance",
+        "CA1812:Avoid uninstantiated internal classes",
+        Justification = "EF Core materializes this entity through query projection."
+    )]
+    private sealed class DecimalOverflowRow
+    {
+        public decimal Value { get; set; }
+    }
+
+    [SuppressMessage(
+        "Performance",
+        "CA1812:Avoid uninstantiated internal classes",
+        Justification = "EF Core materializes this entity through query projection."
+    )]
+    private sealed class ExtraTypeRow
+    {
+        public DateOnly DateValue { get; set; }
+
+        public TimeOnly TimeValue { get; set; }
+
+        public Guid GuidValue { get; set; }
+
+        public string JsonValue { get; set; } = string.Empty;
     }
 
     private sealed record WidgetProjection(int Id, string Name, decimal Amount);

@@ -72,12 +72,11 @@ await using DbConnection connection = await dataSource.OpenConnectionAsync();
 
 ## Entity Framework Core
 
-`DotRocks.EntityFrameworkCore` currently provides the first provider skeleton: `UseStarRocks`,
-provider service registration, and EF-managed relational connections. LINQ SQL translation,
-writes, and migrations are later Milestone 4/5 work.
+`DotRocks.EntityFrameworkCore` provides the current EF Core provider surface for
+StarRocks: `UseStarRocks`, EF-managed relational connections, raw SQL commands,
+`FromSqlRaw`, and a deliberately small LINQ query subset verified against StarRocks.
 
 ```csharp
-using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
 
 DbContextOptions<AppDbContext> options = new DbContextOptionsBuilder<AppDbContext>()
@@ -85,13 +84,54 @@ DbContextOptions<AppDbContext> options = new DbContextOptionsBuilder<AppDbContex
     .Options;
 
 await using var context = new AppDbContext(options);
-DbConnection connection = context.Database.GetDbConnection();
-await connection.OpenAsync();
 
-await using DbCommand command = connection.CreateCommand();
-command.CommandText = "SELECT 1";
-object? value = await command.ExecuteScalarAsync();
+int count = await context.Widgets
+    .Where(widget => widget.IsActive && widget.Name.StartsWith("prod"))
+    .CountAsync();
 ```
+
+Supported EF Core query surface:
+
+- `Database.ExecuteSqlRawAsync` for raw SQL commands.
+- `DbSet<TEntity>.FromSqlRaw("SELECT ...")` materialization.
+- LINQ `Where`, comparison operators, boolean `&&` / `||`, nullable comparisons.
+- `OrderBy`, `ThenBy`, `OrderByDescending`, `Skip`, `Take`, `Distinct`.
+- `Contains` over constant/parameter collections for `IN (...)`.
+- `StartsWith`, `EndsWith`, and `Contains` for strings using StarRocks `LIKE`.
+- `FirstOrDefaultAsync`, `SingleAsync`, `ToListAsync`, `CountAsync`, `AnyAsync`.
+- Aggregate basics: `Min`, `Max`, `Sum`, `Average`.
+- Projection into anonymous objects and simple DTOs.
+
+Unsupported EF Core behavior is explicit:
+
+- `SaveChanges`, `ExecuteUpdate`, and `ExecuteDelete`.
+- `EnsureCreated`, schema creation/deletion, and migrations.
+- joins, `Include`, navigation materialization, and `GroupBy`.
+- binary/varbinary mapping until StarRocks binary wire behavior is verified.
+- `LARGEINT` / `Int128` until the ADO.NET reader has a verified Int128 path.
+
+EF Core type mapping:
+
+| StarRocks type | EF CLR type |
+| --- | --- |
+| `BOOLEAN` | `bool` |
+| `TINYINT` | `sbyte` |
+| `SMALLINT` | `short` |
+| `INT`, `INTEGER`, `MEDIUMINT` | `int` |
+| `BIGINT` | `long` |
+| `FLOAT` | `float` |
+| `DOUBLE` | `double` |
+| `DECIMAL(p,s)` where `p <= 29` | `decimal` |
+| `DECIMAL(p,s)` where `p >= 30` | `DotRocksDecimal` |
+| `DATE` | `DateOnly` |
+| `DATETIME` | `DateTime` |
+| `TIME` | `TimeOnly` when the value is returned as a time string/span |
+| `CHAR(36)` | `Guid` |
+| `CHAR`, `VARCHAR`, `STRING`, `TEXT` | `string` |
+| `JSON` | raw `string` |
+
+Projecting high-precision StarRocks decimals to `decimal` can throw
+`DotRocksPrecisionLossException`; use `DotRocksDecimal` for lossless values.
 
 ## Stream Load
 

@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using DotRocks.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -44,13 +45,27 @@ public sealed class DotRocksTypeMappingTests
     }
 
     [Fact]
-    public void FindMapping_RejectsHighPrecisionDecimalUntilLosslessEfMappingExists()
+    public void FindMapping_MapsHighPrecisionDecimalToDotRocksDecimal()
     {
         IRelationalTypeMappingSource source = CreateMappingSource();
 
         RelationalTypeMapping? mapping = source.FindMapping("decimal(38, 18)");
 
-        Assert.Null(mapping);
+        Assert.NotNull(mapping);
+        Assert.Equal(typeof(DotRocksDecimal), mapping.ClrType);
+        Assert.Equal(38, mapping.Precision);
+        Assert.Equal(18, mapping.Scale);
+    }
+
+    [Fact]
+    public void FindMapping_MapsDotRocksDecimalClrType()
+    {
+        IRelationalTypeMappingSource source = CreateMappingSource();
+
+        RelationalTypeMapping? mapping = source.FindMapping(typeof(DotRocksDecimal));
+
+        Assert.NotNull(mapping);
+        Assert.Equal(typeof(DotRocksDecimal), mapping.ClrType);
     }
 
     [Fact]
@@ -60,6 +75,14 @@ public sealed class DotRocksTypeMappingTests
 
         Assert.Null(source.FindMapping("largeint"));
         Assert.Null(source.FindMapping(typeof(Int128)));
+    }
+
+    [Fact]
+    public void FindMapping_RejectsBinaryUntilStarRocksBinaryBehaviorIsVerified()
+    {
+        IRelationalTypeMappingSource source = CreateMappingSource();
+
+        Assert.Null(source.FindMapping("varbinary"));
     }
 
     private static IRelationalTypeMappingSource CreateMappingSource()

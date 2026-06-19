@@ -481,9 +481,38 @@ public sealed class DotRocksDataReader
             return GetString(ordinal);
         }
 
+        if (targetType == typeof(DateOnly))
+        {
+            return value switch
+            {
+                DateTime dateTime => DateOnly.FromDateTime(dateTime),
+                string text => DateOnly.Parse(text, CultureInfo.InvariantCulture),
+                _ => throw new InvalidCastException(
+                    "Column value cannot be converted to DateOnly."
+                ),
+            };
+        }
+
+        if (targetType == typeof(TimeOnly))
+        {
+            return value switch
+            {
+                TimeSpan timeSpan => TimeOnly.FromTimeSpan(timeSpan),
+                string text => TimeOnly.Parse(text, CultureInfo.InvariantCulture),
+                _ => throw new InvalidCastException(
+                    "Column value cannot be converted to TimeOnly."
+                ),
+            };
+        }
+
         if (targetType == typeof(DateTime))
         {
             return GetDateTime(ordinal);
+        }
+
+        if (targetType == typeof(Guid))
+        {
+            return GetGuid(ordinal);
         }
 
         if (targetType == typeof(bool))
