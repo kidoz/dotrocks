@@ -198,19 +198,51 @@ public sealed class DotRocksConnection : DbConnection
             throw new InvalidOperationException("The connection is not open.");
         }
 
-        byte[] payload = QueryCommandBuilder.Build(commandText);
-        var writer = new PacketWriter(_stream);
-        writer.ResetSequence();
-        await writer.WritePayloadAsync(payload, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            byte[] payload = QueryCommandBuilder.Build(commandText);
+            var writer = new PacketWriter(_stream);
+            writer.ResetSequence();
+            await writer.WritePayloadAsync(payload, cancellationToken).ConfigureAwait(false);
 
-        var reader = new PacketReader(_stream);
-        reader.ResetSequence(1);
-        byte[] firstPayload = await reader
-            .ReadPayloadAsync(cancellationToken)
-            .ConfigureAwait(false);
-        return await TextResultParser
-            .ReadAsync(firstPayload, reader, connectionId: null, cancellationToken)
-            .ConfigureAwait(false);
+            var reader = new PacketReader(_stream);
+            reader.ResetSequence(1);
+            byte[] firstPayload = await reader
+                .ReadPayloadAsync(cancellationToken)
+                .ConfigureAwait(false);
+            return await TextResultParser
+                .ReadAsync(firstPayload, reader, connectionId: null, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            CloseCore();
+            throw;
+        }
+        catch (IOException ex)
+        {
+            CloseCore();
+            throw new DotRocksException(
+                "I/O failed while executing the StarRocks command.",
+                serverErrorCode: null,
+                sqlState: null,
+                isTransient: true,
+                connectionId: null,
+                innerException: ex
+            );
+        }
+        catch (ObjectDisposedException ex)
+        {
+            CloseCore();
+            throw new DotRocksException(
+                "The StarRocks connection was closed while executing a command.",
+                serverErrorCode: null,
+                sqlState: null,
+                isTransient: true,
+                connectionId: null,
+                innerException: ex
+            );
+        }
     }
 
     /// <inheritdoc />

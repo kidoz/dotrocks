@@ -277,6 +277,91 @@ public sealed class ConnectionIntegrationTests
     }
 
     [Fact]
+    public async Task ExecuteScalarAsync_CommandTimeout_ClosesConnection()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
+        await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        using System.Data.Common.DbCommand command = connection.CreateCommand();
+        command.CommandText = "SELECT SLEEP(3)";
+        command.CommandTimeout = 1;
+
+        DotRocksException exception = await Assert
+            .ThrowsAsync<DotRocksException>(async () =>
+                await command
+                    .ExecuteScalarAsync(TestContext.Current.CancellationToken)
+                    .ConfigureAwait(true)
+            )
+            .ConfigureAwait(true);
+
+        Assert.Contains("timed out", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.True(exception.IsTransient);
+        Assert.Equal(ConnectionState.Closed, connection.State);
+    }
+
+    [Fact]
+    public async Task ExecuteScalarAsync_UserCancellation_ClosesConnection()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
+        await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        using System.Data.Common.DbCommand command = connection.CreateCommand();
+        command.CommandText = "SELECT SLEEP(3)";
+        command.CommandTimeout = 0;
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            TestContext.Current.CancellationToken
+        );
+        cancellation.CancelAfter(TimeSpan.FromMilliseconds(100));
+
+        await Assert
+            .ThrowsAsync<OperationCanceledException>(async () =>
+                await command.ExecuteScalarAsync(cancellation.Token).ConfigureAwait(true)
+            )
+            .ConfigureAwait(true);
+
+        Assert.Equal(ConnectionState.Closed, connection.State);
+    }
+
+    [Fact]
+    public async Task Cancel_ActiveCommand_ClosesConnection()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
+        await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        using System.Data.Common.DbCommand command = connection.CreateCommand();
+        command.CommandText = "SELECT SLEEP(3)";
+        command.CommandTimeout = 0;
+
+        Task<object?> execution = command.ExecuteScalarAsync(CancellationToken.None);
+        await Task.Delay(TimeSpan.FromMilliseconds(100), TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+        command.Cancel();
+
+        await Assert
+            .ThrowsAsync<OperationCanceledException>(async () =>
+                await execution.ConfigureAwait(true)
+            )
+            .ConfigureAwait(true);
+
+        Assert.Equal(ConnectionState.Closed, connection.State);
+    }
+
+    [Fact]
     public async Task BadSql_ThrowsDotRocksException()
     {
         if (!IntegrationTestEnvironment.IsEnabled)
