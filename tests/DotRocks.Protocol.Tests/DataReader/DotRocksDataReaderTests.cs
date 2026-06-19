@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Data.Common;
 using DotRocks.Data;
+using DotRocks.Data.Protocol.Framing;
 using DotRocks.Data.Protocol.Results;
 using Xunit;
 
@@ -203,6 +204,29 @@ public sealed class DotRocksDataReaderTests
 
         Assert.True(reader.Read());
         Assert.Throws<InvalidCastException>(() => reader.GetFieldValue<int>(0));
+    }
+
+    [Fact]
+    public void ActiveReader_BlocksConnectionUntilCompleted()
+    {
+        using var connection = new DotRocksConnection();
+        using var stream = new MemoryStream();
+        var rowReader = new TextResultRowReader(
+            new PacketReader(stream),
+            [Column("value", (byte)ColumnType.Long)],
+            connectionId: null
+        );
+        using var reader = new DotRocksDataReader(
+            StreamingQueryResult.FromRows(rowReader.Columns, rowReader),
+            connection
+        );
+
+        connection.SetActiveReader(reader);
+
+        Assert.Throws<InvalidOperationException>(connection.ValidateNoActiveReader);
+
+        connection.CompleteActiveReader(reader, reusable: true);
+        connection.ValidateNoActiveReader();
     }
 
     [Fact]

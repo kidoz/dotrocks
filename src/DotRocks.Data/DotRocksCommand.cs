@@ -155,12 +155,14 @@ public sealed class DotRocksCommand : DbCommand
     public override object? ExecuteScalar()
     {
         using DbDataReader reader = ExecuteDbDataReader(CommandBehavior.SingleResult);
-        if (!reader.Read() || reader.FieldCount == 0)
+        if (!reader.Read())
         {
             return null;
         }
 
-        object value = reader.GetValue(0);
+        object? value = reader.FieldCount == 0 ? null : reader.GetValue(0);
+        while (reader.Read()) { }
+
         return value == DBNull.Value ? null : value;
     }
 
@@ -187,15 +189,14 @@ public sealed class DotRocksCommand : DbCommand
                 cancellationToken
             )
             .ConfigureAwait(false);
-        if (
-            !await reader.ReadAsync(cancellationToken).ConfigureAwait(false)
-            || reader.FieldCount == 0
-        )
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
             return null;
         }
 
-        object value = reader.GetValue(0);
+        object? value = reader.FieldCount == 0 ? null : reader.GetValue(0);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) { }
+
         return value == DBNull.Value ? null : value;
     }
 
@@ -231,10 +232,16 @@ public sealed class DotRocksCommand : DbCommand
         SetActiveCommandCancellation(commandCancellation);
         try
         {
-            QueryResult result = await _connection
-                .ExecuteQueryAsync(commandText, linkedCancellation.Token)
+            StreamingQueryResult result = await _connection
+                .ExecuteStreamingQueryAsync(commandText, linkedCancellation.Token)
                 .ConfigureAwait(false);
-            return new DotRocksDataReader(result, _connection, behavior);
+            var reader = new DotRocksDataReader(result, _connection, behavior);
+            if (result.HasResultSet)
+            {
+                _connection.SetActiveReader(reader);
+            }
+
+            return reader;
         }
         catch (OperationCanceledException ex)
             when (IsCommandTimeout(timeoutCancellation, commandCancellation, cancellationToken))

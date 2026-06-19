@@ -173,6 +173,63 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
         }
     }
 
+    public async ValueTask<StreamingQueryResult> ExecuteQueryStreamingAsync(
+        string commandText,
+        CancellationToken cancellationToken
+    )
+    {
+        if (_isDisposed)
+        {
+            throw new InvalidOperationException("The physical StarRocks connection is closed.");
+        }
+
+        try
+        {
+            byte[] payload = QueryCommandBuilder.Build(commandText);
+            var writer = new PacketWriter(_stream);
+            writer.ResetSequence();
+            await writer.WritePayloadAsync(payload, cancellationToken).ConfigureAwait(false);
+
+            var reader = new PacketReader(_stream);
+            reader.ResetSequence(1);
+            byte[] firstPayload = await reader
+                .ReadPayloadAsync(cancellationToken)
+                .ConfigureAwait(false);
+            return await TextResultParser
+                .ReadStreamingAsync(firstPayload, reader, connectionId: null, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            MarkBroken();
+            throw;
+        }
+        catch (IOException ex)
+        {
+            MarkBroken();
+            throw new DotRocksException(
+                "I/O failed while executing the StarRocks command.",
+                serverErrorCode: null,
+                sqlState: null,
+                isTransient: true,
+                connectionId: null,
+                innerException: ex
+            );
+        }
+        catch (ObjectDisposedException ex)
+        {
+            MarkBroken();
+            throw new DotRocksException(
+                "The StarRocks connection was closed while executing a command.",
+                serverErrorCode: null,
+                sqlState: null,
+                isTransient: true,
+                connectionId: null,
+                innerException: ex
+            );
+        }
+    }
+
     public void MarkBroken() => _isBroken = true;
 
     public void Dispose()

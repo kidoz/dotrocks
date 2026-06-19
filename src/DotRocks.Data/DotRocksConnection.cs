@@ -14,6 +14,7 @@ public sealed class DotRocksConnection : DbConnection
 {
     private DotRocksConnectionOptions _options;
     private DotRocksConnectionPoolLease? _lease;
+    private DotRocksDataReader? _activeReader;
 
     [SuppressMessage(
         "Usage",
@@ -107,6 +108,13 @@ public sealed class DotRocksConnection : DbConnection
 
     private void CloseCore(bool reusable)
     {
+        if (_activeReader is not null)
+        {
+            _activeReader.MarkCompletedBecauseConnectionClosed();
+            _activeReader = null;
+            reusable = false;
+        }
+
         if (_activeTransaction is not null)
         {
             _activeTransaction.MarkCompletedBecauseConnectionClosed();
@@ -199,6 +207,8 @@ public sealed class DotRocksConnection : DbConnection
             throw new InvalidOperationException("The connection is not open.");
         }
 
+        ValidateNoActiveReader();
+
         try
         {
             return await lease
@@ -213,6 +223,57 @@ public sealed class DotRocksConnection : DbConnection
             }
 
             throw;
+        }
+    }
+
+    internal async ValueTask<StreamingQueryResult> ExecuteStreamingQueryAsync(
+        string commandText,
+        CancellationToken cancellationToken
+    )
+    {
+        DotRocksConnectionPoolLease? lease = _lease;
+        if (_state != ConnectionState.Open || lease is null)
+        {
+            throw new InvalidOperationException("The connection is not open.");
+        }
+
+        ValidateNoActiveReader();
+
+        try
+        {
+            return await lease
+                .PhysicalConnection.ExecuteQueryStreamingAsync(commandText, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            if (!lease.PhysicalConnection.IsReusable)
+            {
+                CloseCore(reusable: false);
+            }
+
+            throw;
+        }
+    }
+
+    internal void SetActiveReader(DotRocksDataReader reader)
+    {
+        ArgumentNullException.ThrowIfNull(reader);
+        ValidateNoActiveReader();
+        _activeReader = reader;
+    }
+
+    internal void CompleteActiveReader(DotRocksDataReader reader, bool reusable)
+    {
+        if (!ReferenceEquals(_activeReader, reader))
+        {
+            return;
+        }
+
+        _activeReader = null;
+        if (!reusable)
+        {
+            Abort();
         }
     }
 
@@ -281,6 +342,16 @@ public sealed class DotRocksConnection : DbConnection
         {
             throw new InvalidOperationException(
                 "Commands executed while a transaction is active must reference that transaction."
+            );
+        }
+    }
+
+    internal void ValidateNoActiveReader()
+    {
+        if (_activeReader is not null)
+        {
+            throw new InvalidOperationException(
+                "The DotRocks connection already has an active reader."
             );
         }
     }

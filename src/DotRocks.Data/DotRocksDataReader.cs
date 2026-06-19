@@ -17,12 +17,18 @@ public sealed class DotRocksDataReader
         IDbColumnSchemaGenerator
 {
     private const ushort NotNullColumnFlag = 0x0001;
-    private readonly QueryResult _result;
+    private readonly QueryResult? _bufferedResult;
+    private readonly StreamingQueryResult? _streamingResult;
+    private readonly TextResultRowReader? _rowReader;
+    private readonly IReadOnlyList<ColumnDefinition> _columns;
     private readonly DotRocksConnection? _connection;
     private readonly CommandBehavior _behavior;
     private ReadOnlyCollection<DbColumn>? _columnSchema;
+    private object?[]? _currentRow;
     private int _rowIndex = -1;
     private bool _isClosed;
+    private bool _isConsumed;
+    private bool _connectionCompletionReported;
 
     internal DotRocksDataReader(
         QueryResult result,
@@ -30,9 +36,24 @@ public sealed class DotRocksDataReader
         CommandBehavior behavior = CommandBehavior.Default
     )
     {
-        _result = result;
+        _bufferedResult = result;
+        _columns = result.Columns;
         _connection = connection;
         _behavior = behavior;
+    }
+
+    internal DotRocksDataReader(
+        StreamingQueryResult result,
+        DotRocksConnection? connection = null,
+        CommandBehavior behavior = CommandBehavior.Default
+    )
+    {
+        _streamingResult = result;
+        _rowReader = result.RowReader;
+        _columns = result.Columns;
+        _connection = connection;
+        _behavior = behavior;
+        _isConsumed = !result.HasResultSet;
     }
 
     /// <inheritdoc />
@@ -45,17 +66,18 @@ public sealed class DotRocksDataReader
     public override int Depth => 0;
 
     /// <inheritdoc />
-    public override int FieldCount => _result.Columns.Count;
+    public override int FieldCount => _columns.Count;
 
     /// <inheritdoc />
-    public override bool HasRows => _result.Rows.Count > 0;
+    public override bool HasRows =>
+        _bufferedResult is not null ? _bufferedResult.Rows.Count > 0 : FieldCount > 0;
 
     /// <inheritdoc />
     public override bool IsClosed => _isClosed;
 
     /// <inheritdoc />
     public override int RecordsAffected =>
-        _result.RecordsAffected > int.MaxValue ? int.MaxValue : (int)_result.RecordsAffected;
+        RecordsAffectedCore > int.MaxValue ? int.MaxValue : (int)RecordsAffectedCore;
 
     /// <inheritdoc />
     public override bool GetBoolean(int ordinal) =>
@@ -91,7 +113,7 @@ public sealed class DotRocksDataReader
     public override string GetDataTypeName(int ordinal)
     {
         ValidateOrdinal(ordinal);
-        return ColumnTypeMapper.GetDataTypeName(_result.Columns[ordinal].ColumnType);
+        return ColumnTypeMapper.GetDataTypeName(_columns[ordinal].ColumnType);
     }
 
     /// <inheritdoc />
@@ -110,7 +132,7 @@ public sealed class DotRocksDataReader
     public override Type GetFieldType(int ordinal)
     {
         ValidateOrdinal(ordinal);
-        return ColumnTypeMapper.GetFieldType(_result.Columns[ordinal].ColumnType);
+        return ColumnTypeMapper.GetFieldType(_columns[ordinal].ColumnType);
     }
 
     /// <inheritdoc />
@@ -146,7 +168,7 @@ public sealed class DotRocksDataReader
     public override string GetName(int ordinal)
     {
         ValidateOrdinal(ordinal);
-        return _result.Columns[ordinal].Name;
+        return _columns[ordinal].Name;
     }
 
     /// <inheritdoc />
@@ -158,9 +180,9 @@ public sealed class DotRocksDataReader
     public override int GetOrdinal(string name)
     {
         ArgumentNullException.ThrowIfNull(name);
-        for (int i = 0; i < _result.Columns.Count; i++)
+        for (int i = 0; i < _columns.Count; i++)
         {
-            if (StringComparer.OrdinalIgnoreCase.Equals(_result.Columns[i].Name, name))
+            if (StringComparer.OrdinalIgnoreCase.Equals(_columns[i].Name, name))
             {
                 return i;
             }
@@ -179,7 +201,8 @@ public sealed class DotRocksDataReader
     {
         ValidateReadableRow();
         ValidateOrdinal(ordinal);
-        return _result.Rows[_rowIndex][ordinal] ?? DBNull.Value;
+        object?[] row = _currentRow!;
+        return row[ordinal] ?? DBNull.Value;
     }
 
     /// <inheritdoc />
@@ -229,13 +252,75 @@ public sealed class DotRocksDataReader
             throw new InvalidOperationException("The reader is closed.");
         }
 
-        if (_rowIndex + 1 >= _result.Rows.Count)
+        if (_bufferedResult is not null)
+        {
+            if (_rowIndex + 1 >= _bufferedResult.Rows.Count)
+            {
+                _isConsumed = true;
+                ReportConnectionCompletion(reusable: true);
+                return false;
+            }
+
+            _rowIndex++;
+            _currentRow = _bufferedResult.Rows[_rowIndex];
+            return true;
+        }
+
+        return ReadStreamingRowAsync(CancellationToken.None).GetAwaiter().GetResult();
+    }
+
+    /// <inheritdoc />
+    public override async Task<bool> ReadAsync(CancellationToken cancellationToken)
+    {
+        if (_isClosed)
+        {
+            throw new InvalidOperationException("The reader is closed.");
+        }
+
+        if (_bufferedResult is not null)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Read();
+        }
+
+        return await ReadStreamingRowAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<bool> ReadStreamingRowAsync(CancellationToken cancellationToken)
+    {
+        if (_isConsumed)
         {
             return false;
         }
 
-        _rowIndex++;
-        return true;
+        if (_rowReader is null)
+        {
+            _isConsumed = true;
+            ReportConnectionCompletion(reusable: true);
+            return false;
+        }
+
+        try
+        {
+            object?[]? row = await _rowReader.ReadRowAsync(cancellationToken).ConfigureAwait(false);
+            if (row is null)
+            {
+                _isConsumed = true;
+                _currentRow = null;
+                ReportConnectionCompletion(reusable: true);
+                return false;
+            }
+
+            _rowIndex++;
+            _currentRow = row;
+            return true;
+        }
+        catch
+        {
+            _isConsumed = true;
+            ReportConnectionCompletion(reusable: false);
+            throw;
+        }
     }
 
     /// <inheritdoc />
@@ -258,19 +343,35 @@ public sealed class DotRocksDataReader
     /// <inheritdoc />
     public override void Close()
     {
+        if (_isClosed)
+        {
+            return;
+        }
+
+        bool reusable =
+            _isConsumed || _bufferedResult is not null || _streamingResult?.HasResultSet != true;
         _isClosed = true;
+        _isConsumed = true;
+        ReportConnectionCompletion(reusable);
         if ((_behavior & CommandBehavior.CloseConnection) != 0)
         {
             _connection?.Close();
         }
     }
 
+    internal void MarkCompletedBecauseConnectionClosed()
+    {
+        _connectionCompletionReported = true;
+        _isClosed = true;
+        _isConsumed = true;
+    }
+
     private ReadOnlyCollection<DbColumn> BuildColumnSchema()
     {
-        var columns = new DbColumn[_result.Columns.Count];
-        for (int i = 0; i < _result.Columns.Count; i++)
+        var columns = new DbColumn[_columns.Count];
+        for (int i = 0; i < _columns.Count; i++)
         {
-            ColumnDefinition definition = _result.Columns[i];
+            ColumnDefinition definition = _columns[i];
             columns[i] = new DotRocksDbColumn(
                 definition.Name,
                 i,
@@ -399,6 +500,20 @@ public sealed class DotRocksDataReader
         return value;
     }
 
+    private long RecordsAffectedCore =>
+        _bufferedResult?.RecordsAffected ?? _streamingResult?.RecordsAffected ?? -1;
+
+    private void ReportConnectionCompletion(bool reusable)
+    {
+        if (_connectionCompletionReported)
+        {
+            return;
+        }
+
+        _connectionCompletionReported = true;
+        _connection?.CompleteActiveReader(this, reusable);
+    }
+
     private void ValidateReadableRow()
     {
         if (_isClosed)
@@ -406,7 +521,7 @@ public sealed class DotRocksDataReader
             throw new InvalidOperationException("The reader is closed.");
         }
 
-        if (_rowIndex < 0 || _rowIndex >= _result.Rows.Count)
+        if (_currentRow is null)
         {
             throw new InvalidOperationException("The reader is not positioned on a row.");
         }

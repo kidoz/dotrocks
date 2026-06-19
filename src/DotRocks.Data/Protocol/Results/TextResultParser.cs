@@ -88,6 +88,72 @@ internal static class TextResultParser
         return QueryResult.FromRows(columns, rows);
     }
 
+    public static async ValueTask<StreamingQueryResult> ReadStreamingAsync(
+        byte[] firstPayload,
+        PacketReader reader,
+        uint? connectionId,
+        CancellationToken cancellationToken
+    )
+    {
+        ArgumentNullException.ThrowIfNull(firstPayload);
+        ArgumentNullException.ThrowIfNull(reader);
+
+        if (firstPayload.Length == 0)
+        {
+            throw new MalformedPacketException("Empty query response packet.");
+        }
+
+        if (ResultPacket.IsError(firstPayload))
+        {
+            throw ResultPacket.ReadError(firstPayload, connectionId);
+        }
+
+        if (ResultPacket.IsOk(firstPayload))
+        {
+            return StreamingQueryResult.FromOk(ResultPacket.ReadOk(firstPayload));
+        }
+
+        if (firstPayload[0] == ResultPacket.LocalInFileHeader)
+        {
+            throw new DotRocksException(
+                "StarRocks requested LOCAL INFILE, which DotRocks does not support."
+            );
+        }
+
+        int columnCount = ReadColumnCount(firstPayload);
+        var columns = new List<ColumnDefinition>(columnCount);
+        for (int i = 0; i < columnCount; i++)
+        {
+            byte[] columnPayload = await reader
+                .ReadPayloadAsync(cancellationToken)
+                .ConfigureAwait(false);
+            if (ResultPacket.IsError(columnPayload))
+            {
+                throw ResultPacket.ReadError(columnPayload, connectionId);
+            }
+
+            columns.Add(ReadColumnDefinition(columnPayload));
+        }
+
+        byte[] columnsTerminator = await reader
+            .ReadPayloadAsync(cancellationToken)
+            .ConfigureAwait(false);
+        if (
+            !ResultPacket.IsEndOfResultSet(columnsTerminator)
+            && !ResultPacket.IsOk(columnsTerminator)
+        )
+        {
+            throw new MalformedPacketException(
+                "Expected an EOF or OK packet after column definitions."
+            );
+        }
+
+        return StreamingQueryResult.FromRows(
+            columns,
+            new TextResultRowReader(reader, columns, connectionId)
+        );
+    }
+
     internal static int ReadColumnCount(ReadOnlySpan<byte> payload)
     {
         var reader = new ProtocolReader(payload);

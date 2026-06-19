@@ -611,6 +611,170 @@ public sealed class ConnectionIntegrationTests
     }
 
     [Fact]
+    public async Task ActiveReader_BlocksSecondCommandUntilConsumed()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
+        await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        using DbCommand firstCommand = connection.CreateCommand();
+        firstCommand.CommandText = "SELECT 1 UNION ALL SELECT 2";
+        using DbDataReader reader = await firstCommand
+            .ExecuteReaderAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+
+        Assert.True(
+            await reader.ReadAsync(TestContext.Current.CancellationToken).ConfigureAwait(true)
+        );
+
+        using DbCommand secondCommand = connection.CreateCommand();
+        secondCommand.CommandText = "SELECT 1";
+        InvalidOperationException exception = await Assert
+            .ThrowsAsync<InvalidOperationException>(async () =>
+                await secondCommand
+                    .ExecuteScalarAsync(TestContext.Current.CancellationToken)
+                    .ConfigureAwait(true)
+            )
+            .ConfigureAwait(true);
+
+        Assert.Contains("active reader", exception.Message, StringComparison.OrdinalIgnoreCase);
+
+        while (await reader.ReadAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
+        { }
+
+        object? value = await secondCommand
+            .ExecuteScalarAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+        Assert.Equal(1, value);
+    }
+
+    [Fact]
+    public async Task ClosingReaderBeforeExhaustion_DiscardsPhysicalConnection()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        DotRocksConnection.ClearAllPools();
+        string connectionString = BuildPoolingConnectionString(maximumPoolSize: 1);
+        long firstConnectionId;
+
+        using (var first = new DotRocksConnection(connectionString))
+        {
+            await first.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+            firstConnectionId = await ReadConnectionIdAsync(first).ConfigureAwait(true);
+
+            using DbCommand command = first.CreateCommand();
+            command.CommandText = "SELECT 1 UNION ALL SELECT 2";
+            using DbDataReader reader = await command
+                .ExecuteReaderAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+            Assert.True(
+                await reader.ReadAsync(TestContext.Current.CancellationToken).ConfigureAwait(true)
+            );
+
+            await reader.CloseAsync().ConfigureAwait(true);
+
+            Assert.Equal(ConnectionState.Closed, first.State);
+        }
+
+        using (var second = new DotRocksConnection(connectionString))
+        {
+            await second.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+            long secondConnectionId = await ReadConnectionIdAsync(second).ConfigureAwait(true);
+
+            Assert.NotEqual(firstConnectionId, secondConnectionId);
+            await second.CloseAsync().ConfigureAwait(true);
+        }
+
+        DotRocksConnection.ClearAllPools();
+    }
+
+    [Fact]
+    public async Task ReaderClose_RespectsCommandBehaviorCloseConnection()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
+        await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        using DbCommand command = connection.CreateCommand();
+        command.CommandText = "SELECT 1";
+        using DbDataReader reader = await command
+            .ExecuteReaderAsync(
+                CommandBehavior.CloseConnection,
+                TestContext.Current.CancellationToken
+            )
+            .ConfigureAwait(true);
+        while (await reader.ReadAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
+        { }
+
+        await reader.CloseAsync().ConfigureAwait(true);
+
+        Assert.Equal(ConnectionState.Closed, connection.State);
+    }
+
+    [Fact]
+    [SuppressMessage(
+        "Security",
+        "CA2100:Review SQL queries for security vulnerabilities",
+        Justification = "Integration test SQL uses only a compile-time row-count constant."
+    )]
+    public async Task LargeResult_OpensReaderWithoutBufferingAllRows()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        const int rowCount = 100_000;
+        using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
+        await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        long allocatedBeforeOpen = GC.GetTotalAllocatedBytes(precise: true);
+
+        using DbCommand command = connection.CreateCommand();
+        command.CommandText = """
+            WITH d AS (
+                SELECT 0 AS n UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4
+                UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9
+            )
+            SELECT
+                a.n + (b.n * 10) + (c.n * 100) + (d.n * 1000) + (e.n * 10000) AS number
+            FROM d a, d b, d c, d d, d e
+            """;
+        using DbDataReader reader = await command
+            .ExecuteReaderAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+
+        long allocatedForOpen = GC.GetTotalAllocatedBytes(precise: true) - allocatedBeforeOpen;
+        Assert.True(
+            allocatedForOpen < 8_000_000,
+            $"Opening the reader allocated {allocatedForOpen.ToString(CultureInfo.InvariantCulture)} byte(s), which indicates result buffering."
+        );
+
+        int rowsRead = 0;
+        while (await reader.ReadAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
+        {
+            _ = reader.GetInt64(0);
+            rowsRead++;
+        }
+
+        Assert.Equal(rowCount, rowsRead);
+    }
+
+    [Fact]
     public async Task Transaction_Commit_MakesInsertedRowsVisible()
     {
         if (!IntegrationTestEnvironment.IsEnabled)
