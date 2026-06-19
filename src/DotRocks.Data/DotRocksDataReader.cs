@@ -85,7 +85,7 @@ public sealed class DotRocksDataReader : DbDataReader, IEnumerable<IDataRecord>
     public override string GetDataTypeName(int ordinal)
     {
         ValidateOrdinal(ordinal);
-        return $"0x{_result.Columns[ordinal].ColumnType:X2}";
+        return ColumnTypeMapper.GetDataTypeName(_result.Columns[ordinal].ColumnType);
     }
 
     /// <inheritdoc />
@@ -104,7 +104,7 @@ public sealed class DotRocksDataReader : DbDataReader, IEnumerable<IDataRecord>
     public override Type GetFieldType(int ordinal)
     {
         ValidateOrdinal(ordinal);
-        return typeof(string);
+        return ColumnTypeMapper.GetFieldType(_result.Columns[ordinal].ColumnType);
     }
 
     /// <inheritdoc />
@@ -154,7 +154,9 @@ public sealed class DotRocksDataReader : DbDataReader, IEnumerable<IDataRecord>
     }
 
     /// <inheritdoc />
-    public override string GetString(int ordinal) => (string)GetNonNullValue(ordinal);
+    public override string GetString(int ordinal) =>
+        Convert.ToString(GetNonNullValue(ordinal), CultureInfo.InvariantCulture)
+        ?? throw new InvalidCastException("Column value cannot be converted to string.");
 
     /// <inheritdoc />
     public override object GetValue(int ordinal)

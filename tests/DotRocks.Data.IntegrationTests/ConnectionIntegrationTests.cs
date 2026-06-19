@@ -40,7 +40,7 @@ public sealed class ConnectionIntegrationTests
             .ExecuteScalarAsync(TestContext.Current.CancellationToken)
             .ConfigureAwait(true);
 
-        Assert.Equal("1", value);
+        Assert.Equal(1, value);
     }
 
     [Fact]
@@ -65,7 +65,7 @@ public sealed class ConnectionIntegrationTests
         Assert.True(
             await reader.ReadAsync(TestContext.Current.CancellationToken).ConfigureAwait(true)
         );
-        Assert.Equal("1", reader.GetString(0));
+        Assert.Equal(1, reader.GetInt32(0));
         Assert.False(
             await reader.ReadAsync(TestContext.Current.CancellationToken).ConfigureAwait(true)
         );
@@ -108,7 +108,6 @@ public sealed class ConnectionIntegrationTests
 
     [Theory]
     [InlineData("SELECT 'abc'", "abc")]
-    [InlineData("SELECT 123", "123")]
     [SuppressMessage(
         "Security",
         "CA2100:Review SQL queries for security vulnerabilities",
@@ -132,6 +131,52 @@ public sealed class ConnectionIntegrationTests
             .ConfigureAwait(true);
 
         Assert.Equal(expected, value);
+    }
+
+    [Fact]
+    public async Task ExecuteReaderAsync_MapsCommonStarRocksTypes()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
+        await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        using System.Data.Common.DbCommand command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT
+                CAST(123 AS INT) AS i32,
+                CAST(123 AS BIGINT) AS i64,
+                CAST(12.34 AS DECIMAL(10, 2)) AS amount,
+                CAST(1.5 AS DOUBLE) AS ratio,
+                CAST('2026-06-19' AS DATE) AS created_on,
+                CAST('2026-06-19 13:14:15' AS DATETIME) AS created_at
+            """;
+
+        using System.Data.Common.DbDataReader reader = await command
+            .ExecuteReaderAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+
+        Assert.True(
+            await reader.ReadAsync(TestContext.Current.CancellationToken).ConfigureAwait(true)
+        );
+        Assert.Equal(123, reader.GetInt32(0));
+        Assert.Equal(123L, reader.GetInt64(1));
+        Assert.Equal(12.34m, reader.GetDecimal(2));
+        Assert.Equal(1.5d, reader.GetDouble(3));
+        Assert.Equal(new DateTime(2026, 6, 19), reader.GetDateTime(4));
+        Assert.Equal(new DateTime(2026, 6, 19, 13, 14, 15), reader.GetDateTime(5));
+        Assert.Equal(typeof(int), reader.GetFieldType(0));
+        Assert.Equal(typeof(long), reader.GetFieldType(1));
+        Assert.Equal(typeof(decimal), reader.GetFieldType(2));
+        Assert.Equal(typeof(double), reader.GetFieldType(3));
+        Assert.Equal(typeof(DateTime), reader.GetFieldType(4));
+        Assert.Equal(typeof(DateTime), reader.GetFieldType(5));
+        Assert.False(
+            await reader.ReadAsync(TestContext.Current.CancellationToken).ConfigureAwait(true)
+        );
     }
 
     [Fact]

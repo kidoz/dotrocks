@@ -51,6 +51,42 @@ public sealed class TextResultParserTests
     }
 
     [Fact]
+    public async Task ReadAsync_ParsesTypedTextValues()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using MemoryStream stream = BuildPayloadStream(
+            BuildColumnDefinition("i32", (byte)ColumnType.Long),
+            BuildColumnDefinition("i64", (byte)ColumnType.LongLong),
+            BuildColumnDefinition("amount", (byte)ColumnType.NewDecimal),
+            BuildColumnDefinition("ratio", (byte)ColumnType.Double),
+            BuildColumnDefinition("created_on", (byte)ColumnType.Date),
+            BuildColumnDefinition("created_at", (byte)ColumnType.DateTime),
+            EofPayload(),
+            BuildTextRow(
+                "42",
+                "9007199254740991",
+                "12.34",
+                "1.5",
+                "2026-06-19",
+                "2026-06-19 13:14:15"
+            ),
+            EofPayload()
+        );
+        var packetReader = new PacketReader(stream);
+        packetReader.ResetSequence(1);
+
+        QueryResult result = await TextResultParser.ReadAsync([0x06], packetReader, null, ct);
+
+        object?[] row = result.Rows[0];
+        Assert.Equal(42, row[0]);
+        Assert.Equal(9007199254740991L, row[1]);
+        Assert.Equal(12.34m, row[2]);
+        Assert.Equal(1.5d, row[3]);
+        Assert.Equal(new DateTime(2026, 6, 19), row[4]);
+        Assert.Equal(new DateTime(2026, 6, 19, 13, 14, 15), row[5]);
+    }
+
+    [Fact]
     public async Task ReadAsync_ParsesOkResult()
     {
         CancellationToken ct = TestContext.Current.CancellationToken;
@@ -108,7 +144,10 @@ public sealed class TextResultParserTests
         return stream;
     }
 
-    private static byte[] BuildColumnDefinition(string name)
+    private static byte[] BuildColumnDefinition(
+        string name,
+        byte columnType = (byte)ColumnType.VarString
+    )
     {
         using var writer = new ProtocolWriter();
         writer.WriteLengthEncodedString("def", Encoding.UTF8);
@@ -120,17 +159,21 @@ public sealed class TextResultParserTests
         writer.WriteLengthEncodedInteger(0x0C);
         writer.WriteFixedInteger(0x21, 2);
         writer.WriteFixedInteger(1024, 4);
-        writer.WriteByte(0xFD);
+        writer.WriteByte(columnType);
         writer.WriteFixedInteger(0, 2);
         writer.WriteByte(0);
         writer.WriteFixedInteger(0, 2);
         return writer.ToArray();
     }
 
-    private static byte[] BuildTextRow(string value)
+    private static byte[] BuildTextRow(params string[] values)
     {
         using var writer = new ProtocolWriter();
-        writer.WriteLengthEncodedString(value, Encoding.UTF8);
+        foreach (string value in values)
+        {
+            writer.WriteLengthEncodedString(value, Encoding.UTF8);
+        }
+
         return writer.ToArray();
     }
 

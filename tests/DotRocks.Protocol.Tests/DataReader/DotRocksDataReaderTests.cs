@@ -29,6 +29,30 @@ public sealed class DotRocksDataReaderTests
     }
 
     [Fact]
+    public void Metadata_ExposesMappedColumnTypes()
+    {
+        using var reader = new DotRocksDataReader(
+            QueryResult.FromRows(
+                [
+                    Column("id", (byte)ColumnType.Long),
+                    Column("amount", (byte)ColumnType.NewDecimal),
+                    Column("name"),
+                ],
+                [
+                    [7, 12.34m, "seven"],
+                ]
+            )
+        );
+
+        Assert.Equal(typeof(int), reader.GetFieldType(0));
+        Assert.Equal("LONG", reader.GetDataTypeName(0));
+        Assert.Equal(typeof(decimal), reader.GetFieldType(1));
+        Assert.Equal("NEWDECIMAL", reader.GetDataTypeName(1));
+        Assert.Equal(typeof(string), reader.GetFieldType(2));
+        Assert.Equal("VAR_STRING", reader.GetDataTypeName(2));
+    }
+
+    [Fact]
     public void Read_BeforeRow_Throws()
     {
         using var reader = new DotRocksDataReader(
@@ -43,6 +67,21 @@ public sealed class DotRocksDataReaderTests
         Assert.Throws<InvalidOperationException>(() => reader.GetValue(0));
     }
 
-    private static ColumnDefinition Column(string name) =>
-        new("def", string.Empty, string.Empty, string.Empty, name, name, 0x21, 1024, 0xFD, 0, 0);
+    private static ColumnDefinition Column(
+        string name,
+        byte columnType = (byte)ColumnType.VarString
+    ) =>
+        new(
+            "def",
+            string.Empty,
+            string.Empty,
+            string.Empty,
+            name,
+            name,
+            0x21,
+            1024,
+            columnType,
+            0,
+            0
+        );
 }

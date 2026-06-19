@@ -1,0 +1,33 @@
+namespace DotRocks.Data.Protocol.Results;
+
+internal enum ColumnType : byte
+{
+    Decimal = 0x00,
+    Tiny = 0x01,
+    Short = 0x02,
+    Long = 0x03,
+    Float = 0x04,
+    Double = 0x05,
+    Null = 0x06,
+    Timestamp = 0x07,
+    LongLong = 0x08,
+    Int24 = 0x09,
+    Date = 0x0A,
+    Time = 0x0B,
+    DateTime = 0x0C,
+    Year = 0x0D,
+    NewDate = 0x0E,
+    VarChar = 0x0F,
+    Bit = 0x10,
+    Json = 0xF5,
+    NewDecimal = 0xF6,
+    Enum = 0xF7,
+    Set = 0xF8,
+    TinyBlob = 0xF9,
+    MediumBlob = 0xFA,
+    LongBlob = 0xFB,
+    Blob = 0xFC,
+    VarString = 0xFD,
+    String = 0xFE,
+    Geometry = 0xFF,
+}

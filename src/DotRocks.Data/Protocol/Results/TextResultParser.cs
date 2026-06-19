@@ -82,7 +82,7 @@ internal static class TextResultParser
                 break;
             }
 
-            rows.Add(ReadTextRow(rowPayload, columnCount));
+            rows.Add(ReadTextRow(rowPayload, columns));
         }
 
         return QueryResult.FromRows(columns, rows);
@@ -139,16 +139,21 @@ internal static class TextResultParser
         );
     }
 
-    internal static object?[] ReadTextRow(ReadOnlySpan<byte> payload, int columnCount)
+    internal static object?[] ReadTextRow(
+        ReadOnlySpan<byte> payload,
+        IReadOnlyList<ColumnDefinition> columns
+    )
     {
-        ArgumentOutOfRangeException.ThrowIfNegative(columnCount);
+        ArgumentNullException.ThrowIfNull(columns);
 
         var reader = new ProtocolReader(payload);
-        var values = new object?[columnCount];
-        for (int i = 0; i < columnCount; i++)
+        var values = new object?[columns.Count];
+        for (int i = 0; i < columns.Count; i++)
         {
             ReadOnlySpan<byte> bytes = reader.ReadLengthEncodedBytes(out bool isNull);
-            values[i] = isNull ? null : Encoding.UTF8.GetString(bytes);
+            values[i] = isNull
+                ? null
+                : ColumnTypeMapper.ParseTextValue(columns[i].ColumnType, bytes);
         }
 
         if (!reader.IsAtEnd)
