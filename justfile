@@ -40,6 +40,7 @@ test:
 integration-test:
     DOTROCKS_RUN_INTEGRATION=1 dotnet test tests/DotRocks.Data.IntegrationTests --configuration {{config}} --no-build
     DOTROCKS_RUN_INTEGRATION=1 dotnet test tests/DotRocks.Data.DapperTests --configuration {{config}} --no-build
+    DOTROCKS_RUN_INTEGRATION=1 dotnet test tests/DotRocks.EntityFrameworkCore.IntegrationTests --configuration {{config}} --no-build
 
 # Produce NuGet packages.
 pack:

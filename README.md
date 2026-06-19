@@ -70,6 +70,29 @@ await using DbDataSource dataSource = factory.CreateDataSource(builder.Connectio
 await using DbConnection connection = await dataSource.OpenConnectionAsync();
 ```
 
+## Entity Framework Core
+
+`DotRocks.EntityFrameworkCore` currently provides the first provider skeleton: `UseStarRocks`,
+provider service registration, and EF-managed relational connections. LINQ SQL translation,
+writes, and migrations are later Milestone 4/5 work.
+
+```csharp
+using System.Data.Common;
+using Microsoft.EntityFrameworkCore;
+
+DbContextOptions<AppDbContext> options = new DbContextOptionsBuilder<AppDbContext>()
+    .UseStarRocks("Server=127.0.0.1;Port=9030;User ID=root")
+    .Options;
+
+await using var context = new AppDbContext(options);
+DbConnection connection = context.Database.GetDbConnection();
+await connection.OpenAsync();
+
+await using DbCommand command = connection.CreateCommand();
+command.CommandText = "SELECT 1";
+object? value = await command.ExecuteScalarAsync();
+```
+
 ## Stream Load
 
 Use `DotRocksStreamLoadClient` for StarRocks HTTP Stream Load. The client uses the same
