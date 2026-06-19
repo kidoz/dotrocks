@@ -1,0 +1,42 @@
+<Project>
+  <!--
+    Repository-wide build policy for DotRocks. See .agents/contexts/conventions/STYLE_PROFILE.md.
+    Keep this aligned with section 29 of DotRocks-AI-Agent-Prompt.md.
+  -->
+  <PropertyGroup Label="Language and analysis">
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <WarningsNotAsErrors>true</WarningsNotAsErrors>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Determinism and reproducibility">
+    <Features>strict</Features>
+    <DebugType>portable</DebugType>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Package metadata defaults">
+    <Product>DotRocks</Product>
+    <Company>DotRocks contributors</Company>
+    <Authors>DotRocks contributors</Authors>
+    <Copyright>Copyright (c) DotRocks contributors</Copyright>
+    <PackageProjectUrl>https://github.com/dotrocks/dotrocks</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/dotrocks/dotrocks</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+</Project>

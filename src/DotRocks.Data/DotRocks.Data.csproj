@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>DotRocks.Data</PackageId>
+    <Title>DotRocks.Data</Title>
+    <Description>A native .NET ADO.NET provider for StarRocks, with its own managed StarRocks client protocol implementation. DotRocks for StarRocks.</Description>
+    <PackageTags>starrocks;ado.net;database;driver;dotrocks;data</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None
+      Include="$(MSBuildThisFileDirectory)../../README.md"
+      Pack="true"
+      PackagePath="\"
+      Visible="false"
+    />
+  </ItemGroup>
+
+  <ItemGroup Label="Internal test access">
+    <InternalsVisibleTo Include="DotRocks.Protocol.Tests" />
+    <InternalsVisibleTo Include="DotRocks.Data.Tests" />
+    <InternalsVisibleTo Include="DotRocks.Data.SecurityTests" />
+    <InternalsVisibleTo Include="DotRocks.CompatibilityHarness" />
+  </ItemGroup>
+</Project>

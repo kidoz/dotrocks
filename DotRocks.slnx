@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/DotRocks.Data/DotRocks.Data.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/DotRocks.Protocol.Tests/DotRocks.Protocol.Tests.csproj" />
+    <Project Path="tests/DotRocks.CompatibilityHarness/DotRocks.CompatibilityHarness.csproj" />
+  </Folder>
+</Solution>

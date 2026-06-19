@@ -1,0 +1,5 @@
+# CSharpier ignore list. Only generated, vendored, or artifact paths belong here.
+**/bin/
+**/obj/
+artifacts/
+**/*.Designer.cs
