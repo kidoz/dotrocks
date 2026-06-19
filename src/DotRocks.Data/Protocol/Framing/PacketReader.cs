@@ -37,8 +37,8 @@ internal sealed class PacketReader
     /// <summary>The sequence id expected on the next packet.</summary>
     public byte SequenceId { get; private set; }
 
-    /// <summary>Resets the expected sequence id to 0 at the start of a new command.</summary>
-    public void ResetSequence() => SequenceId = 0;
+    /// <summary>Resets the expected sequence id at the start of a new command or protocol phase.</summary>
+    public void ResetSequence(byte sequenceId = 0) => SequenceId = sequenceId;
 
     /// <summary>Reads one logical message payload, reassembling continuation packets.</summary>
     public async ValueTask<byte[]> ReadPayloadAsync(CancellationToken cancellationToken = default)

@@ -27,8 +27,8 @@ internal sealed class PacketWriter
     /// <summary>The sequence id that will be stamped on the next packet.</summary>
     public byte SequenceId { get; private set; }
 
-    /// <summary>Resets the sequence id to 0 at the start of a new command.</summary>
-    public void ResetSequence() => SequenceId = 0;
+    /// <summary>Resets the sequence id at the start of a new command or protocol phase.</summary>
+    public void ResetSequence(byte sequenceId = 0) => SequenceId = sequenceId;
 
     /// <summary>Writes <paramref name="payload"/> as one or more packets.</summary>
     public async ValueTask WritePayloadAsync(
