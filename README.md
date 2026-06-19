@@ -47,6 +47,12 @@ command.CommandText = "SELECT 1";
 object? value = await command.ExecuteScalarAsync();
 ```
 
+`DotRocksCommand.Prepare()` / `PrepareAsync()` currently perform conservative
+client-side preparation for text commands: named placeholders and parameter metadata are
+validated up front, and execution still sends StarRocks text SQL with safely formatted
+current parameter values. The driver does not use the MySQL binary prepared-statement
+protocol yet.
+
 Use `DotRocksDataSource` when one normalized configuration should create many logical
 connections and participate in DotRocks pooling:
 

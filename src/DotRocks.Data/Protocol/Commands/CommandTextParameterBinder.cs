@@ -122,6 +122,113 @@ internal static class CommandTextParameterBinder
         return builder.ToString();
     }
 
+    public static PreparedCommandText Prepare(string commandText, DbParameterCollection parameters)
+    {
+        ArgumentNullException.ThrowIfNull(commandText);
+        ArgumentNullException.ThrowIfNull(parameters);
+
+        Dictionary<string, DbParameter> parameterMap = BuildParameterMap(parameters);
+        var referencedParameters = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        bool hasPlaceholders = false;
+
+        for (int index = 0; index < commandText.Length; index++)
+        {
+            char current = commandText[index];
+            if (current == '\'')
+            {
+                SkipSingleQuotedLiteral(commandText, ref index);
+                continue;
+            }
+
+            if (current == '"')
+            {
+                SkipQuotedRegion(commandText, ref index, '"');
+                continue;
+            }
+
+            if (current == '`')
+            {
+                SkipQuotedRegion(commandText, ref index, '`');
+                continue;
+            }
+
+            if (current == '-' && IsNext(commandText, index, '-'))
+            {
+                SkipLineComment(commandText, ref index);
+                continue;
+            }
+
+            if (current == '#')
+            {
+                SkipLineComment(commandText, ref index);
+                continue;
+            }
+
+            if (current == '/' && IsNext(commandText, index, '*'))
+            {
+                SkipBlockComment(commandText, ref index);
+                continue;
+            }
+
+            if (current == '?')
+            {
+                throw new NotSupportedException(
+                    "Positional parameter placeholders are not supported. Use named @parameter placeholders."
+                );
+            }
+
+            if (current == '@')
+            {
+                if (IsNext(commandText, index, '@'))
+                {
+                    index++;
+                    continue;
+                }
+
+                if (
+                    index + 1 >= commandText.Length
+                    || !IsParameterNameStart(commandText[index + 1])
+                )
+                {
+                    throw new FormatException(
+                        $"Invalid parameter placeholder at character {index}."
+                    );
+                }
+
+                int nameStart = index + 1;
+                int nameEnd = nameStart;
+                while (nameEnd < commandText.Length && IsParameterNamePart(commandText[nameEnd]))
+                {
+                    nameEnd++;
+                }
+
+                string parameterName = commandText[nameStart..nameEnd];
+                if (!parameterMap.ContainsKey(parameterName))
+                {
+                    throw new InvalidOperationException(
+                        $"Command text references parameter '@{parameterName}', but it was not provided."
+                    );
+                }
+
+                referencedParameters.Add(parameterName);
+                hasPlaceholders = true;
+                index = nameEnd - 1;
+            }
+        }
+
+        foreach (string parameterName in parameterMap.Keys)
+        {
+            if (!referencedParameters.Contains(parameterName))
+            {
+                throw new InvalidOperationException(
+                    $"Parameter '@{parameterName}' was provided but is not referenced by the command text."
+                );
+            }
+        }
+
+        return new PreparedCommandText(commandText, [.. referencedParameters], hasPlaceholders);
+    }
+
     private static Dictionary<string, DbParameter> BuildParameterMap(
         DbParameterCollection parameters
     )
@@ -259,6 +366,66 @@ internal static class CommandTextParameterBinder
         }
     }
 
+    private static void SkipSingleQuotedLiteral(string commandText, ref int index)
+    {
+        while (++index < commandText.Length)
+        {
+            if (commandText[index] == '\\' && index + 1 < commandText.Length)
+            {
+                index++;
+                continue;
+            }
+
+            if (commandText[index] != '\'')
+            {
+                continue;
+            }
+
+            if (IsNext(commandText, index, '\''))
+            {
+                index++;
+                continue;
+            }
+
+            break;
+        }
+    }
+
+    private static void SkipQuotedRegion(string commandText, ref int index, char quote)
+    {
+        while (++index < commandText.Length)
+        {
+            if (commandText[index] == quote)
+            {
+                break;
+            }
+        }
+    }
+
+    private static void SkipLineComment(string commandText, ref int index)
+    {
+        while (++index < commandText.Length)
+        {
+            if (commandText[index] == '\n')
+            {
+                break;
+            }
+        }
+    }
+
+    private static void SkipBlockComment(string commandText, ref int index)
+    {
+        index++;
+        while (++index < commandText.Length)
+        {
+            if (commandText[index] == '*' && IsNext(commandText, index, '/'))
+            {
+                index++;
+                break;
+            }
+        }
+    }
+
     private static bool IsNext(string value, int index, char expected) =>
         index + 1 < value.Length && value[index + 1] == expected;
 
@@ -268,3 +435,9 @@ internal static class CommandTextParameterBinder
     private static bool IsParameterNamePart(char value) =>
         IsParameterNameStart(value) || value is >= '0' and <= '9';
 }
+
+internal sealed record PreparedCommandText(
+    string CommandText,
+    IReadOnlyList<string> ParameterNames,
+    bool HasPlaceholders
+);

@@ -403,6 +403,190 @@ public sealed class ConnectionIntegrationTests
     }
 
     [Fact]
+    public async Task PreparedCommand_SelectValue_ExecutesWithChangedParameterValues()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
+        await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        using DbCommand command = connection.CreateCommand();
+        command.CommandText = "SELECT @value";
+        DbParameter parameter = command.CreateParameter();
+        parameter.ParameterName = "value";
+        parameter.Value = 42;
+        command.Parameters.Add(parameter);
+
+        await command.PrepareAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+        object? first = await command
+            .ExecuteScalarAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+        parameter.Value = 43;
+        object? second = await command
+            .ExecuteScalarAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+
+        Assert.Equal(42, first);
+        Assert.Equal(43, second);
+    }
+
+    [Fact]
+    public async Task PreparedCommand_BindsCommonValuesSafely()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
+        await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        using DbCommand command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT
+                @text AS text_value,
+                @null_value AS null_value,
+                @decimal AS decimal_value,
+                @dotrocks_decimal AS dotrocks_decimal_value,
+                IF(@flag, 'yes', 'no') AS flag_value,
+                @created_at AS created_at_value
+            """;
+        AddParameter(command, "text", "quote'\\slash");
+        AddParameter(command, "null_value", DBNull.Value);
+        AddParameter(command, "decimal", 12.34m);
+        AddParameter(
+            command,
+            "dotrocks_decimal",
+            DotRocksDecimal.Parse("1234567890123456789012345678901234.9000")
+        );
+        AddParameter(command, "flag", true);
+        AddParameter(command, "created_at", new DateTime(2026, 6, 19, 13, 14, 15));
+
+        await command.PrepareAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+        using DbDataReader reader = await command
+            .ExecuteReaderAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+
+        Assert.True(
+            await reader.ReadAsync(TestContext.Current.CancellationToken).ConfigureAwait(true)
+        );
+        Assert.Equal("quote'\\slash", reader.GetString(0));
+        Assert.True(
+            await reader
+                .IsDBNullAsync(1, TestContext.Current.CancellationToken)
+                .ConfigureAwait(true)
+        );
+        Assert.Equal(12.34m, reader.GetDecimal(2));
+        Assert.Equal(
+            DotRocksDecimal.Parse("1234567890123456789012345678901234.9000"),
+            await reader
+                .GetFieldValueAsync<DotRocksDecimal>(3, TestContext.Current.CancellationToken)
+                .ConfigureAwait(true)
+        );
+        Assert.Equal("yes", reader.GetString(4));
+        Assert.Equal(new DateTime(2026, 6, 19, 13, 14, 15), reader.GetDateTime(5));
+    }
+
+    [Fact]
+    [SuppressMessage(
+        "Security",
+        "CA2100:Review SQL queries for security vulnerabilities",
+        Justification = "Integration test SQL is built from internally generated table names and constant parameter placeholders."
+    )]
+    public async Task PreparedCommand_ExecutesParameterizedSelectFromTableRepeatedly()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        string tableName = await CreateTransactionTableAsync().ConfigureAwait(true);
+        try
+        {
+            using var connection = new DotRocksConnection(
+                BuildDatabaseConnectionString(TransactionDatabaseName)
+            );
+            await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+            await UseTransactionDatabaseAsync(connection).ConfigureAwait(true);
+            await ExecuteNonQueryAsync(connection, null, $"INSERT INTO {tableName} SELECT 1, 10")
+                .ConfigureAwait(true);
+            await ExecuteNonQueryAsync(connection, null, $"INSERT INTO {tableName} SELECT 2, 20")
+                .ConfigureAwait(true);
+
+            using DbCommand command = connection.CreateCommand();
+            command.CommandText = $"SELECT value FROM {tableName} WHERE id = @id";
+            DbParameter id = command.CreateParameter();
+            id.ParameterName = "id";
+            id.Value = 1;
+            command.Parameters.Add(id);
+
+            await command.PrepareAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+            object? first = await command
+                .ExecuteScalarAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+            id.Value = 2;
+            object? second = await command
+                .ExecuteScalarAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+
+            Assert.Equal(10, first);
+            Assert.Equal(20, second);
+        }
+        finally
+        {
+            await DropTableAsync(tableName).ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
+    public async Task PreparedCommand_FailedValidationDoesNotPoisonPooledConnection()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        DotRocksConnection.ClearAllPools();
+        string connectionString = BuildPoolingConnectionString(maximumPoolSize: 1);
+        long firstConnectionId;
+        using (var first = new DotRocksConnection(connectionString))
+        {
+            await first.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+            firstConnectionId = await ReadConnectionIdAsync(first).ConfigureAwait(true);
+
+            using DbCommand command = first.CreateCommand();
+            command.CommandText = "SELECT @value";
+            AddParameter(command, "value", 1);
+            await command.PrepareAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+            command.Parameters.Clear();
+
+            await Assert
+                .ThrowsAsync<InvalidOperationException>(async () =>
+                    await command
+                        .ExecuteScalarAsync(TestContext.Current.CancellationToken)
+                        .ConfigureAwait(true)
+                )
+                .ConfigureAwait(true);
+            Assert.Equal(ConnectionState.Open, first.State);
+            await first.CloseAsync().ConfigureAwait(true);
+        }
+
+        using (var second = new DotRocksConnection(connectionString))
+        {
+            await second.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+            long secondConnectionId = await ReadConnectionIdAsync(second).ConfigureAwait(true);
+
+            Assert.Equal(firstConnectionId, secondConnectionId);
+            await second.CloseAsync().ConfigureAwait(true);
+        }
+
+        DotRocksConnection.ClearAllPools();
+    }
+
+    [Fact]
     public async Task ExecuteScalarAsync_ReturnsNullForSqlNull()
     {
         if (!IntegrationTestEnvironment.IsEnabled)
@@ -941,6 +1125,14 @@ public sealed class ConnectionIntegrationTests
         return Convert.ToInt64(value, CultureInfo.InvariantCulture);
     }
 
+    private static void AddParameter(DbCommand command, string name, object? value)
+    {
+        DbParameter parameter = command.CreateParameter();
+        parameter.ParameterName = name;
+        parameter.Value = value;
+        command.Parameters.Add(parameter);
+    }
+
     [SuppressMessage(
         "Security",
         "CA2100:Review SQL queries for security vulnerabilities",
@@ -1006,7 +1198,7 @@ public sealed class ConnectionIntegrationTests
     )]
     private static async Task ExecuteNonQueryAsync(
         DotRocksConnection connection,
-        System.Data.Common.DbTransaction transaction,
+        System.Data.Common.DbTransaction? transaction,
         string commandText
     )
     {

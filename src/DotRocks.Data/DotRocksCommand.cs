@@ -18,6 +18,7 @@ public sealed class DotRocksCommand : DbCommand
     private DbTransaction? _transaction;
     private string _commandText = string.Empty;
     private int _commandTimeout = 30;
+    private PreparedCommandText? _preparedCommand;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DotRocksCommand"/> class.
@@ -50,7 +51,11 @@ public sealed class DotRocksCommand : DbCommand
     public override string CommandText
     {
         get => _commandText;
-        set => _commandText = value ?? string.Empty;
+        set
+        {
+            _commandText = value ?? string.Empty;
+            _preparedCommand = null;
+        }
     }
 
     /// <inheritdoc />
@@ -167,8 +172,19 @@ public sealed class DotRocksCommand : DbCommand
     }
 
     /// <inheritdoc />
-    public override void Prepare() =>
-        throw new NotSupportedException("Prepared commands are not implemented yet.");
+    public override void Prepare()
+    {
+        EnsureTextCommand();
+        _preparedCommand = CommandTextParameterBinder.Prepare(CommandText, _parameters);
+    }
+
+    /// <inheritdoc />
+    public override Task PrepareAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        Prepare();
+        return Task.CompletedTask;
+    }
 
     /// <inheritdoc />
     public override async Task<int> ExecuteNonQueryAsync(CancellationToken cancellationToken)
@@ -220,7 +236,7 @@ public sealed class DotRocksCommand : DbCommand
         }
 
         _connection.ValidateCommandTransaction((DotRocksTransaction?)_transaction);
-        string commandText = CommandTextParameterBinder.Bind(CommandText, _parameters);
+        string commandText = BindCommandText();
         using var commandCancellation = new CancellationTokenSource();
         using CancellationTokenSource? timeoutCancellation = CreateTimeoutCancellation();
         using CancellationTokenSource linkedCancellation = CreateLinkedCancellation(
@@ -365,4 +381,29 @@ public sealed class DotRocksCommand : DbCommand
             connectionId: null,
             innerException
         );
+
+    private string BindCommandText()
+    {
+        if (_preparedCommand is not null)
+        {
+            if (!string.Equals(_preparedCommand.CommandText, CommandText, StringComparison.Ordinal))
+            {
+                _preparedCommand = null;
+            }
+            else
+            {
+                CommandTextParameterBinder.Prepare(CommandText, _parameters);
+            }
+        }
+
+        return CommandTextParameterBinder.Bind(CommandText, _parameters);
+    }
+
+    private void EnsureTextCommand()
+    {
+        if (CommandType != CommandType.Text)
+        {
+            throw new NotSupportedException("DotRocks supports only text commands.");
+        }
+    }
 }

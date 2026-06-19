@@ -41,6 +41,41 @@ public sealed class DotRocksCommandTests
     }
 
     [Fact]
+    public void Prepare_ValidatesTextCommandParameterShape()
+    {
+        using var command = new DotRocksCommand { CommandText = "SELECT @value" };
+        command.Parameters.Add(new DotRocksParameter { ParameterName = "value", Value = 1 });
+
+        command.Prepare();
+    }
+
+    [Fact]
+    public void Prepare_RejectsMissingParameter()
+    {
+        using var command = new DotRocksCommand { CommandText = "SELECT @missing" };
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+            command.Prepare
+        );
+
+        Assert.Contains("@missing", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task PrepareAsync_WithPreCanceledToken_ThrowsOperationCanceled()
+    {
+        using var command = new DotRocksCommand { CommandText = "SELECT 1" };
+        using var cancellation = new CancellationTokenSource();
+        await cancellation.CancelAsync().ConfigureAwait(true);
+
+        await Assert
+            .ThrowsAsync<OperationCanceledException>(async () =>
+                await command.PrepareAsync(cancellation.Token).ConfigureAwait(true)
+            )
+            .ConfigureAwait(true);
+    }
+
+    [Fact]
     public async Task ExecuteScalarAsync_WithPreCanceledToken_ThrowsOperationCanceled()
     {
         using var command = new DotRocksCommand();

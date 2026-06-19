@@ -58,6 +58,32 @@ public sealed class DapperIntegrationTests
     }
 
     [Fact]
+    public async Task PreparedCommand_ExecutesThroughDapperConnection()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
+        await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        using System.Data.Common.DbCommand command = connection.CreateCommand();
+        command.CommandText = "SELECT @value";
+        System.Data.Common.DbParameter parameter = command.CreateParameter();
+        parameter.ParameterName = "value";
+        parameter.Value = 42;
+        command.Parameters.Add(parameter);
+
+        await command.PrepareAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+        object? value = await command
+            .ExecuteScalarAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+
+        Assert.Equal(42, value);
+    }
+
+    [Fact]
     public async Task QuerySingleAsync_MapsPoco()
     {
         if (!IntegrationTestEnvironment.IsEnabled)
