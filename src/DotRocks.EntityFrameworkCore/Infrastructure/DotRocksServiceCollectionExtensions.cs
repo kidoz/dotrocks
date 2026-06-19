@@ -1,8 +1,14 @@
 using DotRocks.EntityFrameworkCore.Diagnostics;
+using DotRocks.EntityFrameworkCore.Metadata.Conventions;
+using DotRocks.EntityFrameworkCore.Migrations;
+using DotRocks.EntityFrameworkCore.Query;
 using DotRocks.EntityFrameworkCore.Storage;
 using DotRocks.EntityFrameworkCore.Update;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Metadata.Conventions.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.EntityFrameworkCore.Update;
 using Microsoft.Extensions.DependencyInjection;
@@ -24,13 +30,17 @@ public static class DotRocksServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
 
         var builder = new EntityFrameworkRelationalServicesBuilder(services);
+        builder.TryAdd<IProviderConventionSetBuilder, DotRocksConventionSetBuilder>();
         builder.TryAdd<IDatabaseProvider, DatabaseProvider<DotRocksOptionsExtension>>();
         builder.TryAdd<LoggingDefinitions, DotRocksLoggingDefinitions>();
+        builder.TryAdd<IDatabase, DotRocksDatabase>();
         builder.TryAdd<IRelationalConnection, DotRocksRelationalConnection>();
         builder.TryAdd<IDatabaseCreator, DotRocksDatabaseCreator>();
         builder.TryAdd<IRelationalDatabaseCreator, DotRocksDatabaseCreator>();
-        builder.TryAdd<ISqlGenerationHelper, RelationalSqlGenerationHelper>();
+        builder.TryAdd<ISqlGenerationHelper, DotRocksSqlGenerationHelper>();
         builder.TryAdd<IRelationalTypeMappingSource, DotRocksTypeMappingSource>();
+        builder.TryAdd<IQuerySqlGeneratorFactory, DotRocksQuerySqlGeneratorFactory>();
+        builder.TryAdd<IMigrator, DotRocksMigrator>();
         builder.TryAdd<IUpdateSqlGenerator, DotRocksUpdateSqlGenerator>();
         builder.TryAdd<IModificationCommandBatchFactory, DotRocksModificationCommandBatchFactory>();
         builder.TryAddCoreServices();
