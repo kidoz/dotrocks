@@ -1,4 +1,5 @@
 using System.Data;
+using System.Diagnostics.CodeAnalysis;
 using Xunit;
 
 namespace DotRocks.Data.IntegrationTests;
@@ -18,7 +19,7 @@ public sealed class ConnectionIntegrationTests
         await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
 
         Assert.Equal(ConnectionState.Open, connection.State);
-        Assert.Contains("StarRocks", connection.ServerVersion, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("5.1.0", connection.ServerVersion);
     }
 
     [Fact]
@@ -103,5 +104,104 @@ public sealed class ConnectionIntegrationTests
             exception.ToString(),
             StringComparison.Ordinal
         );
+    }
+
+    [Theory]
+    [InlineData("SELECT 'abc'", "abc")]
+    [InlineData("SELECT 123", "123")]
+    [SuppressMessage(
+        "Security",
+        "CA2100:Review SQL queries for security vulnerabilities",
+        Justification = "Integration test SQL is fixed InlineData, not user input."
+    )]
+    public async Task ExecuteScalarAsync_ReturnsTextProtocolValues(string sql, string expected)
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
+        await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        using System.Data.Common.DbCommand command = connection.CreateCommand();
+        command.CommandText = sql;
+
+        object? value = await command
+            .ExecuteScalarAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+
+        Assert.Equal(expected, value);
+    }
+
+    [Fact]
+    public async Task ExecuteScalarAsync_ReturnsNullForSqlNull()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
+        await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        using System.Data.Common.DbCommand command = connection.CreateCommand();
+        command.CommandText = "SELECT NULL";
+
+        object? value = await command
+            .ExecuteScalarAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+
+        Assert.Null(value);
+    }
+
+    [Fact]
+    public async Task BadSql_ThrowsDotRocksException()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
+        await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        using System.Data.Common.DbCommand command = connection.CreateCommand();
+        command.CommandText = "SELECT FROM";
+
+        DotRocksException exception = await Assert
+            .ThrowsAsync<DotRocksException>(async () =>
+                await command
+                    .ExecuteScalarAsync(TestContext.Current.CancellationToken)
+                    .ConfigureAwait(true)
+            )
+            .ConfigureAwait(true);
+
+        Assert.NotNull(exception.ServerErrorCode);
+        Assert.DoesNotContain(
+            IntegrationTestEnvironment.ConnectionString,
+            exception.ToString(),
+            StringComparison.Ordinal
+        );
+    }
+
+    [Fact]
+    public async Task OpenClose_CanRepeatOnSeparateConnections()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        for (int i = 0; i < 2; i++)
+        {
+            using var connection = new DotRocksConnection(
+                IntegrationTestEnvironment.ConnectionString
+            );
+            await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+            Assert.Equal(ConnectionState.Open, connection.State);
+            await connection.CloseAsync().ConfigureAwait(true);
+            Assert.Equal(ConnectionState.Closed, connection.State);
+        }
     }
 }
