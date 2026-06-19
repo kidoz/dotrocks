@@ -27,6 +27,7 @@ public sealed class DotRocksConnectionStringBuilder
     private const string MinimumPoolSizeKeyword = "Minimum Pool Size";
     private const string MaximumPoolSizeKeyword = "Maximum Pool Size";
     private const string ConnectionIdleTimeoutKeyword = "Connection Idle Timeout";
+    private const string StreamLoadEndpointKeyword = "Stream Load Endpoint";
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DotRocksConnectionStringBuilder"/> class.
@@ -174,6 +175,43 @@ public sealed class DotRocksConnectionStringBuilder
     }
 
     /// <summary>
+    /// Gets or sets the StarRocks FE HTTP endpoint used for Stream Load requests.
+    /// </summary>
+    public string StreamLoadEndpoint
+    {
+        get
+        {
+            string endpoint = GetString(
+                StreamLoadEndpointKeyword,
+                DotRocksConnectionOptions.BuildDefaultStreamLoadEndpoint(Server).AbsoluteUri
+            );
+            return new Uri(endpoint, UriKind.Absolute).AbsoluteUri;
+        }
+        set
+        {
+            ArgumentNullException.ThrowIfNull(value);
+            Uri endpoint = new(value, UriKind.Absolute);
+            if (endpoint.Scheme is not ("http" or "https"))
+            {
+                throw new ArgumentException(
+                    "Stream Load Endpoint must use http or https.",
+                    nameof(value)
+                );
+            }
+
+            if (!string.IsNullOrEmpty(endpoint.UserInfo))
+            {
+                throw new ArgumentException(
+                    "Stream Load Endpoint must not include user information.",
+                    nameof(value)
+                );
+            }
+
+            this[StreamLoadEndpointKeyword] = endpoint.AbsoluteUri;
+        }
+    }
+
+    /// <summary>
     /// Gets a sanitized connection-string representation.
     /// </summary>
     /// <returns>A connection string with the password redacted.</returns>
@@ -241,6 +279,13 @@ public sealed class DotRocksConnectionStringBuilder
             MinimumPoolSizeKeyword => [MinimumPoolSizeKeyword, "Min Pool Size"],
             MaximumPoolSizeKeyword => [MaximumPoolSizeKeyword, "Max Pool Size"],
             ConnectionIdleTimeoutKeyword => [ConnectionIdleTimeoutKeyword, "Idle Timeout"],
+            StreamLoadEndpointKeyword =>
+            [
+                StreamLoadEndpointKeyword,
+                "StreamLoadEndpoint",
+                "Stream Load URL",
+                "Http Endpoint",
+            ],
             _ => [keyword],
         };
 }

@@ -14,6 +14,7 @@ internal sealed record DotRocksConnectionOptions(
     int MinimumPoolSize,
     int MaximumPoolSize,
     TimeSpan ConnectionIdleTimeout,
+    Uri StreamLoadEndpoint,
     string ConnectionString
 )
 {
@@ -25,6 +26,7 @@ internal sealed record DotRocksConnectionOptions(
     public const int DefaultMinimumPoolSize = 0;
     public const int DefaultMaximumPoolSize = 100;
     public const int DefaultConnectionIdleTimeoutSeconds = 300;
+    public const int DefaultStreamLoadPort = 8030;
 
     public static DotRocksConnectionOptions Default { get; } =
         new(
@@ -38,6 +40,7 @@ internal sealed record DotRocksConnectionOptions(
             DefaultMinimumPoolSize,
             DefaultMaximumPoolSize,
             TimeSpan.FromSeconds(DefaultConnectionIdleTimeoutSeconds),
+            BuildDefaultStreamLoadEndpoint(DefaultServer),
             string.Empty
         );
 
@@ -73,6 +76,11 @@ internal sealed record DotRocksConnectionOptions(
             "Connection Idle Timeout",
             DefaultConnectionIdleTimeoutSeconds
         );
+        Uri streamLoadEndpoint = GetUri(
+            builder,
+            "Stream Load Endpoint",
+            BuildDefaultStreamLoadEndpoint(server)
+        );
 
         Validate(
             server,
@@ -81,7 +89,8 @@ internal sealed record DotRocksConnectionOptions(
             timeoutSeconds,
             minimumPoolSize,
             maximumPoolSize,
-            idleTimeoutSeconds
+            idleTimeoutSeconds,
+            streamLoadEndpoint
         );
         string canonical = BuildConnectionString(
             server,
@@ -93,7 +102,8 @@ internal sealed record DotRocksConnectionOptions(
             pooling,
             minimumPoolSize,
             maximumPoolSize,
-            idleTimeoutSeconds
+            idleTimeoutSeconds,
+            streamLoadEndpoint
         );
 
         return new DotRocksConnectionOptions(
@@ -107,6 +117,7 @@ internal sealed record DotRocksConnectionOptions(
             minimumPoolSize,
             maximumPoolSize,
             TimeSpan.FromSeconds(idleTimeoutSeconds),
+            streamLoadEndpoint,
             canonical
         );
     }
@@ -122,7 +133,8 @@ internal sealed record DotRocksConnectionOptions(
             Pooling,
             MinimumPoolSize,
             MaximumPoolSize,
-            (int)ConnectionIdleTimeout.TotalSeconds
+            (int)ConnectionIdleTimeout.TotalSeconds,
+            StreamLoadEndpoint
         );
 
     internal DotRocksConnectionPoolKey CreatePoolKey() =>
@@ -135,7 +147,8 @@ internal sealed record DotRocksConnectionOptions(
         int timeoutSeconds,
         int minimumPoolSize,
         int maximumPoolSize,
-        int idleTimeoutSeconds
+        int idleTimeoutSeconds,
+        Uri streamLoadEndpoint
     )
     {
         if (string.IsNullOrWhiteSpace(server))
@@ -167,6 +180,30 @@ internal sealed record DotRocksConnectionOptions(
                 nameof(minimumPoolSize),
                 minimumPoolSize,
                 "Minimum Pool Size must be less than or equal to Maximum Pool Size."
+            );
+        }
+
+        if (!streamLoadEndpoint.IsAbsoluteUri)
+        {
+            throw new ArgumentException(
+                "Stream Load Endpoint must be an absolute URI.",
+                nameof(streamLoadEndpoint)
+            );
+        }
+
+        if (streamLoadEndpoint.Scheme is not ("http" or "https"))
+        {
+            throw new ArgumentException(
+                "Stream Load Endpoint must use http or https.",
+                nameof(streamLoadEndpoint)
+            );
+        }
+
+        if (!string.IsNullOrEmpty(streamLoadEndpoint.UserInfo))
+        {
+            throw new ArgumentException(
+                "Stream Load Endpoint must not include user information.",
+                nameof(streamLoadEndpoint)
             );
         }
     }
@@ -219,6 +256,25 @@ internal sealed record DotRocksConnectionOptions(
         return fallback;
     }
 
+    private static Uri GetUri(DbConnectionStringBuilder builder, string canonical, Uri fallback)
+    {
+        foreach (string keyword in Aliases(canonical))
+        {
+            if (builder.TryGetValue(keyword, out object? value))
+            {
+                string text =
+                    Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture)
+                    ?? string.Empty;
+                return new Uri(text, UriKind.Absolute);
+            }
+        }
+
+        return fallback;
+    }
+
+    internal static Uri BuildDefaultStreamLoadEndpoint(string server) =>
+        new($"http://{server}:{DefaultStreamLoadPort}", UriKind.Absolute);
+
     private static IEnumerable<string> Aliases(string canonical) =>
         canonical switch
         {
@@ -230,6 +286,13 @@ internal sealed record DotRocksConnectionOptions(
             "Minimum Pool Size" => ["Minimum Pool Size", "Min Pool Size"],
             "Maximum Pool Size" => ["Maximum Pool Size", "Max Pool Size"],
             "Connection Idle Timeout" => ["Connection Idle Timeout", "Idle Timeout"],
+            "Stream Load Endpoint" =>
+            [
+                "Stream Load Endpoint",
+                "StreamLoadEndpoint",
+                "Stream Load URL",
+                "Http Endpoint",
+            ],
             _ => [canonical],
         };
 
@@ -243,7 +306,8 @@ internal sealed record DotRocksConnectionOptions(
         bool pooling,
         int minimumPoolSize,
         int maximumPoolSize,
-        int idleTimeoutSeconds
+        int idleTimeoutSeconds,
+        Uri streamLoadEndpoint
     )
     {
         var builder = new StringBuilder();
@@ -285,6 +349,7 @@ internal sealed record DotRocksConnectionOptions(
             "Connection Idle Timeout",
             idleTimeoutSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture)
         );
+        Append(builder, "Stream Load Endpoint", streamLoadEndpoint.AbsoluteUri);
         return builder.ToString();
     }
 

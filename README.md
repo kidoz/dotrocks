@@ -70,6 +70,33 @@ await using DbDataSource dataSource = factory.CreateDataSource(builder.Connectio
 await using DbConnection connection = await dataSource.OpenConnectionAsync();
 ```
 
+## Stream Load
+
+Use `DotRocksStreamLoadClient` for StarRocks HTTP Stream Load. The client uses the same
+connection string credentials and reads payloads from the supplied stream.
+
+```csharp
+using DotRocks.Data.Loading;
+
+using var client = new DotRocksStreamLoadClient(
+    "Server=127.0.0.1;Port=9030;User ID=root;Stream Load Endpoint=http://127.0.0.1:8030"
+);
+
+await using Stream csv = File.OpenRead("events.csv");
+DotRocksStreamLoadResult result = await client.LoadCsvAsync(
+    "warehouse",
+    "events",
+    csv,
+    new DotRocksStreamLoadOptions
+    {
+        Label = "events_20260619",
+        Columns = "id,name,created_at",
+        ColumnSeparator = ",",
+        RowDelimiter = "\\n",
+    }
+);
+```
+
 ## Build and test
 
 Common tasks are exposed via [`just`](https://github.com/casey/just) (see `justfile`):

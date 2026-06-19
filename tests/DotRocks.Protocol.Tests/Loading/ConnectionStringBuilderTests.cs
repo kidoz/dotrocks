@@ -25,6 +25,12 @@ public sealed class ConnectionStringBuilderTests
         Assert.Equal(0, builder.MinimumPoolSize);
         Assert.Equal(100, builder.MaximumPoolSize);
         Assert.Equal(300, builder.ConnectionIdleTimeout);
+        Assert.Equal("http://starrocks.local:8030/", builder.StreamLoadEndpoint);
+        Assert.Contains(
+            "Stream Load Endpoint=http://starrocks.local:8030/",
+            builder.ToString(),
+            StringComparison.Ordinal
+        );
     }
 
     [Fact]
@@ -67,5 +73,30 @@ public sealed class ConnectionStringBuilderTests
         Assert.Throws<ArgumentOutOfRangeException>(() => builder.MinimumPoolSize = -1);
         Assert.Throws<ArgumentOutOfRangeException>(() => builder.MaximumPoolSize = 0);
         Assert.Throws<ArgumentOutOfRangeException>(() => builder.ConnectionIdleTimeout = 0);
+    }
+
+    [Fact]
+    public void StreamLoadEndpoint_ParsesAliases()
+    {
+        var builder = new DotRocksConnectionStringBuilder(
+            "Host=starrocks.local;Http Endpoint=https://load.starrocks.local:8443"
+        );
+
+        Assert.Equal("https://load.starrocks.local:8443/", builder.StreamLoadEndpoint);
+        Assert.Contains(
+            "Stream Load Endpoint=https://load.starrocks.local:8443/",
+            builder.ToString(),
+            StringComparison.Ordinal
+        );
+    }
+
+    [Theory]
+    [InlineData("ftp://starrocks.local:8030")]
+    [InlineData("http://alice@starrocks.local:8030")]
+    public void InvalidStreamLoadEndpoint_Throws(string endpoint)
+    {
+        var builder = new DotRocksConnectionStringBuilder();
+
+        Assert.Throws<ArgumentException>(() => builder.StreamLoadEndpoint = endpoint);
     }
 }

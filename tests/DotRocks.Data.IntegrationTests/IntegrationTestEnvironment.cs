@@ -50,6 +50,31 @@ internal static class IntegrationTestEnvironment
                 builder.Database = database;
             }
 
+            string? streamLoadEndpoint = Environment.GetEnvironmentVariable(
+                "DOTROCKS_STREAM_LOAD_ENDPOINT"
+            );
+            if (!string.IsNullOrWhiteSpace(streamLoadEndpoint))
+            {
+                builder.StreamLoadEndpoint = streamLoadEndpoint;
+            }
+            else
+            {
+                string? httpPort =
+                    Environment.GetEnvironmentVariable("DOTROCKS_FE_HTTP_PORT")
+                    ?? Environment.GetEnvironmentVariable("DOTROCKS_HTTP_PORT");
+                if (
+                    int.TryParse(
+                        httpPort,
+                        System.Globalization.NumberStyles.Integer,
+                        null,
+                        out int parsedHttpPort
+                    )
+                )
+                {
+                    builder.StreamLoadEndpoint = $"http://{builder.Server}:{parsedHttpPort}";
+                }
+            }
+
             return builder.ConnectionString;
         }
     }
