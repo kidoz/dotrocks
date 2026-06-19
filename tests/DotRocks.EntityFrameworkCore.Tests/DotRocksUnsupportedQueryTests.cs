@@ -26,7 +26,7 @@ public sealed class DotRocksUnsupportedQueryTests
     [Fact]
     public void Include_ThrowsNotSupportedException()
     {
-        using var context = CreateContext();
+        using var context = CreateNavigationContext();
 
         Assert.Throws<NotSupportedException>(() =>
             context.Widgets.Include(widget => widget.Details).ToQueryString()
@@ -110,12 +110,57 @@ public sealed class DotRocksUnsupportedQueryTests
                 .Entity<UnitWidget>()
                 .ToTable("widgets", "unit_db")
                 .HasKey(widget => widget.Id);
+            modelBuilder.Entity<UnitWidget>().Property(widget => widget.Id).ValueGeneratedNever();
             modelBuilder
                 .Entity<UnitWidgetDetail>()
                 .ToTable("widget_details", "unit_db")
                 .HasKey(detail => detail.Id);
             modelBuilder
-                .Entity<UnitWidget>()
+                .Entity<UnitWidgetDetail>()
+                .Property(detail => detail.Id)
+                .ValueGeneratedNever();
+        }
+    }
+
+    private static NavigationContext CreateNavigationContext()
+    {
+        var optionsBuilder = new DbContextOptionsBuilder<NavigationContext>();
+        optionsBuilder.UseStarRocks("Server=127.0.0.1;Port=9030;User ID=root");
+        return new NavigationContext(optionsBuilder.Options);
+    }
+
+    [SuppressMessage(
+        "Performance",
+        "CA1812:Avoid uninstantiated internal classes",
+        Justification = "The test methods instantiate this nested context through its primary constructor."
+    )]
+    private sealed class NavigationContext(DbContextOptions<NavigationContext> options)
+        : DbContext(options)
+    {
+        public DbSet<NavigationWidget> Widgets => Set<NavigationWidget>();
+
+        public DbSet<NavigationWidgetDetail> WidgetDetails => Set<NavigationWidgetDetail>();
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            modelBuilder
+                .Entity<NavigationWidget>()
+                .ToTable("widgets", "unit_db")
+                .HasKey(widget => widget.Id);
+            modelBuilder
+                .Entity<NavigationWidget>()
+                .Property(widget => widget.Id)
+                .ValueGeneratedNever();
+            modelBuilder
+                .Entity<NavigationWidgetDetail>()
+                .ToTable("widget_details", "unit_db")
+                .HasKey(detail => detail.Id);
+            modelBuilder
+                .Entity<NavigationWidgetDetail>()
+                .Property(detail => detail.Id)
+                .ValueGeneratedNever();
+            modelBuilder
+                .Entity<NavigationWidget>()
                 .HasMany(widget => widget.Details)
                 .WithOne(detail => detail.Widget)
                 .HasForeignKey(detail => detail.WidgetId);
@@ -134,8 +179,6 @@ public sealed class DotRocksUnsupportedQueryTests
         public int Category { get; set; }
 
         public string Name { get; set; } = string.Empty;
-
-        public ICollection<UnitWidgetDetail> Details { get; } = [];
     }
 
     [SuppressMessage(
@@ -150,7 +193,35 @@ public sealed class DotRocksUnsupportedQueryTests
         public int WidgetId { get; set; }
 
         public string Description { get; set; } = string.Empty;
+    }
 
-        public UnitWidget Widget { get; set; } = null!;
+    [SuppressMessage(
+        "Performance",
+        "CA1812:Avoid uninstantiated internal classes",
+        Justification = "EF Core uses this entity type through DbSet metadata."
+    )]
+    private sealed class NavigationWidget
+    {
+        public int Id { get; set; }
+
+        public string Name { get; set; } = string.Empty;
+
+        public ICollection<NavigationWidgetDetail> Details { get; } = [];
+    }
+
+    [SuppressMessage(
+        "Performance",
+        "CA1812:Avoid uninstantiated internal classes",
+        Justification = "EF Core uses this entity type through DbSet metadata."
+    )]
+    private sealed class NavigationWidgetDetail
+    {
+        public int Id { get; set; }
+
+        public int WidgetId { get; set; }
+
+        public string Description { get; set; } = string.Empty;
+
+        public NavigationWidget Widget { get; set; } = null!;
     }
 }

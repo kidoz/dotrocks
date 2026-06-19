@@ -31,6 +31,7 @@ public static class DotRocksServiceCollectionExtensions
 
         var builder = new EntityFrameworkRelationalServicesBuilder(services);
         builder.TryAdd<IProviderConventionSetBuilder, DotRocksConventionSetBuilder>();
+        builder.TryAdd<IModelValidator, DotRocksModelValidator>();
         builder.TryAdd<IDatabaseProvider, DatabaseProvider<DotRocksOptionsExtension>>();
         builder.TryAdd<LoggingDefinitions, DotRocksLoggingDefinitions>();
         builder.TryAdd<IDatabase, DotRocksDatabase>();
@@ -45,7 +46,8 @@ public static class DotRocksServiceCollectionExtensions
             DotRocksParameterBasedSqlProcessorFactory
         >();
         builder.TryAdd<IQuerySqlGeneratorFactory, DotRocksQuerySqlGeneratorFactory>();
-        builder.TryAdd<IMigrator, DotRocksMigrator>();
+        builder.TryAdd<IMigrationsSqlGenerator, DotRocksMigrationsSqlGenerator>();
+        builder.TryAdd<IHistoryRepository, DotRocksHistoryRepository>();
         builder.TryAdd<IUpdateSqlGenerator, DotRocksUpdateSqlGenerator>();
         builder.TryAdd<IModificationCommandBatchFactory, DotRocksModificationCommandBatchFactory>();
         builder.TryAddCoreServices();

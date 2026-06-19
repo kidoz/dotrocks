@@ -12,20 +12,4 @@ namespace DotRocks.EntityFrameworkCore.Storage;
 internal sealed class DotRocksDatabase(
     DatabaseDependencies dependencies,
     RelationalDatabaseDependencies relationalDependencies
-) : RelationalDatabase(dependencies, relationalDependencies)
-{
-    public override int SaveChanges(IList<IUpdateEntry> entries) =>
-        throw CreateUnsupportedException();
-
-    public override Task<int> SaveChangesAsync(
-        IList<IUpdateEntry> entries,
-        CancellationToken cancellationToken = default
-    )
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        throw CreateUnsupportedException();
-    }
-
-    private static NotSupportedException CreateUnsupportedException() =>
-        new("DotRocks EF Core SaveChanges is not implemented yet.");
-}
+) : RelationalDatabase(dependencies, relationalDependencies);

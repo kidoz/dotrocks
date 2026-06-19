@@ -5,6 +5,7 @@ using DotRocks.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage;
 using Xunit;
 
@@ -14,6 +15,9 @@ public sealed class DotRocksEfCoreIntegrationTests
 {
     private const string LinqDatabaseName = "dotrocks_ef_core_test";
     private const string WidgetTableName = "widgets";
+    private const string WriteWidgetTableName = "ef_write_widgets";
+    private const string MigrationWidgetTableName = "ef_migration_widgets";
+    private const string MigrationId = "202606190001_CreateEfMigrationWidget";
 
     [Fact]
     public void UseStarRocks_ConfiguresProviderName()
@@ -318,26 +322,172 @@ public sealed class DotRocksEfCoreIntegrationTests
     }
 
     [Fact]
-    public void Migrate_ThrowsNotSupportedException()
+    public async Task SaveChangesAsync_InsertsUpdatesAndDeletesSupportedEntity()
     {
-        using var context = CreateContext("Server=127.0.0.1;Port=9030;User ID=root");
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
 
-        NotSupportedException exception = Assert.Throws<NotSupportedException>(() =>
-            context.Database.Migrate()
-        );
-        Assert.Contains("migrations", exception.Message, StringComparison.OrdinalIgnoreCase);
+        var interceptor = new CapturingCommandInterceptor();
+        await using var context = CreateLiveContext(interceptor);
+        await EnsureWriteWidgetTableAsync(context).ConfigureAwait(true);
+
+        try
+        {
+            var row = new EfWriteWidget
+            {
+                Id = 10,
+                Name = "inserted",
+                Active = true,
+                Amount = 12.34m,
+            };
+            context.WriteWidgets.Add(row);
+            interceptor.Clear();
+            Assert.Equal(
+                1,
+                await context
+                    .SaveChangesAsync(TestContext.Current.CancellationToken)
+                    .ConfigureAwait(true)
+            );
+            CapturedCommand insertCommand = interceptor.SingleNonQueryCommand("INSERT");
+            Assert.Contains("@p", insertCommand.CommandText, StringComparison.Ordinal);
+            Assert.DoesNotContain("inserted", insertCommand.CommandText, StringComparison.Ordinal);
+
+            EfWriteWidget inserted = await context
+                .WriteWidgets.AsNoTracking()
+                .SingleAsync(widget => widget.Id == 10, TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+            Assert.Equal("inserted", inserted.Name);
+            Assert.True(inserted.Active);
+
+            row.Name = "updated";
+            row.Active = false;
+            row.Amount = 56.78m;
+            interceptor.Clear();
+            Assert.Equal(
+                1,
+                await context
+                    .SaveChangesAsync(TestContext.Current.CancellationToken)
+                    .ConfigureAwait(true)
+            );
+            CapturedCommand updateCommand = interceptor.SingleNonQueryCommand("UPDATE");
+            Assert.Contains(" WHERE ", updateCommand.CommandText, StringComparison.Ordinal);
+            Assert.Contains("@p", updateCommand.CommandText, StringComparison.Ordinal);
+            Assert.DoesNotContain("updated", updateCommand.CommandText, StringComparison.Ordinal);
+
+            EfWriteWidget updated = await context
+                .WriteWidgets.AsNoTracking()
+                .SingleAsync(widget => widget.Id == 10, TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+            Assert.Equal("updated", updated.Name);
+            Assert.False(updated.Active);
+            Assert.Equal(56.78m, updated.Amount);
+
+            context.WriteWidgets.Remove(row);
+            interceptor.Clear();
+            Assert.Equal(
+                1,
+                await context
+                    .SaveChangesAsync(TestContext.Current.CancellationToken)
+                    .ConfigureAwait(true)
+            );
+            CapturedCommand deleteCommand = interceptor.SingleNonQueryCommand("DELETE");
+            Assert.Contains(" WHERE ", deleteCommand.CommandText, StringComparison.Ordinal);
+            Assert.Contains("@p", deleteCommand.CommandText, StringComparison.Ordinal);
+
+            Assert.Equal(
+                0,
+                await context
+                    .WriteWidgets.CountAsync(
+                        widget => widget.Id == 10,
+                        TestContext.Current.CancellationToken
+                    )
+                    .ConfigureAwait(true)
+            );
+        }
+        finally
+        {
+            await DropWriteWidgetTableAsync(context).ConfigureAwait(true);
+        }
     }
 
     [Fact]
-    public async Task SaveChangesAsync_ThrowsNotSupportedException()
+    [SuppressMessage(
+        "Security",
+        "EF1003:Method inserts concatenated strings directly into the SQL",
+        Justification = "The migration cleanup and verification SQL is assembled only from fixed sanitized identifiers and parameter placeholders."
+    )]
+    public async Task MigrateAsync_CreatesValidStarRocksTable()
     {
-        await using var context = CreateContext("Server=127.0.0.1;Port=9030;User ID=root");
-        context.Widgets.Add(new DotRocksWidget { Id = 1, Name = "one" });
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
 
-        NotSupportedException exception = await Assert.ThrowsAsync<NotSupportedException>(() =>
-            context.SaveChangesAsync(TestContext.Current.CancellationToken)
+        await using DotRocksTestContext setupContext = CreateLiveContext();
+        await EnsureLinqDatabaseAsync(setupContext).ConfigureAwait(true);
+        await setupContext
+            .Database.ExecuteSqlRawAsync(
+                "DROP TABLE IF EXISTS "
+                    + DelimitIdentifier(LinqDatabaseName)
+                    + "."
+                    + DelimitIdentifier(MigrationWidgetTableName),
+                TestContext.Current.CancellationToken
+            )
+            .ConfigureAwait(true);
+        await setupContext
+            .Database.ExecuteSqlRawAsync(
+                "DROP TABLE IF EXISTS "
+                    + DelimitIdentifier(LinqDatabaseName)
+                    + "."
+                    + DelimitIdentifier("__EFMigrationsHistory"),
+                TestContext.Current.CancellationToken
+            )
+            .ConfigureAwait(true);
+
+        using var context = new MigrationTestContext(
+            CreateMigrationContextOptions(BuildDatabaseConnectionString(LinqDatabaseName))
         );
-        Assert.Contains("SaveChanges", exception.Message, StringComparison.OrdinalIgnoreCase);
+
+        await context
+            .Database.MigrateAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+        Assert.Equal(
+            1,
+            await context
+                .Database.ExecuteSqlRawAsync(
+                    "INSERT INTO "
+                        + DelimitIdentifier(MigrationWidgetTableName)
+                        + " ("
+                        + DelimitIdentifier("id")
+                        + ", "
+                        + DelimitIdentifier("name")
+                        + ") VALUES ({0}, {1})",
+                    [1, "created"],
+                    TestContext.Current.CancellationToken
+                )
+                .ConfigureAwait(true)
+        );
+
+        EfMigrationWidget row = await context
+            .MigrationWidgets.AsNoTracking()
+            .SingleAsync(widget => widget.Id == 1, TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+        Assert.Equal("created", row.Name);
+
+        int historyRows = await context
+            .Database.SqlQueryRaw<int>(
+                "SELECT COUNT(*) AS Value FROM "
+                    + DelimitIdentifier("__EFMigrationsHistory")
+                    + " WHERE "
+                    + DelimitIdentifier("MigrationId")
+                    + " = {0}",
+                MigrationId
+            )
+            .SingleAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+        Assert.Equal(1, historyRows);
     }
 
     [Fact]
@@ -981,6 +1131,15 @@ public sealed class DotRocksEfCoreIntegrationTests
         return new DotRocksTestContext(optionsBuilder.Options);
     }
 
+    private static DbContextOptions<MigrationTestContext> CreateMigrationContextOptions(
+        string connectionString
+    )
+    {
+        var optionsBuilder = new DbContextOptionsBuilder<MigrationTestContext>();
+        optionsBuilder.UseStarRocks(connectionString);
+        return optionsBuilder.Options;
+    }
+
     private static async Task EnsureLinqDatabaseAsync(DotRocksTestContext context)
     {
         string sql = "CREATE DATABASE IF NOT EXISTS " + DelimitIdentifier(LinqDatabaseName);
@@ -1032,6 +1191,33 @@ public sealed class DotRocksEfCoreIntegrationTests
         return context.Database.ExecuteSqlRawAsync(sql, TestContext.Current.CancellationToken);
     }
 
+    private static async Task EnsureWriteWidgetTableAsync(DotRocksTestContext context)
+    {
+        await EnsureLinqDatabaseAsync(context).ConfigureAwait(true);
+        await DropWriteWidgetTableAsync(context).ConfigureAwait(true);
+        string createSql = $"""
+            CREATE TABLE {DelimitedWriteWidgetTable()} (
+                id INT NOT NULL,
+                name VARCHAR(64) NOT NULL,
+                active BOOLEAN NOT NULL,
+                amount DECIMAL(10, 2) NOT NULL
+            )
+            PRIMARY KEY(id)
+            DISTRIBUTED BY HASH(id) BUCKETS 1
+            PROPERTIES ('replication_num' = '1')
+            """;
+
+        await context
+            .Database.ExecuteSqlRawAsync(createSql, TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+    }
+
+    private static Task<int> DropWriteWidgetTableAsync(DotRocksTestContext context)
+    {
+        string sql = "DROP TABLE IF EXISTS " + DelimitedWriteWidgetTable();
+        return context.Database.ExecuteSqlRawAsync(sql, TestContext.Current.CancellationToken);
+    }
+
     private static async Task EnsureHighPrecisionTableAsync(DotRocksTestContext context)
     {
         await EnsureLinqDatabaseAsync(context).ConfigureAwait(true);
@@ -1070,11 +1256,25 @@ public sealed class DotRocksEfCoreIntegrationTests
     private static string DelimitedWidgetTable() =>
         DelimitIdentifier(LinqDatabaseName) + "." + DelimitIdentifier(WidgetTableName);
 
+    private static string DelimitedWriteWidgetTable() =>
+        DelimitIdentifier(LinqDatabaseName) + "." + DelimitIdentifier(WriteWidgetTableName);
+
     private static string DelimitedHighPrecisionTable() =>
         DelimitIdentifier(LinqDatabaseName) + "." + DelimitIdentifier("high_precision_values");
 
     private static string CreateUniqueDatabaseName() =>
         "dotrocks_ef_" + Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture)[..12];
+
+    private static string BuildDatabaseConnectionString(string database)
+    {
+        var builder = new DotRocksConnectionStringBuilder(
+            IntegrationTestEnvironment.ConnectionString
+        )
+        {
+            Database = database,
+        };
+        return builder.ConnectionString;
+    }
 
     private static string DelimitIdentifier(string identifier) =>
         "`" + identifier.Replace("`", "``", StringComparison.Ordinal) + "`";
@@ -1131,6 +1331,8 @@ public sealed class DotRocksEfCoreIntegrationTests
 
         public DbSet<LargeIntRow> LargeIntRows => Set<LargeIntRow>();
 
+        public DbSet<EfWriteWidget> WriteWidgets => Set<EfWriteWidget>();
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             modelBuilder.Entity<DotRocksRow>().HasNoKey();
@@ -1144,6 +1346,7 @@ public sealed class DotRocksEfCoreIntegrationTests
                 .Entity<HighPrecisionRow>()
                 .ToTable("high_precision_values", LinqDatabaseName)
                 .HasKey(row => row.Id);
+            modelBuilder.Entity<HighPrecisionRow>().Property(row => row.Id).ValueGeneratedNever();
             modelBuilder
                 .Entity<HighPrecisionRow>()
                 .Property(row => row.Value)
@@ -1184,6 +1387,10 @@ public sealed class DotRocksEfCoreIntegrationTests
                 .Entity<DotRocksWidget>()
                 .ToTable(WidgetTableName, LinqDatabaseName)
                 .HasKey(widget => widget.Id);
+            modelBuilder
+                .Entity<DotRocksWidget>()
+                .Property(widget => widget.Id)
+                .ValueGeneratedNever();
             modelBuilder.Entity<DotRocksWidget>().Property(widget => widget.Category);
             modelBuilder.Entity<DotRocksWidget>().Property(widget => widget.Priority);
             modelBuilder
@@ -1204,6 +1411,79 @@ public sealed class DotRocksEfCoreIntegrationTests
                 .Entity<DotRocksWidget>()
                 .Property(widget => widget.OptionalScore)
                 .HasColumnName("optional_score");
+            modelBuilder
+                .Entity<EfWriteWidget>()
+                .ToTable(WriteWidgetTableName, LinqDatabaseName)
+                .HasKey(widget => widget.Id);
+            modelBuilder
+                .Entity<EfWriteWidget>()
+                .Property(widget => widget.Id)
+                .ValueGeneratedNever();
+            modelBuilder
+                .Entity<EfWriteWidget>()
+                .Property(widget => widget.Amount)
+                .HasColumnType("decimal(10, 2)");
+        }
+    }
+
+    [SuppressMessage(
+        "Performance",
+        "CA1812:Avoid uninstantiated internal classes",
+        Justification = "The test methods instantiate this nested context through its primary constructor."
+    )]
+    private sealed class MigrationTestContext(DbContextOptions<MigrationTestContext> options)
+        : DbContext(options)
+    {
+        public DbSet<EfMigrationWidget> MigrationWidgets => Set<EfMigrationWidget>();
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            modelBuilder
+                .Entity<EfMigrationWidget>()
+                .ToTable(MigrationWidgetTableName, LinqDatabaseName)
+                .HasKey(widget => widget.Id);
+            modelBuilder
+                .Entity<EfMigrationWidget>()
+                .Property(widget => widget.Id)
+                .ValueGeneratedNever()
+                .HasColumnName("id");
+            modelBuilder
+                .Entity<EfMigrationWidget>()
+                .Property(widget => widget.Name)
+                .HasColumnName("name")
+                .HasMaxLength(64);
+        }
+    }
+
+    [DbContext(typeof(MigrationTestContext))]
+    [Migration(MigrationId)]
+    [SuppressMessage(
+        "Performance",
+        "CA1812:Avoid uninstantiated internal classes",
+        Justification = "EF Core discovers this migration through assembly metadata."
+    )]
+    private sealed class CreateEfMigrationWidget : Migration
+    {
+        protected override void Up(MigrationBuilder migrationBuilder)
+        {
+            migrationBuilder.CreateTable(
+                name: MigrationWidgetTableName,
+                schema: LinqDatabaseName,
+                columns: table => new
+                {
+                    Id = table.Column<int>(name: "id", nullable: false),
+                    Name = table.Column<string>(name: "name", type: "varchar(64)", nullable: false),
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_ef_migration_widgets", row => row.Id);
+                }
+            );
+        }
+
+        protected override void Down(MigrationBuilder migrationBuilder)
+        {
+            migrationBuilder.DropTable(name: MigrationWidgetTableName, schema: LinqDatabaseName);
         }
     }
 
@@ -1219,6 +1499,11 @@ public sealed class DotRocksEfCoreIntegrationTests
         public string Name { get; set; } = string.Empty;
     }
 
+    [SuppressMessage(
+        "Performance",
+        "CA1812:Avoid uninstantiated internal classes",
+        Justification = "EF Core materializes this entity through query projection."
+    )]
     private sealed class DotRocksWidget
     {
         public int Id { get; set; }
@@ -1238,6 +1523,34 @@ public sealed class DotRocksEfCoreIntegrationTests
         public decimal Amount { get; set; }
 
         public int? OptionalScore { get; set; }
+    }
+
+    [SuppressMessage(
+        "Performance",
+        "CA1812:Avoid uninstantiated internal classes",
+        Justification = "EF Core materializes this entity through query projection."
+    )]
+    private sealed class EfWriteWidget
+    {
+        public int Id { get; set; }
+
+        public string Name { get; set; } = string.Empty;
+
+        public bool Active { get; set; }
+
+        public decimal Amount { get; set; }
+    }
+
+    [SuppressMessage(
+        "Performance",
+        "CA1812:Avoid uninstantiated internal classes",
+        Justification = "EF Core materializes this entity through query projection."
+    )]
+    private sealed class EfMigrationWidget
+    {
+        public int Id { get; set; }
+
+        public string Name { get; set; } = string.Empty;
     }
 
     [SuppressMessage(
@@ -1314,6 +1627,12 @@ public sealed class DotRocksEfCoreIntegrationTests
                     && command.CommandText.Contains(tableName, StringComparison.Ordinal)
             );
 
+        public CapturedCommand SingleNonQueryCommand(string verb) =>
+            Assert.Single(
+                _commands,
+                command => command.CommandText.StartsWith(verb, StringComparison.OrdinalIgnoreCase)
+            );
+
         public override InterceptionResult<DbDataReader> ReaderExecuting(
             DbCommand command,
             CommandEventData eventData,
@@ -1333,6 +1652,27 @@ public sealed class DotRocksEfCoreIntegrationTests
         {
             Capture(command);
             return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
+        }
+
+        public override InterceptionResult<int> NonQueryExecuting(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<int> result
+        )
+        {
+            Capture(command);
+            return base.NonQueryExecuting(command, eventData, result);
+        }
+
+        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<int> result,
+            CancellationToken cancellationToken = default
+        )
+        {
+            Capture(command);
+            return base.NonQueryExecutingAsync(command, eventData, result, cancellationToken);
         }
 
         private void Capture(DbCommand command)
