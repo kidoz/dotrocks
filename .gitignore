@@ -1,0 +1,21 @@
+# Build output
+[Bb]in/
+[Oo]bj/
+artifacts/
+*.user
+
+# Test results
+[Tt]est[Rr]esults/
+*.trx
+coverage*.json
+coverage*.xml
+*.coverage
+
+# Tooling / IDE
+.vs/
+.idea/
+.vscode/
+*.DotSettings.user
+
+# OS
+.DS_Store
