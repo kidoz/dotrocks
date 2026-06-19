@@ -21,6 +21,24 @@ public sealed class ConnectionStringBuilderTests
         Assert.Equal("alice", builder.UserId);
         Assert.Equal("warehouse", builder.Database);
         Assert.Equal(7, builder.ConnectionTimeout);
+        Assert.False(builder.Pooling);
+        Assert.Equal(0, builder.MinimumPoolSize);
+        Assert.Equal(100, builder.MaximumPoolSize);
+        Assert.Equal(300, builder.ConnectionIdleTimeout);
+    }
+
+    [Fact]
+    public void PoolingOptions_ParseAliases()
+    {
+        var builder = new DotRocksConnectionStringBuilder(
+            "Pooling=true;Min Pool Size=1;Max Pool Size=2;Idle Timeout=3"
+        );
+
+        Assert.True(builder.Pooling);
+        Assert.Equal(1, builder.MinimumPoolSize);
+        Assert.Equal(2, builder.MaximumPoolSize);
+        Assert.Equal(3, builder.ConnectionIdleTimeout);
+        Assert.Contains("Pooling=True", builder.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -29,5 +47,25 @@ public sealed class ConnectionStringBuilderTests
         var builder = new DotRocksConnectionStringBuilder();
 
         Assert.Throws<ArgumentOutOfRangeException>(() => builder.Port = 0);
+    }
+
+    [Fact]
+    public void InvalidPoolSizes_Throw()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            _ = new DotRocksConnectionStringBuilder(
+                "Minimum Pool Size=2;Maximum Pool Size=1"
+            ).BuildOptions()
+        );
+    }
+
+    [Fact]
+    public void InvalidPoolPropertyValues_Throw()
+    {
+        var builder = new DotRocksConnectionStringBuilder();
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => builder.MinimumPoolSize = -1);
+        Assert.Throws<ArgumentOutOfRangeException>(() => builder.MaximumPoolSize = 0);
+        Assert.Throws<ArgumentOutOfRangeException>(() => builder.ConnectionIdleTimeout = 0);
     }
 }

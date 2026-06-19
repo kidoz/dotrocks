@@ -1,5 +1,6 @@
 using System.Data;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using Xunit;
 
 namespace DotRocks.Data.IntegrationTests;
@@ -409,5 +410,128 @@ public sealed class ConnectionIntegrationTests
             await connection.CloseAsync().ConfigureAwait(true);
             Assert.Equal(ConnectionState.Closed, connection.State);
         }
+    }
+
+    [Fact]
+    public async Task PooledConnections_ReusePhysicalConnection()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        DotRocksConnection.ClearAllPools();
+        string connectionString = BuildPoolingConnectionString(maximumPoolSize: 1);
+        long firstConnectionId;
+        using (var first = new DotRocksConnection(connectionString))
+        {
+            await first.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+            firstConnectionId = await ReadConnectionIdAsync(first).ConfigureAwait(true);
+            await first.CloseAsync().ConfigureAwait(true);
+        }
+
+        using (var second = new DotRocksConnection(connectionString))
+        {
+            await second.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+            long secondConnectionId = await ReadConnectionIdAsync(second).ConfigureAwait(true);
+
+            Assert.Equal(firstConnectionId, secondConnectionId);
+            await second.CloseAsync().ConfigureAwait(true);
+        }
+
+        DotRocksConnection.ClearAllPools();
+    }
+
+    [Fact]
+    public async Task PooledConnections_RespectMaximumPoolSize()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        DotRocksConnection.ClearAllPools();
+        string connectionString = BuildPoolingConnectionString(maximumPoolSize: 1);
+        using var first = new DotRocksConnection(connectionString);
+        using var second = new DotRocksConnection(connectionString);
+        await first.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        Task openSecond = second.OpenAsync(TestContext.Current.CancellationToken);
+        await Task.Delay(TimeSpan.FromMilliseconds(200), TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+        Assert.False(openSecond.IsCompleted);
+
+        await first.CloseAsync().ConfigureAwait(true);
+        await openSecond.ConfigureAwait(true);
+        Assert.Equal(ConnectionState.Open, second.State);
+        await second.CloseAsync().ConfigureAwait(true);
+        DotRocksConnection.ClearAllPools();
+    }
+
+    [Fact]
+    public async Task PooledConnections_DiscardBrokenPhysicalConnection()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        DotRocksConnection.ClearAllPools();
+        string connectionString = BuildPoolingConnectionString(maximumPoolSize: 1);
+        long firstConnectionId;
+        using (var first = new DotRocksConnection(connectionString))
+        {
+            await first.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+            firstConnectionId = await ReadConnectionIdAsync(first).ConfigureAwait(true);
+
+            using System.Data.Common.DbCommand command = first.CreateCommand();
+            command.CommandText = "SELECT SLEEP(3)";
+            command.CommandTimeout = 1;
+
+            await Assert
+                .ThrowsAsync<DotRocksException>(async () =>
+                    await command
+                        .ExecuteScalarAsync(TestContext.Current.CancellationToken)
+                        .ConfigureAwait(true)
+                )
+                .ConfigureAwait(true);
+            Assert.Equal(ConnectionState.Closed, first.State);
+        }
+
+        using (var second = new DotRocksConnection(connectionString))
+        {
+            await second.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+            long secondConnectionId = await ReadConnectionIdAsync(second).ConfigureAwait(true);
+
+            Assert.NotEqual(firstConnectionId, secondConnectionId);
+            await second.CloseAsync().ConfigureAwait(true);
+        }
+
+        DotRocksConnection.ClearAllPools();
+    }
+
+    private static string BuildPoolingConnectionString(int maximumPoolSize)
+    {
+        var builder = new DotRocksConnectionStringBuilder(
+            IntegrationTestEnvironment.ConnectionString
+        )
+        {
+            Pooling = true,
+            MinimumPoolSize = 0,
+            MaximumPoolSize = maximumPoolSize,
+            ConnectionIdleTimeout = 300,
+        };
+
+        return builder.ConnectionString;
+    }
+
+    private static async Task<long> ReadConnectionIdAsync(DotRocksConnection connection)
+    {
+        using System.Data.Common.DbCommand command = connection.CreateCommand();
+        command.CommandText = "SELECT CONNECTION_ID()";
+        object? value = await command
+            .ExecuteScalarAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+        return Convert.ToInt64(value, CultureInfo.InvariantCulture);
     }
 }

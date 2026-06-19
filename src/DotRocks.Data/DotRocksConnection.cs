@@ -1,13 +1,9 @@
 using System.Data;
 using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
-using System.Net.Sockets;
 using DotRocks.Data.Loading;
-using DotRocks.Data.Protocol.Commands;
-using DotRocks.Data.Protocol.Framing;
-using DotRocks.Data.Protocol.Handshake;
+using DotRocks.Data.Pooling;
 using DotRocks.Data.Protocol.Results;
-using DotRocks.Data.Protocol.Serialization;
 
 namespace DotRocks.Data;
 
@@ -17,8 +13,7 @@ namespace DotRocks.Data;
 public sealed class DotRocksConnection : DbConnection
 {
     private DotRocksConnectionOptions _options;
-    private TcpClient? _client;
-    private NetworkStream? _stream;
+    private DotRocksConnectionPoolLease? _lease;
     private string _serverVersion = string.Empty;
     private ConnectionState _state;
 
@@ -39,6 +34,11 @@ public sealed class DotRocksConnection : DbConnection
     {
         ConnectionString = connectionString;
     }
+
+    /// <summary>
+    /// Closes and removes all idle physical connections from all DotRocks connection pools.
+    /// </summary>
+    public static void ClearAllPools() => DotRocksConnectionPool.ClearAll();
 
     /// <inheritdoc />
     [AllowNull]
@@ -79,17 +79,29 @@ public sealed class DotRocksConnection : DbConnection
     /// <inheritdoc />
     public override void Close()
     {
-        CloseCore();
+        CloseCore(reusable: true);
     }
 
-    private void CloseCore()
+    /// <inheritdoc />
+    public override Task CloseAsync()
     {
-        _stream?.Dispose();
-        _client?.Dispose();
-        _stream = null;
-        _client = null;
+        Close();
+        return Task.CompletedTask;
+    }
+
+    internal void Abort()
+    {
+        _lease?.PhysicalConnection.MarkBroken();
+        CloseCore(reusable: false);
+    }
+
+    private void CloseCore(bool reusable)
+    {
+        DotRocksConnectionPoolLease? lease = _lease;
+        _lease = null;
         _serverVersion = string.Empty;
         _state = ConnectionState.Closed;
+        lease?.Return(reusable);
     }
 
     /// <inheritdoc />
@@ -112,72 +124,14 @@ public sealed class DotRocksConnection : DbConnection
 
         try
         {
-            var client = new TcpClient();
-            await client
-                .ConnectAsync(_options.Server, _options.Port, linked.Token)
-                .ConfigureAwait(false);
-            NetworkStream stream = client.GetStream();
-
-            var reader = new PacketReader(stream);
-            byte[] handshakePayload = await reader
-                .ReadPayloadAsync(linked.Token)
-                .ConfigureAwait(false);
-            ServerHandshake handshake = ServerHandshake.Parse(handshakePayload);
-
-            byte[] responsePayload = HandshakeResponseBuilder.Build(_options, handshake);
-            var writer = new PacketWriter(stream);
-            writer.ResetSequence(reader.SequenceId);
-            await writer.WritePayloadAsync(responsePayload, linked.Token).ConfigureAwait(false);
-
-            reader.ResetSequence(writer.SequenceId);
-            byte[] authResultPayload = await reader
-                .ReadPayloadAsync(linked.Token)
-                .ConfigureAwait(false);
-            AuthenticationResult.Read(authResultPayload, handshake.ConnectionId);
-
-            _client = client;
-            _stream = stream;
-            _serverVersion = handshake.ServerVersion;
+            _lease = await OpenLeaseAsync(linked.Token).ConfigureAwait(false);
+            _serverVersion = _lease.PhysicalConnection.ServerVersion;
             _state = ConnectionState.Open;
         }
-        catch (OperationCanceledException)
+        catch
         {
-            CloseCore();
+            CloseCore(reusable: false);
             throw;
-        }
-        catch (DotRocksException)
-        {
-            CloseCore();
-            throw;
-        }
-        catch (MalformedPacketException ex)
-        {
-            CloseCore();
-            throw new DotRocksException("StarRocks returned malformed protocol bytes.", ex);
-        }
-        catch (SocketException ex)
-        {
-            CloseCore();
-            throw new DotRocksException(
-                "Could not connect to the StarRocks server.",
-                serverErrorCode: null,
-                sqlState: null,
-                isTransient: true,
-                connectionId: null,
-                innerException: ex
-            );
-        }
-        catch (IOException ex)
-        {
-            CloseCore();
-            throw new DotRocksException(
-                "I/O failed while opening the StarRocks connection.",
-                serverErrorCode: null,
-                sqlState: null,
-                isTransient: true,
-                connectionId: null,
-                innerException: ex
-            );
         }
     }
 
@@ -193,56 +147,45 @@ public sealed class DotRocksConnection : DbConnection
         CancellationToken cancellationToken
     )
     {
-        if (_state != ConnectionState.Open || _stream is null)
+        DotRocksConnectionPoolLease? lease = _lease;
+        if (_state != ConnectionState.Open || lease is null)
         {
             throw new InvalidOperationException("The connection is not open.");
         }
 
         try
         {
-            byte[] payload = QueryCommandBuilder.Build(commandText);
-            var writer = new PacketWriter(_stream);
-            writer.ResetSequence();
-            await writer.WritePayloadAsync(payload, cancellationToken).ConfigureAwait(false);
-
-            var reader = new PacketReader(_stream);
-            reader.ResetSequence(1);
-            byte[] firstPayload = await reader
-                .ReadPayloadAsync(cancellationToken)
-                .ConfigureAwait(false);
-            return await TextResultParser
-                .ReadAsync(firstPayload, reader, connectionId: null, cancellationToken)
+            return await lease
+                .PhysicalConnection.ExecuteQueryAsync(commandText, cancellationToken)
                 .ConfigureAwait(false);
         }
-        catch (OperationCanceledException)
+        catch
         {
-            CloseCore();
+            if (!lease.PhysicalConnection.IsReusable)
+            {
+                CloseCore(reusable: false);
+            }
+
             throw;
         }
-        catch (IOException ex)
+    }
+
+    private async ValueTask<DotRocksConnectionPoolLease> OpenLeaseAsync(
+        CancellationToken cancellationToken
+    )
+    {
+        if (_options.Pooling)
         {
-            CloseCore();
-            throw new DotRocksException(
-                "I/O failed while executing the StarRocks command.",
-                serverErrorCode: null,
-                sqlState: null,
-                isTransient: true,
-                connectionId: null,
-                innerException: ex
-            );
+            return await DotRocksConnectionPool
+                .GetPool(_options)
+                .LeaseAsync(cancellationToken)
+                .ConfigureAwait(false);
         }
-        catch (ObjectDisposedException ex)
-        {
-            CloseCore();
-            throw new DotRocksException(
-                "The StarRocks connection was closed while executing a command.",
-                serverErrorCode: null,
-                sqlState: null,
-                isTransient: true,
-                connectionId: null,
-                innerException: ex
-            );
-        }
+
+        DotRocksPhysicalConnection physicalConnection = await DotRocksPhysicalConnection
+            .OpenAsync(_options, cancellationToken)
+            .ConfigureAwait(false);
+        return DotRocksConnectionPoolLease.Unpooled(physicalConnection);
     }
 
     /// <inheritdoc />

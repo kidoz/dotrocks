@@ -23,6 +23,10 @@ public sealed class DotRocksConnectionStringBuilder
     private const string PasswordKeyword = "Password";
     private const string DatabaseKeyword = "Database";
     private const string ConnectionTimeoutKeyword = "Connection Timeout";
+    private const string PoolingKeyword = "Pooling";
+    private const string MinimumPoolSizeKeyword = "Minimum Pool Size";
+    private const string MaximumPoolSizeKeyword = "Maximum Pool Size";
+    private const string ConnectionIdleTimeoutKeyword = "Connection Idle Timeout";
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DotRocksConnectionStringBuilder"/> class.
@@ -33,6 +37,10 @@ public sealed class DotRocksConnectionStringBuilder
         Port = DotRocksConnectionOptions.DefaultPort;
         UserId = DotRocksConnectionOptions.DefaultUserId;
         ConnectionTimeout = DotRocksConnectionOptions.DefaultConnectionTimeoutSeconds;
+        Pooling = DotRocksConnectionOptions.DefaultPooling;
+        MinimumPoolSize = DotRocksConnectionOptions.DefaultMinimumPoolSize;
+        MaximumPoolSize = DotRocksConnectionOptions.DefaultMaximumPoolSize;
+        ConnectionIdleTimeout = DotRocksConnectionOptions.DefaultConnectionIdleTimeoutSeconds;
     }
 
     /// <summary>
@@ -114,6 +122,58 @@ public sealed class DotRocksConnectionStringBuilder
     }
 
     /// <summary>
+    /// Gets or sets a value indicating whether physical StarRocks connections are pooled.
+    /// </summary>
+    public bool Pooling
+    {
+        get => GetBoolean(PoolingKeyword, DotRocksConnectionOptions.DefaultPooling);
+        set => this[PoolingKeyword] = value;
+    }
+
+    /// <summary>
+    /// Gets or sets the minimum number of idle physical connections retained per pool.
+    /// </summary>
+    public int MinimumPoolSize
+    {
+        get => GetInt32(MinimumPoolSizeKeyword, DotRocksConnectionOptions.DefaultMinimumPoolSize);
+        set
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(value);
+            this[MinimumPoolSizeKeyword] = value;
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets the maximum number of concurrent leased physical connections per pool.
+    /// </summary>
+    public int MaximumPoolSize
+    {
+        get => GetInt32(MaximumPoolSizeKeyword, DotRocksConnectionOptions.DefaultMaximumPoolSize);
+        set
+        {
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value);
+            this[MaximumPoolSizeKeyword] = value;
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets how long an idle physical connection can remain in the pool, in seconds.
+    /// </summary>
+    public int ConnectionIdleTimeout
+    {
+        get =>
+            GetInt32(
+                ConnectionIdleTimeoutKeyword,
+                DotRocksConnectionOptions.DefaultConnectionIdleTimeoutSeconds
+            );
+        set
+        {
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value);
+            this[ConnectionIdleTimeoutKeyword] = value;
+        }
+    }
+
+    /// <summary>
     /// Gets a sanitized connection-string representation.
     /// </summary>
     /// <returns>A connection string with the password redacted.</returns>
@@ -145,6 +205,11 @@ public sealed class DotRocksConnectionStringBuilder
             ? Convert.ToInt32(value, System.Globalization.CultureInfo.InvariantCulture)
             : fallback;
 
+    private bool GetBoolean(string keyword, bool fallback) =>
+        TryGetAliasedValue(keyword, out object? value)
+            ? Convert.ToBoolean(value, System.Globalization.CultureInfo.InvariantCulture)
+            : fallback;
+
     private void SetValue(string keyword, string value)
     {
         ArgumentNullException.ThrowIfNull(value);
@@ -173,6 +238,9 @@ public sealed class DotRocksConnectionStringBuilder
             PasswordKeyword => [PasswordKeyword, "Pwd"],
             DatabaseKeyword => [DatabaseKeyword, "Initial Catalog"],
             ConnectionTimeoutKeyword => [ConnectionTimeoutKeyword, "Connect Timeout", "Timeout"],
+            MinimumPoolSizeKeyword => [MinimumPoolSizeKeyword, "Min Pool Size"],
+            MaximumPoolSizeKeyword => [MaximumPoolSizeKeyword, "Max Pool Size"],
+            ConnectionIdleTimeoutKeyword => [ConnectionIdleTimeoutKeyword, "Idle Timeout"],
             _ => [keyword],
         };
 }

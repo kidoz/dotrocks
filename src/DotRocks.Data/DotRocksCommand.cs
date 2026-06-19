@@ -120,7 +120,7 @@ public sealed class DotRocksCommand : DbCommand
         if (activeCommandCancellation is not null)
         {
             activeCommandCancellation.Cancel();
-            _connection?.Close();
+            _connection?.Abort();
         }
     }
 

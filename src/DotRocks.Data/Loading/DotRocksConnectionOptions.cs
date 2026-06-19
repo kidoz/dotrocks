@@ -10,6 +10,10 @@ internal sealed record DotRocksConnectionOptions(
     string Password,
     string Database,
     TimeSpan ConnectionTimeout,
+    bool Pooling,
+    int MinimumPoolSize,
+    int MaximumPoolSize,
+    TimeSpan ConnectionIdleTimeout,
     string ConnectionString
 )
 {
@@ -17,6 +21,10 @@ internal sealed record DotRocksConnectionOptions(
     public const int DefaultPort = 9030;
     public const string DefaultUserId = "root";
     public const int DefaultConnectionTimeoutSeconds = 15;
+    public const bool DefaultPooling = false;
+    public const int DefaultMinimumPoolSize = 0;
+    public const int DefaultMaximumPoolSize = 100;
+    public const int DefaultConnectionIdleTimeoutSeconds = 300;
 
     public static DotRocksConnectionOptions Default { get; } =
         new(
@@ -26,6 +34,10 @@ internal sealed record DotRocksConnectionOptions(
             string.Empty,
             string.Empty,
             TimeSpan.FromSeconds(DefaultConnectionTimeoutSeconds),
+            DefaultPooling,
+            DefaultMinimumPoolSize,
+            DefaultMaximumPoolSize,
+            TimeSpan.FromSeconds(DefaultConnectionIdleTimeoutSeconds),
             string.Empty
         );
 
@@ -53,15 +65,35 @@ internal sealed record DotRocksConnectionOptions(
             "Connection Timeout",
             DefaultConnectionTimeoutSeconds
         );
+        bool pooling = GetBoolean(builder, "Pooling", DefaultPooling);
+        int minimumPoolSize = GetInt32(builder, "Minimum Pool Size", DefaultMinimumPoolSize);
+        int maximumPoolSize = GetInt32(builder, "Maximum Pool Size", DefaultMaximumPoolSize);
+        int idleTimeoutSeconds = GetInt32(
+            builder,
+            "Connection Idle Timeout",
+            DefaultConnectionIdleTimeoutSeconds
+        );
 
-        Validate(server, port, userId, timeoutSeconds);
+        Validate(
+            server,
+            port,
+            userId,
+            timeoutSeconds,
+            minimumPoolSize,
+            maximumPoolSize,
+            idleTimeoutSeconds
+        );
         string canonical = BuildConnectionString(
             server,
             port,
             userId,
             password,
             database,
-            timeoutSeconds
+            timeoutSeconds,
+            pooling,
+            minimumPoolSize,
+            maximumPoolSize,
+            idleTimeoutSeconds
         );
 
         return new DotRocksConnectionOptions(
@@ -71,6 +103,10 @@ internal sealed record DotRocksConnectionOptions(
             password,
             database,
             TimeSpan.FromSeconds(timeoutSeconds),
+            pooling,
+            minimumPoolSize,
+            maximumPoolSize,
+            TimeSpan.FromSeconds(idleTimeoutSeconds),
             canonical
         );
     }
@@ -82,10 +118,25 @@ internal sealed record DotRocksConnectionOptions(
             UserId,
             "***",
             Database,
-            (int)ConnectionTimeout.TotalSeconds
+            (int)ConnectionTimeout.TotalSeconds,
+            Pooling,
+            MinimumPoolSize,
+            MaximumPoolSize,
+            (int)ConnectionIdleTimeout.TotalSeconds
         );
 
-    private static void Validate(string server, int port, string userId, int timeoutSeconds)
+    internal DotRocksConnectionPoolKey CreatePoolKey() =>
+        new(Server, Port, UserId, Password, Database, (int)ConnectionTimeout.TotalSeconds);
+
+    private static void Validate(
+        string server,
+        int port,
+        string userId,
+        int timeoutSeconds,
+        int minimumPoolSize,
+        int maximumPoolSize,
+        int idleTimeoutSeconds
+    )
     {
         if (string.IsNullOrWhiteSpace(server))
         {
@@ -107,6 +158,17 @@ internal sealed record DotRocksConnectionOptions(
         }
 
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(timeoutSeconds);
+        ArgumentOutOfRangeException.ThrowIfNegative(minimumPoolSize);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumPoolSize);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(idleTimeoutSeconds);
+        if (minimumPoolSize > maximumPoolSize)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(minimumPoolSize),
+                minimumPoolSize,
+                "Minimum Pool Size must be less than or equal to Maximum Pool Size."
+            );
+        }
     }
 
     private static string GetString(
@@ -140,6 +202,23 @@ internal sealed record DotRocksConnectionOptions(
         return fallback;
     }
 
+    private static bool GetBoolean(
+        DbConnectionStringBuilder builder,
+        string canonical,
+        bool fallback
+    )
+    {
+        foreach (string keyword in Aliases(canonical))
+        {
+            if (builder.TryGetValue(keyword, out object? value))
+            {
+                return Convert.ToBoolean(value, System.Globalization.CultureInfo.InvariantCulture);
+            }
+        }
+
+        return fallback;
+    }
+
     private static IEnumerable<string> Aliases(string canonical) =>
         canonical switch
         {
@@ -148,6 +227,9 @@ internal sealed record DotRocksConnectionOptions(
             "Password" => ["Password", "Pwd"],
             "Database" => ["Database", "Initial Catalog"],
             "Connection Timeout" => ["Connection Timeout", "Connect Timeout", "Timeout"],
+            "Minimum Pool Size" => ["Minimum Pool Size", "Min Pool Size"],
+            "Maximum Pool Size" => ["Maximum Pool Size", "Max Pool Size"],
+            "Connection Idle Timeout" => ["Connection Idle Timeout", "Idle Timeout"],
             _ => [canonical],
         };
 
@@ -157,7 +239,11 @@ internal sealed record DotRocksConnectionOptions(
         string userId,
         string password,
         string database,
-        int timeoutSeconds
+        int timeoutSeconds,
+        bool pooling,
+        int minimumPoolSize,
+        int maximumPoolSize,
+        int idleTimeoutSeconds
     )
     {
         var builder = new StringBuilder();
@@ -179,6 +265,26 @@ internal sealed record DotRocksConnectionOptions(
             "Connection Timeout",
             timeoutSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture)
         );
+        Append(
+            builder,
+            "Pooling",
+            pooling.ToString(System.Globalization.CultureInfo.InvariantCulture)
+        );
+        Append(
+            builder,
+            "Minimum Pool Size",
+            minimumPoolSize.ToString(System.Globalization.CultureInfo.InvariantCulture)
+        );
+        Append(
+            builder,
+            "Maximum Pool Size",
+            maximumPoolSize.ToString(System.Globalization.CultureInfo.InvariantCulture)
+        );
+        Append(
+            builder,
+            "Connection Idle Timeout",
+            idleTimeoutSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture)
+        );
         return builder.ToString();
     }
 
@@ -194,3 +300,12 @@ internal sealed record DotRocksConnectionOptions(
         builder.Append(value.Replace(";", "\\;", StringComparison.Ordinal));
     }
 }
+
+internal sealed record DotRocksConnectionPoolKey(
+    string Server,
+    int Port,
+    string UserId,
+    string Password,
+    string Database,
+    int ConnectionTimeoutSeconds
+);
