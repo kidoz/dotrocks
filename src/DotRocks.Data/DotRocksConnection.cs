@@ -78,6 +78,9 @@ public sealed class DotRocksConnection : DbConnection
     public override ConnectionState State => _state;
 
     /// <inheritdoc />
+    protected override DbProviderFactory DbProviderFactory => DotRocksFactory.Instance;
+
+    /// <inheritdoc />
     public override void ChangeDatabase(string databaseName) =>
         throw new NotSupportedException(
             "Changing the database on an open DotRocks connection is not supported yet."

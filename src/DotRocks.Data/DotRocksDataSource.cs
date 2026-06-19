@@ -1,0 +1,109 @@
+using System.Data.Common;
+using System.Diagnostics.CodeAnalysis;
+using DotRocks.Data.Loading;
+
+namespace DotRocks.Data;
+
+/// <summary>
+/// Represents a reusable DotRocks data source that creates logical connections using one
+/// normalized connection configuration.
+/// </summary>
+public sealed class DotRocksDataSource : DbDataSource
+{
+    private readonly DotRocksConnectionOptions _options;
+    private bool _isDisposed;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DotRocksDataSource"/> class.
+    /// </summary>
+    /// <param name="connectionString">The DotRocks connection string.</param>
+    public DotRocksDataSource(string connectionString)
+    {
+        _options = DotRocksConnectionOptions.Parse(connectionString);
+    }
+
+    /// <inheritdoc />
+    public override string ConnectionString => _options.ConnectionString;
+
+    /// <inheritdoc />
+    protected override DbConnection CreateDbConnection()
+    {
+        ThrowIfDisposed();
+        return CreateDotRocksConnection();
+    }
+
+    /// <inheritdoc />
+    protected override DbConnection OpenDbConnection()
+    {
+        DotRocksConnection connection = CreateDotRocksConnection();
+        try
+        {
+            connection.Open();
+            return connection;
+        }
+        catch
+        {
+            connection.Dispose();
+            throw;
+        }
+    }
+
+    /// <inheritdoc />
+    protected override async ValueTask<DbConnection> OpenDbConnectionAsync(
+        CancellationToken cancellationToken = default
+    )
+    {
+        DotRocksConnection connection = CreateDotRocksConnection();
+        try
+        {
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+            return connection;
+        }
+        catch
+        {
+            await connection.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    /// <inheritdoc />
+    [SuppressMessage(
+        "Security",
+        "CA2100:Review SQL queries for security vulnerabilities",
+        Justification = "This factory method stores caller-provided command text; execution-time parameterization remains explicit."
+    )]
+    protected override DbCommand CreateDbCommand(string? commandText = null)
+    {
+        ThrowIfDisposed();
+        return new DotRocksCommand(commandText ?? string.Empty, CreateDotRocksConnection());
+    }
+
+    /// <inheritdoc />
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _isDisposed = true;
+        }
+
+        base.Dispose(disposing);
+    }
+
+    /// <inheritdoc />
+    protected override ValueTask DisposeAsyncCore()
+    {
+        _isDisposed = true;
+        return base.DisposeAsyncCore();
+    }
+
+    private DotRocksConnection CreateDotRocksConnection()
+    {
+        ThrowIfDisposed();
+        return new DotRocksConnection(ConnectionString);
+    }
+
+    private void ThrowIfDisposed()
+    {
+        ObjectDisposedException.ThrowIf(_isDisposed, this);
+    }
+}

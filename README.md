@@ -32,6 +32,44 @@ driver, and it is not a general-purpose MySQL driver.
 - .NET 10 SDK (pinned via `global.json`)
 - C# 14
 
+## ADO.NET usage
+
+Create connections directly when you need a short-lived provider object:
+
+```csharp
+await using var connection = new DotRocksConnection(
+    "Server=127.0.0.1;Port=9030;User ID=root"
+);
+await connection.OpenAsync();
+
+await using var command = connection.CreateCommand();
+command.CommandText = "SELECT 1";
+object? value = await command.ExecuteScalarAsync();
+```
+
+Use `DotRocksDataSource` when one normalized configuration should create many logical
+connections and participate in DotRocks pooling:
+
+```csharp
+await using var dataSource = new DotRocksDataSource(
+    "Server=127.0.0.1;Port=9030;User ID=root;Pooling=true"
+);
+
+await using DbConnection connection = await dataSource.OpenConnectionAsync();
+```
+
+Provider-agnostic ADO.NET code can use `DotRocksFactory`:
+
+```csharp
+DbProviderFactory factory = DotRocksFactory.Instance;
+
+using DbConnectionStringBuilder builder = factory.CreateConnectionStringBuilder()!;
+builder.ConnectionString = "Server=127.0.0.1;Port=9030;User ID=root";
+
+await using DbDataSource dataSource = factory.CreateDataSource(builder.ConnectionString);
+await using DbConnection connection = await dataSource.OpenConnectionAsync();
+```
+
 ## Build and test
 
 Common tasks are exposed via [`just`](https://github.com/casey/just) (see `justfile`):

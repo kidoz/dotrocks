@@ -5,6 +5,7 @@ using Xunit;
 
 namespace DotRocks.Data.IntegrationTests;
 
+[Collection("StarRocks integration")]
 public sealed class ConnectionIntegrationTests
 {
     private const string TransactionDatabaseName = "dotrocks_tx";
