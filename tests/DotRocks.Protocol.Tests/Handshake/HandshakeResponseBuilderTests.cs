@@ -58,7 +58,11 @@ public sealed class HandshakeResponseBuilderTests
             HandshakeResponseBuilder.Build(options, handshake)
         );
 
-        Assert.Contains("Unsupported StarRocks authentication plugin", exception.Message);
+        Assert.Contains(
+            "Unsupported StarRocks authentication plugin",
+            exception.Message,
+            StringComparison.Ordinal
+        );
         Assert.DoesNotContain("secret", exception.ToString(), StringComparison.Ordinal);
     }
 

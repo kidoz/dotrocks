@@ -1,4 +1,6 @@
+using System.Collections;
 using System.Data.Common;
+using System.Diagnostics.CodeAnalysis;
 using DotRocks.Data.Loading;
 
 namespace DotRocks.Data;
@@ -6,7 +8,14 @@ namespace DotRocks.Data;
 /// <summary>
 /// Builds and parses DotRocks connection strings.
 /// </summary>
-public sealed class DotRocksConnectionStringBuilder : DbConnectionStringBuilder
+[SuppressMessage(
+    "Naming",
+    "CA1710:Identifiers should have correct suffix",
+    Justification = "ADO.NET connection string builders conventionally end with ConnectionStringBuilder."
+)]
+public sealed class DotRocksConnectionStringBuilder
+    : DbConnectionStringBuilder,
+        IReadOnlyCollection<KeyValuePair<string, object?>>
 {
     private const string ServerKeyword = "Server";
     private const string PortKeyword = "Port";
@@ -111,6 +120,19 @@ public sealed class DotRocksConnectionStringBuilder : DbConnectionStringBuilder
     public override string ToString() => DotRocksConnectionOptions.Parse(this).ToSanitizedString();
 
     internal DotRocksConnectionOptions BuildOptions() => DotRocksConnectionOptions.Parse(this);
+
+    IEnumerator<KeyValuePair<string, object?>> IEnumerable<
+        KeyValuePair<string, object?>
+    >.GetEnumerator()
+    {
+        foreach (string key in Keys)
+        {
+            yield return new KeyValuePair<string, object?>(key, this[key]);
+        }
+    }
+
+    IEnumerator IEnumerable.GetEnumerator() =>
+        ((IEnumerable<KeyValuePair<string, object?>>)this).GetEnumerator();
 
     private string GetString(string keyword, string fallback) =>
         TryGetAliasedValue(keyword, out object? value)

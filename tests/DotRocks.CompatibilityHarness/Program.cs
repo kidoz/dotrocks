@@ -35,50 +35,62 @@ internal static class Program
         string reportPath =
             Environment.GetEnvironmentVariable("DOTROCKS_REPORT") ?? "handshake-report.json";
 
-        Console.WriteLine(
-            $"DotRocks compatibility harness — probing StarRocks handshake at {host}:{port} (timeout {timeoutSeconds}s)"
-        );
+        await Console
+            .Out.WriteLineAsync(
+                $"DotRocks compatibility harness — probing StarRocks handshake at {host}:{port} (timeout {timeoutSeconds}s)"
+            )
+            .ConfigureAwait(false);
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds));
         try
         {
             using var client = new TcpClient();
-            await client.ConnectAsync(host, port, cts.Token);
-            await using NetworkStream stream = client.GetStream();
+            await client.ConnectAsync(host, port, cts.Token).ConfigureAwait(false);
+            using NetworkStream stream = client.GetStream();
 
             var reader = new PacketReader(stream);
-            byte[] payload = await reader.ReadPayloadAsync(cts.Token);
+            byte[] payload = await reader.ReadPayloadAsync(cts.Token).ConfigureAwait(false);
             ServerHandshake handshake = ServerHandshake.Parse(payload);
 
             HandshakeReport report = BuildReport(host, port, payload.Length, handshake);
-            PrintSummary(report);
-            await WriteReportAsync(reportPath, report, cts.Token);
-            Console.WriteLine($"Wrote handshake report to {Path.GetFullPath(reportPath)}");
+            await PrintSummaryAsync(report).ConfigureAwait(false);
+            await WriteReportAsync(reportPath, report, cts.Token).ConfigureAwait(false);
+            await Console
+                .Out.WriteLineAsync($"Wrote handshake report to {Path.GetFullPath(reportPath)}")
+                .ConfigureAwait(false);
             return 0;
         }
         catch (OperationCanceledException)
         {
-            Console.Error.WriteLine(
-                $"Timed out after {timeoutSeconds}s connecting to or reading from {host}:{port}."
-            );
+            await Console
+                .Error.WriteLineAsync(
+                    $"Timed out after {timeoutSeconds}s connecting to or reading from {host}:{port}."
+                )
+                .ConfigureAwait(false);
             return 2;
         }
         catch (SocketException ex)
         {
-            Console.Error.WriteLine(
-                $"Could not connect to {host}:{port} ({ex.SocketErrorCode}). "
-                    + "Is StarRocks running? Start it with `just starrocks-up`."
-            );
+            await Console
+                .Error.WriteLineAsync(
+                    $"Could not connect to {host}:{port} ({ex.SocketErrorCode}). "
+                        + "Is StarRocks running? Start it with `just starrocks-up`."
+                )
+                .ConfigureAwait(false);
             return 2;
         }
         catch (MalformedPacketException ex)
         {
-            Console.Error.WriteLine($"The server bytes are not a valid handshake: {ex.Message}");
+            await Console
+                .Error.WriteLineAsync($"The server bytes are not a valid handshake: {ex.Message}")
+                .ConfigureAwait(false);
             return 3;
         }
         catch (IOException ex)
         {
-            Console.Error.WriteLine($"I/O error talking to {host}:{port}: {ex.Message}");
+            await Console
+                .Error.WriteLineAsync($"I/O error talking to {host}:{port}: {ex.Message}")
+                .ConfigureAwait(false);
             return 2;
         }
     }
@@ -115,16 +127,36 @@ internal static class Program
         );
     }
 
-    private static void PrintSummary(HandshakeReport report)
+    private static async Task PrintSummaryAsync(HandshakeReport report)
     {
-        Console.WriteLine($"  protocol version : {report.ProtocolVersion}");
-        Console.WriteLine($"  server version   : {report.ServerVersion}");
-        Console.WriteLine($"  connection id    : {report.ConnectionId}");
-        Console.WriteLine($"  character set    : {report.CharacterSet}");
-        Console.WriteLine($"  status flags     : 0x{report.StatusFlags:X4}");
-        Console.WriteLine($"  auth plugin      : {report.AuthPluginName ?? "(none advertised)"}");
-        Console.WriteLine($"  auth data length : {report.AuthPluginDataLength} byte(s) (redacted)");
-        Console.WriteLine($"  capabilities     : {string.Join(", ", report.Capabilities)}");
+        await Console
+            .Out.WriteLineAsync($"  protocol version : {report.ProtocolVersion}")
+            .ConfigureAwait(false);
+        await Console
+            .Out.WriteLineAsync($"  server version   : {report.ServerVersion}")
+            .ConfigureAwait(false);
+        await Console
+            .Out.WriteLineAsync($"  connection id    : {report.ConnectionId}")
+            .ConfigureAwait(false);
+        await Console
+            .Out.WriteLineAsync($"  character set    : {report.CharacterSet}")
+            .ConfigureAwait(false);
+        await Console
+            .Out.WriteLineAsync($"  status flags     : 0x{report.StatusFlags:X4}")
+            .ConfigureAwait(false);
+        await Console
+            .Out.WriteLineAsync(
+                $"  auth plugin      : {report.AuthPluginName ?? "(none advertised)"}"
+            )
+            .ConfigureAwait(false);
+        await Console
+            .Out.WriteLineAsync(
+                $"  auth data length : {report.AuthPluginDataLength} byte(s) (redacted)"
+            )
+            .ConfigureAwait(false);
+        await Console
+            .Out.WriteLineAsync($"  capabilities     : {string.Join(", ", report.Capabilities)}")
+            .ConfigureAwait(false);
     }
 
     private static async Task WriteReportAsync(
@@ -134,7 +166,7 @@ internal static class Program
     )
     {
         string json = JsonSerializer.Serialize(report, ReportJsonOptions);
-        await File.WriteAllTextAsync(path, json, cancellationToken);
+        await File.WriteAllTextAsync(path, json, cancellationToken).ConfigureAwait(false);
     }
 
     private static string? GetArg(string[] args, int index) =>

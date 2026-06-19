@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -7,6 +8,11 @@ internal static class MySqlNativePassword
 {
     public const string PluginName = "mysql_native_password";
 
+    [SuppressMessage(
+        "Security",
+        "CA5350:Do Not Use Weak Cryptographic Algorithms",
+        Justification = "mysql_native_password is a StarRocks wire-protocol authentication plugin that requires SHA1."
+    )]
     public static byte[] CreateAuthenticationResponse(
         string password,
         ReadOnlySpan<byte> authenticationChallenge

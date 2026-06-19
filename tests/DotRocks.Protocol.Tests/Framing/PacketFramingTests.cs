@@ -101,9 +101,11 @@ public sealed class PacketFramingTests
         stream.Position = 0;
 
         var reader = new PacketReader(stream);
-        await Assert.ThrowsAsync<MalformedPacketException>(async () =>
-            await reader.ReadPayloadAsync(ct)
-        );
+        await Assert
+            .ThrowsAsync<MalformedPacketException>(async () =>
+                await reader.ReadPayloadAsync(ct).ConfigureAwait(true)
+            )
+            .ConfigureAwait(true);
     }
 
     [Fact]
@@ -116,9 +118,11 @@ public sealed class PacketFramingTests
         stream.Position = 0;
 
         var reader = new PacketReader(stream);
-        await Assert.ThrowsAsync<MalformedPacketException>(async () =>
-            await reader.ReadPayloadAsync(ct)
-        );
+        await Assert
+            .ThrowsAsync<MalformedPacketException>(async () =>
+                await reader.ReadPayloadAsync(ct).ConfigureAwait(true)
+            )
+            .ConfigureAwait(true);
     }
 
     [Fact]
@@ -149,9 +153,11 @@ public sealed class PacketFramingTests
 
         var reader = new PacketReader(stream, maxPayloadPerPacket: 4, maxLogicalPayloadLength: 7);
 
-        await Assert.ThrowsAsync<MalformedPacketException>(async () =>
-            await reader.ReadPayloadAsync(ct)
-        );
+        await Assert
+            .ThrowsAsync<MalformedPacketException>(async () =>
+                await reader.ReadPayloadAsync(ct).ConfigureAwait(true)
+            )
+            .ConfigureAwait(true);
     }
 
     [Fact]
