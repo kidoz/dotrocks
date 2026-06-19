@@ -112,11 +112,25 @@ public sealed class DotRocksEfCoreIntegrationTests
 
         try
         {
-            string insertSql = "INSERT INTO " + DelimitedWidgetTable() + " VALUES ({0}, {1})";
+            string insertSql =
+                "INSERT INTO "
+                + DelimitedWidgetTable()
+                + " (id, category, priority, big_value, name, active, created_at, amount, optional_score) "
+                + "VALUES ({0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8})";
             await context
                 .Database.ExecuteSqlRawAsync(
                     insertSql,
-                    [42, "parameterized"],
+                    [
+                        42,
+                        9,
+                        1,
+                        10000000042L,
+                        "parameterized",
+                        true,
+                        new DateTime(2026, 6, 19, 14, 15, 16),
+                        42.42m,
+                        42,
+                    ],
                     TestContext.Current.CancellationToken
                 )
                 .ConfigureAwait(true);
@@ -136,6 +150,41 @@ public sealed class DotRocksEfCoreIntegrationTests
                 .ConfigureAwait(true);
 
             Assert.Equal(1, Convert.ToInt32(value, CultureInfo.InvariantCulture));
+        }
+        finally
+        {
+            await DropWidgetTableAsync(context).ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
+    public async Task DbSet_MaterializesCommonStarRocksTypes()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        await using var context = CreateLiveContext();
+        await EnsureWidgetTableAsync(context).ConfigureAwait(true);
+
+        try
+        {
+            DotRocksWidget widget = await context
+                .Widgets.SingleAsync(
+                    widget => widget.Id == 1,
+                    TestContext.Current.CancellationToken
+                )
+                .ConfigureAwait(true);
+
+            Assert.Equal(1, widget.Category);
+            Assert.Equal(2, widget.Priority);
+            Assert.Equal(10000000001L, widget.BigValue);
+            Assert.Equal("one", widget.Name);
+            Assert.True(widget.Active);
+            Assert.Equal(new DateTime(2026, 6, 19, 10, 0, 0), widget.CreatedAt);
+            Assert.Equal(12.34m, widget.Amount);
+            Assert.Null(widget.OptionalScore);
         }
         finally
         {
@@ -235,6 +284,181 @@ public sealed class DotRocksEfCoreIntegrationTests
         }
     }
 
+    [Fact]
+    public async Task LinqWhereComparisons_Translate()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        await using var context = CreateLiveContext();
+        await EnsureWidgetTableAsync(context).ConfigureAwait(true);
+
+        try
+        {
+            List<int> ids = await context
+                .Widgets.Where(widget =>
+                    widget.Id != 1
+                    && widget.Id > 1
+                    && widget.Id >= 2
+                    && widget.Id < 4
+                    && widget.Id <= 3
+                )
+                .OrderBy(widget => widget.Id)
+                .Select(widget => widget.Id)
+                .ToListAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+
+            Assert.Equal([2, 3], ids);
+        }
+        finally
+        {
+            await DropWidgetTableAsync(context).ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
+    public async Task LinqAndAlsoOrElseAndNullableComparisons_Translate()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        await using var context = CreateLiveContext();
+        await EnsureWidgetTableAsync(context).ConfigureAwait(true);
+
+        try
+        {
+            List<int> ids = await context
+                .Widgets.Where(widget =>
+                    (widget.Category == 2 || widget.OptionalScore == null)
+                    && (widget.OptionalScore == null || widget.OptionalScore >= 20)
+                )
+                .OrderBy(widget => widget.Id)
+                .Select(widget => widget.Id)
+                .ToListAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+
+            Assert.Equal([1, 3], ids);
+        }
+        finally
+        {
+            await DropWidgetTableAsync(context).ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
+    public async Task LinqOrderByThenByTakeSkip_Translates()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        await using var context = CreateLiveContext();
+        await EnsureWidgetTableAsync(context).ConfigureAwait(true);
+
+        try
+        {
+            List<string> names = await context
+                .Widgets.OrderBy(widget => widget.Category)
+                .ThenBy(widget => widget.Priority)
+                .Select(widget => widget.Name)
+                .Skip(1)
+                .Take(2)
+                .ToListAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+
+            Assert.Equal(["one", "three"], names);
+        }
+        finally
+        {
+            await DropWidgetTableAsync(context).ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
+    public async Task LinqCountAndAny_Translate()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        await using var context = CreateLiveContext();
+        await EnsureWidgetTableAsync(context).ConfigureAwait(true);
+
+        try
+        {
+            int activeCount = await context
+                .Widgets.CountAsync(widget => widget.Active, TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+            bool hasLargeAmount = await context
+                .Widgets.AnyAsync(
+                    widget => widget.Amount > 30m,
+                    TestContext.Current.CancellationToken
+                )
+                .ConfigureAwait(true);
+            bool hasMissingName = await context
+                .Widgets.AnyAsync(
+                    widget => widget.Name == "missing",
+                    TestContext.Current.CancellationToken
+                )
+                .ConfigureAwait(true);
+
+            Assert.Equal(2, activeCount);
+            Assert.True(hasLargeAmount);
+            Assert.False(hasMissingName);
+        }
+        finally
+        {
+            await DropWidgetTableAsync(context).ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
+    public async Task LinqProjectionAndToList_Translate()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        await using var context = CreateLiveContext();
+        await EnsureWidgetTableAsync(context).ConfigureAwait(true);
+
+        try
+        {
+            WidgetProjection projection = await context
+                .Widgets.Where(widget => widget.Id == 2)
+                .Select(widget => new WidgetProjection(widget.Id, widget.Name, widget.Amount))
+                .SingleAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+            var anonymousRows = await context
+                .Widgets.Where(widget => widget.Id <= 2)
+                .OrderBy(widget => widget.Id)
+                .Select(widget => new
+                {
+                    widget.Id,
+                    widget.Name,
+                    widget.Active,
+                })
+                .ToListAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+
+            Assert.Equal(new WidgetProjection(2, "two", 23.45m), projection);
+            Assert.Equal(2, anonymousRows.Count);
+            Assert.Equal("one", anonymousRows[0].Name);
+            Assert.True(anonymousRows[0].Active);
+        }
+        finally
+        {
+            await DropWidgetTableAsync(context).ConfigureAwait(true);
+        }
+    }
+
     private static DotRocksTestContext CreateLiveContext() =>
         CreateContext(IntegrationTestEnvironment.ConnectionString);
 
@@ -260,14 +484,26 @@ public sealed class DotRocksEfCoreIntegrationTests
         string createSql = $"""
             CREATE TABLE {DelimitedWidgetTable()} (
                 id INT NOT NULL,
-                name VARCHAR(64) NOT NULL
+                category INT NOT NULL,
+                priority INT NOT NULL,
+                big_value BIGINT NOT NULL,
+                name VARCHAR(64) NOT NULL,
+                active BOOLEAN NOT NULL,
+                created_at DATETIME NOT NULL,
+                amount DECIMAL(10, 2) NOT NULL,
+                optional_score INT NULL
             )
             DUPLICATE KEY(id)
             DISTRIBUTED BY HASH(id) BUCKETS 1
             PROPERTIES ('replication_num' = '1')
             """;
         string insertSql =
-            "INSERT INTO " + DelimitedWidgetTable() + " VALUES (1, 'one'), (2, 'two')";
+            "INSERT INTO "
+            + DelimitedWidgetTable()
+            + " VALUES "
+            + "(1, 1, 2, 10000000001, 'one', TRUE, '2026-06-19 10:00:00', 12.34, NULL), "
+            + "(2, 1, 1, 10000000002, 'two', FALSE, '2026-06-19 11:00:00', 23.45, 20), "
+            + "(3, 2, 1, 10000000003, 'three', TRUE, '2026-06-19 12:00:00', 34.56, 30)";
 
         await context
             .Database.ExecuteSqlRawAsync(createSql, TestContext.Current.CancellationToken)
@@ -325,6 +561,26 @@ public sealed class DotRocksEfCoreIntegrationTests
                 .Entity<DotRocksWidget>()
                 .ToTable(WidgetTableName, LinqDatabaseName)
                 .HasKey(widget => widget.Id);
+            modelBuilder.Entity<DotRocksWidget>().Property(widget => widget.Category);
+            modelBuilder.Entity<DotRocksWidget>().Property(widget => widget.Priority);
+            modelBuilder
+                .Entity<DotRocksWidget>()
+                .Property(widget => widget.BigValue)
+                .HasColumnName("big_value")
+                .HasColumnType("bigint");
+            modelBuilder
+                .Entity<DotRocksWidget>()
+                .Property(widget => widget.CreatedAt)
+                .HasColumnName("created_at")
+                .HasColumnType("datetime");
+            modelBuilder
+                .Entity<DotRocksWidget>()
+                .Property(widget => widget.Amount)
+                .HasColumnType("decimal(10, 2)");
+            modelBuilder
+                .Entity<DotRocksWidget>()
+                .Property(widget => widget.OptionalScore)
+                .HasColumnName("optional_score");
         }
     }
 
@@ -344,6 +600,22 @@ public sealed class DotRocksEfCoreIntegrationTests
     {
         public int Id { get; set; }
 
+        public int Category { get; set; }
+
+        public int Priority { get; set; }
+
+        public long BigValue { get; set; }
+
         public string Name { get; set; } = string.Empty;
+
+        public bool Active { get; set; }
+
+        public DateTime CreatedAt { get; set; }
+
+        public decimal Amount { get; set; }
+
+        public int? OptionalScore { get; set; }
     }
+
+    private sealed record WidgetProjection(int Id, string Name, decimal Amount);
 }
