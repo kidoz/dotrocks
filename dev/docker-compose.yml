@@ -1,0 +1,25 @@
+# StarRocks all-in-one (FE + BE in one container) for DotRocks integration and
+# compatibility testing. Pin the image by an immutable tag; CI should additionally pin by
+# digest. Host ports are configurable so CI can randomize them and avoid collisions.
+services:
+  starrocks:
+    image: starrocks/allin1-ubuntu:${STARROCKS_VERSION:-3.3.5}
+    container_name: dotrocks-starrocks
+    ports:
+      # FE MySQL-protocol query port (DotRocks.Data connects here).
+      - "${DOTROCKS_FE_QUERY_PORT:-9030}:9030"
+      # FE HTTP port (Stream Load, REST API, health).
+      - "${DOTROCKS_FE_HTTP_PORT:-8030}:8030"
+      # BE HTTP port.
+      - "${DOTROCKS_BE_HTTP_PORT:-8040}:8040"
+    healthcheck:
+      # Ready only when the FE answers an actual SQL query, not merely when the port opens.
+      test:
+        [
+          "CMD-SHELL",
+          "mysql -h127.0.0.1 -P9030 -uroot -e 'SELECT 1' >/dev/null 2>&1 || exit 1",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 30s
