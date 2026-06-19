@@ -482,6 +482,116 @@ public sealed class DotRocksStreamLoadClientTests
             .ConfigureAwait(true);
     }
 
+    [Fact]
+    public async Task BeginTransactionAsync_WithPreCanceledToken_ThrowsOperationCanceled()
+    {
+        using var handler = new RecordingHandler(static (_, _) => Task.FromResult(JsonResponse()));
+        using var httpClient = new HttpClient(handler);
+        using var client = CreateClient(httpClient);
+        using var cancellation = new CancellationTokenSource();
+        await cancellation.CancelAsync().ConfigureAwait(true);
+
+        await Assert
+            .ThrowsAsync<OperationCanceledException>(async () =>
+                await client
+                    .BeginTransactionAsync(
+                        "warehouse",
+                        "events",
+                        new DotRocksStreamLoadTransactionOptions { Label = "tx_label" },
+                        cancellation.Token
+                    )
+                    .ConfigureAwait(true)
+            )
+            .ConfigureAwait(true);
+        Assert.Null(handler.Request);
+    }
+
+    [Fact]
+    public async Task TransactionCommitAsync_CancellationAfterRequestSent_ReportsInDoubt()
+    {
+        using var handler = new TransactionCompletionFailureHandler(
+            "/api/transaction/commit",
+            static () => new OperationCanceledException("commit timed out")
+        );
+        using var httpClient = new HttpClient(handler);
+        using var client = CreateClient(httpClient);
+        DotRocksStreamLoadTransaction transaction = await CreatePreparedTransactionAsync(client)
+            .ConfigureAwait(true);
+
+        DotRocksStreamLoadTransactionInDoubtException exception = await Assert
+            .ThrowsAsync<DotRocksStreamLoadTransactionInDoubtException>(async () =>
+                await transaction
+                    .CommitAsync(TestContext.Current.CancellationToken)
+                    .ConfigureAwait(true)
+            )
+            .ConfigureAwait(true);
+
+        Assert.Equal("tx_label", exception.Label);
+        Assert.Equal("commit", exception.Operation);
+        Assert.IsType<OperationCanceledException>(exception.InnerException);
+        await Assert
+            .ThrowsAsync<InvalidOperationException>(async () =>
+                await transaction
+                    .RollbackAsync(TestContext.Current.CancellationToken)
+                    .ConfigureAwait(true)
+            )
+            .ConfigureAwait(true);
+    }
+
+    [Fact]
+    public async Task TransactionRollbackAsync_IoFailureAfterRequestSent_ReportsInDoubt()
+    {
+        using var handler = new TransactionCompletionFailureHandler(
+            "/api/transaction/rollback",
+            static () => new HttpRequestException("connection reset")
+        );
+        using var httpClient = new HttpClient(handler);
+        using var client = CreateClient(httpClient);
+        DotRocksStreamLoadTransaction transaction = await client
+            .BeginTransactionAsync(
+                "warehouse",
+                "events",
+                new DotRocksStreamLoadTransactionOptions { Label = "tx_label" },
+                TestContext.Current.CancellationToken
+            )
+            .ConfigureAwait(true);
+
+        DotRocksStreamLoadTransactionInDoubtException exception = await Assert
+            .ThrowsAsync<DotRocksStreamLoadTransactionInDoubtException>(async () =>
+                await transaction
+                    .RollbackAsync(TestContext.Current.CancellationToken)
+                    .ConfigureAwait(true)
+            )
+            .ConfigureAwait(true);
+
+        Assert.Equal("tx_label", exception.Label);
+        Assert.Equal("rollback", exception.Operation);
+        Assert.IsType<HttpRequestException>(exception.InnerException);
+        await Assert
+            .ThrowsAsync<InvalidOperationException>(async () =>
+                await transaction
+                    .RollbackAsync(TestContext.Current.CancellationToken)
+                    .ConfigureAwait(true)
+            )
+            .ConfigureAwait(true);
+    }
+
+    private static async Task<DotRocksStreamLoadTransaction> CreatePreparedTransactionAsync(
+        DotRocksStreamLoadClient client
+    )
+    {
+        DotRocksStreamLoadTransaction transaction = await client
+            .BeginTransactionAsync(
+                "warehouse",
+                "events",
+                new DotRocksStreamLoadTransactionOptions { Label = "tx_label" },
+                TestContext.Current.CancellationToken
+            )
+            .ConfigureAwait(true);
+        await transaction.PrepareAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+        return transaction;
+    }
+
     private static DotRocksStreamLoadClient CreateClient(HttpClient httpClient)
     {
         DotRocksConnectionOptions options = DotRocksConnectionOptions.Parse(
@@ -627,6 +737,26 @@ public sealed class DotRocksStreamLoadClientTests
                         """
                     )
                 );
+            }
+
+            return Task.FromResult(TransactionResponse());
+        }
+    }
+
+    private sealed class TransactionCompletionFailureHandler(
+        string failingPath,
+        Func<Exception> exceptionFactory
+    ) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken
+        )
+        {
+            string path = request.RequestUri!.AbsolutePath;
+            if (string.Equals(path, failingPath, StringComparison.Ordinal))
+            {
+                throw exceptionFactory();
             }
 
             return Task.FromResult(TransactionResponse());

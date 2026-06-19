@@ -187,7 +187,8 @@ public sealed class DotRocksStreamLoadClient : IDisposable
     internal Task<DotRocksStreamLoadResult> SendTransactionOperationAsync(
         string operation,
         IReadOnlyDictionary<string, string> headers,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        Action? onRequestDispatch = null
     )
     {
         ObjectDisposedException.ThrowIf(_isDisposed, this);
@@ -197,6 +198,7 @@ public sealed class DotRocksStreamLoadClient : IDisposable
             headers,
             payload: null,
             mediaType: null,
+            onRequestDispatch,
             cancellationToken
         );
     }
@@ -214,6 +216,7 @@ public sealed class DotRocksStreamLoadClient : IDisposable
             headers,
             payload,
             mediaType,
+            onRequestDispatch: null,
             cancellationToken
         );
 
@@ -223,9 +226,11 @@ public sealed class DotRocksStreamLoadClient : IDisposable
         IReadOnlyDictionary<string, string> headers,
         Stream? payload,
         string? mediaType,
+        Action? onRequestDispatch,
         CancellationToken cancellationToken
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
         long initialPosition = payload?.CanSeek == true ? payload.Position : 0;
 
         for (int redirectCount = 0; redirectCount <= MaximumRedirects; redirectCount++)
@@ -236,42 +241,48 @@ public sealed class DotRocksStreamLoadClient : IDisposable
             }
 
             using var request = CreateRequest(method, requestUri, payload, headers, mediaType);
-            using HttpResponseMessage response = await _httpClient
+            HttpResponseMessage response;
+            onRequestDispatch?.Invoke();
+            response = await _httpClient
                 .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
                 .ConfigureAwait(false);
-            if (IsRedirect(response))
+
+            using (response)
             {
-                requestUri = GetRedirectUri(response, requestUri);
-                continue;
+                if (IsRedirect(response))
+                {
+                    requestUri = GetRedirectUri(response, requestUri);
+                    continue;
+                }
+
+                string responseText = await response
+                    .Content.ReadAsStringAsync(cancellationToken)
+                    .ConfigureAwait(false);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    throw new DotRocksStreamLoadException(
+                        $"StarRocks Stream Load request failed with HTTP status {(int)response.StatusCode}.",
+                        response.StatusCode,
+                        null
+                    );
+                }
+
+                DotRocksStreamLoadResult result = DotRocksStreamLoadResult.Parse(responseText);
+                if (!result.IsSuccess)
+                {
+                    string suffix = string.IsNullOrWhiteSpace(result.Message)
+                        ? string.Empty
+                        : ": " + result.Message;
+                    throw new DotRocksStreamLoadException(
+                        $"StarRocks Stream Load failed with status '{result.Status}'{suffix}.",
+                        response.StatusCode,
+                        result
+                    );
+                }
+
+                return result;
             }
-
-            string responseText = await response
-                .Content.ReadAsStringAsync(cancellationToken)
-                .ConfigureAwait(false);
-
-            if (!response.IsSuccessStatusCode)
-            {
-                throw new DotRocksStreamLoadException(
-                    $"StarRocks Stream Load request failed with HTTP status {(int)response.StatusCode}.",
-                    response.StatusCode,
-                    null
-                );
-            }
-
-            DotRocksStreamLoadResult result = DotRocksStreamLoadResult.Parse(responseText);
-            if (!result.IsSuccess)
-            {
-                string suffix = string.IsNullOrWhiteSpace(result.Message)
-                    ? string.Empty
-                    : ": " + result.Message;
-                throw new DotRocksStreamLoadException(
-                    $"StarRocks Stream Load failed with status '{result.Status}'{suffix}.",
-                    response.StatusCode,
-                    result
-                );
-            }
-
-            return result;
         }
 
         throw new DotRocksStreamLoadException("StarRocks Stream Load exceeded the redirect limit.");

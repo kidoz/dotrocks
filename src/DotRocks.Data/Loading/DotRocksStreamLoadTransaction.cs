@@ -160,23 +160,12 @@ public sealed class DotRocksStreamLoadTransaction
     )
     {
         EnsureState(DotRocksStreamLoadTransactionState.Prepared, "commit");
-        try
-        {
-            DotRocksStreamLoadResult result = await _client
-                .SendTransactionOperationAsync(
-                    "commit",
-                    _options.BuildCompletionHeaders(_databaseName),
-                    cancellationToken
-                )
-                .ConfigureAwait(false);
-            _state = DotRocksStreamLoadTransactionState.Committed;
-            return result;
-        }
-        catch
-        {
-            _state = DotRocksStreamLoadTransactionState.Failed;
-            throw;
-        }
+        return await CompleteAsync(
+                "commit",
+                DotRocksStreamLoadTransactionState.Committed,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -197,23 +186,12 @@ public sealed class DotRocksStreamLoadTransaction
             throw CreateInvalidStateException("rollback");
         }
 
-        try
-        {
-            DotRocksStreamLoadResult result = await _client
-                .SendTransactionOperationAsync(
-                    "rollback",
-                    _options.BuildCompletionHeaders(_databaseName),
-                    cancellationToken
-                )
-                .ConfigureAwait(false);
-            _state = DotRocksStreamLoadTransactionState.RolledBack;
-            return result;
-        }
-        catch
-        {
-            _state = DotRocksStreamLoadTransactionState.Failed;
-            throw;
-        }
+        return await CompleteAsync(
+                "rollback",
+                DotRocksStreamLoadTransactionState.RolledBack,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
     }
 
     private async Task<DotRocksStreamLoadResult> LoadAsync(
@@ -247,6 +225,45 @@ public sealed class DotRocksStreamLoadTransaction
         }
     }
 
+    private async Task<DotRocksStreamLoadResult> CompleteAsync(
+        string operation,
+        DotRocksStreamLoadTransactionState completedState,
+        CancellationToken cancellationToken
+    )
+    {
+        bool requestDispatched = false;
+        try
+        {
+            DotRocksStreamLoadResult result = await _client
+                .SendTransactionOperationAsync(
+                    operation,
+                    _options.BuildCompletionHeaders(_databaseName),
+                    cancellationToken,
+                    () => requestDispatched = true
+                )
+                .ConfigureAwait(false);
+            _state = completedState;
+            return result;
+        }
+        catch (Exception ex) when (requestDispatched && IsInDoubtTransportException(ex))
+        {
+            _state = DotRocksStreamLoadTransactionState.CompletionInDoubt;
+            throw new DotRocksStreamLoadTransactionInDoubtException(Label, operation, ex);
+        }
+        catch
+        {
+            _state = DotRocksStreamLoadTransactionState.Failed;
+            throw;
+        }
+    }
+
+    private static bool IsInDoubtTransportException(Exception exception) =>
+        exception
+            is OperationCanceledException
+                or HttpRequestException
+                or IOException
+                or ObjectDisposedException;
+
     private void EnsureState(DotRocksStreamLoadTransactionState requiredState, string operation)
     {
         if (_state != requiredState)
@@ -266,4 +283,5 @@ internal enum DotRocksStreamLoadTransactionState
     Committed,
     RolledBack,
     Failed,
+    CompletionInDoubt,
 }
