@@ -36,6 +36,10 @@ build:
 test:
     dotnet test DotRocks.slnx --configuration {{config}} --no-build
 
+# Run integration tests against an already-running StarRocks FE.
+integration-test:
+    DOTROCKS_RUN_INTEGRATION=1 dotnet test tests/DotRocks.Data.IntegrationTests --configuration {{config}} --no-build
+
 # Produce NuGet packages.
 pack:
     dotnet pack DotRocks.slnx --configuration {{config}} --no-build

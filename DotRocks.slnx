@@ -4,6 +4,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/DotRocks.Protocol.Tests/DotRocks.Protocol.Tests.csproj" />
+    <Project Path="tests/DotRocks.Data.IntegrationTests/DotRocks.Data.IntegrationTests.csproj" />
     <Project Path="tests/DotRocks.CompatibilityHarness/DotRocks.CompatibilityHarness.csproj" />
   </Folder>
 </Solution>
