@@ -403,6 +403,187 @@ public sealed class ConnectionIntegrationTests
     }
 
     [Fact]
+    [SuppressMessage(
+        "Security",
+        "CA2100:Review SQL queries for security vulnerabilities",
+        Justification = "Integration test SQL is built from internally generated table names and constant parameter placeholders."
+    )]
+    public async Task ExecuteReaderAsync_CharacterizesBinaryExpressionsAndVarBinaryRoundTrip()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        string tableName = await CreateBinaryTableAsync().ConfigureAwait(true);
+        try
+        {
+            using var connection = new DotRocksConnection(
+                BuildDatabaseConnectionString(TransactionDatabaseName)
+            );
+            await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+            await UseTransactionDatabaseAsync(connection).ConfigureAwait(true);
+
+            using (DbCommand insert = connection.CreateCommand())
+            {
+                insert.CommandText = $"INSERT INTO {tableName} SELECT @id, @bytes";
+                AddParameter(insert, "id", 1);
+                AddParameter(insert, "bytes", new byte[] { 0x00, 0xFF, 0x10 });
+                await insert
+                    .ExecuteNonQueryAsync(TestContext.Current.CancellationToken)
+                    .ConfigureAwait(true);
+            }
+
+            using DbCommand command = connection.CreateCommand();
+            command.CommandText = $"""
+                SELECT
+                    HEX('abc') AS hex_value,
+                    HEX(UNHEX('00FF10')) AS unhex_hex,
+                    binary_value,
+                    HEX(binary_value) AS binary_hex
+                FROM {tableName}
+                WHERE id = @id
+                """;
+            AddParameter(command, "id", 1);
+
+            using DbDataReader reader = await command
+                .ExecuteReaderAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+            ReadOnlyCollection<DbColumn> schema = reader.GetColumnSchema();
+
+            Assert.Equal(typeof(string), schema[0].DataType);
+            Assert.Equal("VAR_STRING", schema[0].DataTypeName);
+            Assert.Equal(typeof(string), schema[1].DataType);
+            Assert.Equal("VAR_STRING", schema[1].DataTypeName);
+            Assert.Equal(typeof(byte[]), schema[2].DataType);
+            Assert.Equal("BLOB", schema[2].DataTypeName);
+            Assert.Equal(typeof(string), schema[3].DataType);
+            Assert.Equal("VAR_STRING", schema[3].DataTypeName);
+            Assert.True(
+                await reader.ReadAsync(TestContext.Current.CancellationToken).ConfigureAwait(true)
+            );
+            Assert.Equal("616263", reader.GetString(0));
+            Assert.Equal("00FF10", reader.GetString(1));
+            Assert.Equal(
+                [0x00, 0xFF, 0x10],
+                await reader
+                    .GetFieldValueAsync<byte[]>(2, TestContext.Current.CancellationToken)
+                    .ConfigureAwait(true)
+            );
+            Assert.Equal("00FF10", reader.GetString(3));
+
+            byte[] buffer = [0xAA, 0xAA, 0xAA, 0xAA];
+            Assert.Equal(3, reader.GetBytes(2, 0, null, 0, 0));
+            Assert.Equal(2, reader.GetBytes(2, 1, buffer, 1, 2));
+            Assert.Equal([0xAA, 0xFF, 0x10, 0xAA], buffer);
+        }
+        finally
+        {
+            await DropTableAsync(tableName).ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
+    [SuppressMessage(
+        "Security",
+        "CA2100:Review SQL queries for security vulnerabilities",
+        Justification = "Integration test SQL is built from internally generated table names and constant parameter placeholders."
+    )]
+    public async Task ExecuteReaderAsync_CharacterizesLargeIntAsTextProtocolStringWithInt128Access()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        string tableName = await CreateLargeIntTableAsync().ConfigureAwait(true);
+        try
+        {
+            using var connection = new DotRocksConnection(
+                BuildDatabaseConnectionString(TransactionDatabaseName)
+            );
+            await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+            await UseTransactionDatabaseAsync(connection).ConfigureAwait(true);
+
+            using (DbCommand insert = connection.CreateCommand())
+            {
+                insert.CommandText =
+                    $"INSERT INTO {tableName} SELECT 1, @typical UNION ALL SELECT 2, @maximum UNION ALL SELECT 3, @minimum";
+                AddParameter(insert, "typical", (Int128)123);
+                AddParameter(
+                    insert,
+                    "maximum",
+                    Int128.Parse(
+                        "170141183460469231731687303715884105727",
+                        CultureInfo.InvariantCulture
+                    )
+                );
+                AddParameter(
+                    insert,
+                    "minimum",
+                    Int128.Parse(
+                        "-170141183460469231731687303715884105728",
+                        CultureInfo.InvariantCulture
+                    )
+                );
+                await insert
+                    .ExecuteNonQueryAsync(TestContext.Current.CancellationToken)
+                    .ConfigureAwait(true);
+            }
+
+            using DbCommand command = connection.CreateCommand();
+            command.CommandText = $"SELECT value FROM {tableName} ORDER BY id";
+            using DbDataReader reader = await command
+                .ExecuteReaderAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+            ReadOnlyCollection<DbColumn> schema = reader.GetColumnSchema();
+
+            Assert.Equal(typeof(string), reader.GetFieldType(0));
+            Assert.Equal(typeof(string), schema[0].DataType);
+            Assert.Equal("STRING", schema[0].DataTypeName);
+            Assert.Equal(40, schema[0].ColumnSize);
+
+            Assert.True(
+                await reader.ReadAsync(TestContext.Current.CancellationToken).ConfigureAwait(true)
+            );
+            Assert.Equal(
+                (Int128)123,
+                await reader
+                    .GetFieldValueAsync<Int128>(0, TestContext.Current.CancellationToken)
+                    .ConfigureAwait(true)
+            );
+            Assert.True(
+                await reader.ReadAsync(TestContext.Current.CancellationToken).ConfigureAwait(true)
+            );
+            Assert.Equal(
+                Int128.Parse(
+                    "170141183460469231731687303715884105727",
+                    CultureInfo.InvariantCulture
+                ),
+                await reader
+                    .GetFieldValueAsync<Int128>(0, TestContext.Current.CancellationToken)
+                    .ConfigureAwait(true)
+            );
+            Assert.True(
+                await reader.ReadAsync(TestContext.Current.CancellationToken).ConfigureAwait(true)
+            );
+            Assert.Equal(
+                Int128.Parse(
+                    "-170141183460469231731687303715884105728",
+                    CultureInfo.InvariantCulture
+                ),
+                await reader
+                    .GetFieldValueAsync<Int128>(0, TestContext.Current.CancellationToken)
+                    .ConfigureAwait(true)
+            );
+        }
+        finally
+        {
+            await DropTableAsync(tableName).ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
     public async Task PreparedCommand_SelectValue_ExecutesWithChangedParameterValues()
     {
         if (!IntegrationTestEnvironment.IsEnabled)
@@ -1164,6 +1345,86 @@ public sealed class ConnectionIntegrationTests
                 value INT NOT NULL
             )
             PRIMARY KEY(id)
+            DISTRIBUTED BY HASH(id) BUCKETS 1
+            PROPERTIES ("replication_num" = "1")
+            """;
+        await command
+            .ExecuteNonQueryAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+        return tableName;
+    }
+
+    [SuppressMessage(
+        "Security",
+        "CA2100:Review SQL queries for security vulnerabilities",
+        Justification = "Integration test table names are generated internally and never use user input."
+    )]
+    private static async Task<string> CreateBinaryTableAsync()
+    {
+        string tableName =
+            "dotrocks_bin_" + Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture)[..12];
+        using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
+        await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+        using System.Data.Common.DbCommand createDatabase = connection.CreateCommand();
+        createDatabase.CommandText = $"CREATE DATABASE IF NOT EXISTS {TransactionDatabaseName}";
+        await createDatabase
+            .ExecuteNonQueryAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+
+        using var databaseConnection = new DotRocksConnection(
+            BuildDatabaseConnectionString(TransactionDatabaseName)
+        );
+        await databaseConnection
+            .OpenAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+        using System.Data.Common.DbCommand command = databaseConnection.CreateCommand();
+        command.CommandText = $"""
+            CREATE TABLE {tableName}
+            (
+                id INT NOT NULL,
+                binary_value VARBINARY(16) NULL
+            )
+            DUPLICATE KEY(id)
+            DISTRIBUTED BY HASH(id) BUCKETS 1
+            PROPERTIES ("replication_num" = "1")
+            """;
+        await command
+            .ExecuteNonQueryAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+        return tableName;
+    }
+
+    [SuppressMessage(
+        "Security",
+        "CA2100:Review SQL queries for security vulnerabilities",
+        Justification = "Integration test table names are generated internally and never use user input."
+    )]
+    private static async Task<string> CreateLargeIntTableAsync()
+    {
+        string tableName =
+            "dotrocks_largeint_" + Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture)[..12];
+        using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
+        await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+        using System.Data.Common.DbCommand createDatabase = connection.CreateCommand();
+        createDatabase.CommandText = $"CREATE DATABASE IF NOT EXISTS {TransactionDatabaseName}";
+        await createDatabase
+            .ExecuteNonQueryAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+
+        using var databaseConnection = new DotRocksConnection(
+            BuildDatabaseConnectionString(TransactionDatabaseName)
+        );
+        await databaseConnection
+            .OpenAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+        using System.Data.Common.DbCommand command = databaseConnection.CreateCommand();
+        command.CommandText = $"""
+            CREATE TABLE {tableName}
+            (
+                id INT NOT NULL,
+                value LARGEINT NOT NULL
+            )
+            DUPLICATE KEY(id)
             DISTRIBUTED BY HASH(id) BUCKETS 1
             PROPERTIES ("replication_num" = "1")
             """;

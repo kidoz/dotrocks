@@ -19,6 +19,7 @@ internal static class SqlLiteralFormatter
             uint uintValue => uintValue.ToString(CultureInfo.InvariantCulture),
             long longValue => longValue.ToString(CultureInfo.InvariantCulture),
             ulong ulongValue => ulongValue.ToString(CultureInfo.InvariantCulture),
+            Int128 int128Value => int128Value.ToString(CultureInfo.InvariantCulture),
             float floatValue => FormatSingle(floatValue),
             double doubleValue => FormatDouble(doubleValue),
             decimal decimalValue => decimalValue.ToString(CultureInfo.InvariantCulture),

@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Data.Common;
+using System.Globalization;
 using DotRocks.Data;
 using DotRocks.Data.Protocol.Framing;
 using DotRocks.Data.Protocol.Results;
@@ -39,10 +40,11 @@ public sealed class DotRocksDataReaderTests
                 [
                     Column("id", (byte)ColumnType.Long),
                     Column("amount", (byte)ColumnType.NewDecimal),
+                    Column("bytes", (byte)ColumnType.Blob),
                     Column("name"),
                 ],
                 [
-                    [7, DotRocksDecimal.Parse("12.34"), "seven"],
+                    [7, DotRocksDecimal.Parse("12.34"), new byte[] { 0x00, 0xFF }, "seven"],
                 ]
             )
         );
@@ -51,8 +53,10 @@ public sealed class DotRocksDataReaderTests
         Assert.Equal("LONG", reader.GetDataTypeName(0));
         Assert.Equal(typeof(DotRocksDecimal), reader.GetFieldType(1));
         Assert.Equal("NEWDECIMAL", reader.GetDataTypeName(1));
-        Assert.Equal(typeof(string), reader.GetFieldType(2));
-        Assert.Equal("VAR_STRING", reader.GetDataTypeName(2));
+        Assert.Equal(typeof(byte[]), reader.GetFieldType(2));
+        Assert.Equal("BLOB", reader.GetDataTypeName(2));
+        Assert.Equal(typeof(string), reader.GetFieldType(3));
+        Assert.Equal("VAR_STRING", reader.GetDataTypeName(3));
     }
 
     [Fact]
@@ -63,17 +67,18 @@ public sealed class DotRocksDataReaderTests
                 [
                     Column("id", (byte)ColumnType.Long, flags: 1, columnLength: 11),
                     Column("amount", (byte)ColumnType.NewDecimal, columnLength: 18),
+                    Column("bytes", (byte)ColumnType.Blob, columnLength: 16),
                     Column("name"),
                 ],
                 [
-                    [7, DotRocksDecimal.Parse("12.34"), "seven"],
+                    [7, DotRocksDecimal.Parse("12.34"), new byte[] { 0x00, 0xFF }, "seven"],
                 ]
             )
         );
 
         ReadOnlyCollection<DbColumn> schema = reader.GetColumnSchema();
 
-        Assert.Equal(3, schema.Count);
+        Assert.Equal(4, schema.Count);
         Assert.Equal("id", schema[0].ColumnName);
         Assert.Equal(0, schema[0].ColumnOrdinal);
         Assert.Equal(typeof(int), schema[0].DataType);
@@ -85,10 +90,15 @@ public sealed class DotRocksDataReaderTests
         Assert.Equal(typeof(DotRocksDecimal), schema[1].DataType);
         Assert.Equal("NEWDECIMAL", schema[1].DataTypeName);
         Assert.True(schema[1].AllowDBNull);
-        Assert.Equal("name", schema[2].ColumnName);
+        Assert.Equal("bytes", schema[2].ColumnName);
         Assert.Equal(2, schema[2].ColumnOrdinal);
-        Assert.Equal(typeof(string), schema[2].DataType);
-        Assert.Equal("VAR_STRING", schema[2].DataTypeName);
+        Assert.Equal(typeof(byte[]), schema[2].DataType);
+        Assert.Equal("BLOB", schema[2].DataTypeName);
+        Assert.Equal(16, schema[2].ColumnSize);
+        Assert.Equal("name", schema[3].ColumnName);
+        Assert.Equal(3, schema[3].ColumnOrdinal);
+        Assert.Equal(typeof(string), schema[3].DataType);
+        Assert.Equal("VAR_STRING", schema[3].DataTypeName);
     }
 
     [Fact]
@@ -156,6 +166,46 @@ public sealed class DotRocksDataReaderTests
         Assert.Equal(reader.GetDateTime(6), reader.GetFieldValue<DateTime>(6));
         Assert.Equal(reader.GetBoolean(7), reader.GetFieldValue<bool>(7));
         Assert.Same(bytes, reader.GetFieldValue<byte[]>(8));
+    }
+
+    [Fact]
+    public void GetBytes_ReadsBinaryValues()
+    {
+        byte[] bytes = [0x00, 0xFF, 0x10, 0x20];
+        using var reader = new DotRocksDataReader(
+            QueryResult.FromRows(
+                [Column("bytes", (byte)ColumnType.Blob)],
+                [
+                    [bytes],
+                ]
+            )
+        );
+        byte[] buffer = [0xAA, 0xAA, 0xAA, 0xAA, 0xAA];
+
+        Assert.True(reader.Read());
+        Assert.Equal(4, reader.GetBytes(0, 0, null, 0, 0));
+        Assert.Equal(2, reader.GetBytes(0, 1, buffer, 2, 2));
+        Assert.Equal([0xAA, 0xAA, 0xFF, 0x10, 0xAA], buffer);
+        Assert.Equal(0, reader.GetBytes(0, 4, buffer, 0, 2));
+    }
+
+    [Fact]
+    public void GetFieldValue_ParsesInt128FromLargeIntText()
+    {
+        using var reader = new DotRocksDataReader(
+            QueryResult.FromRows(
+                [Column("large_value", (byte)ColumnType.String, columnLength: 40)],
+                [
+                    ["170141183460469231731687303715884105727"],
+                ]
+            )
+        );
+
+        Assert.True(reader.Read());
+        Assert.Equal(
+            Int128.Parse("170141183460469231731687303715884105727", CultureInfo.InvariantCulture),
+            reader.GetFieldValue<Int128>(0)
+        );
     }
 
     [Fact]

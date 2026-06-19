@@ -25,6 +25,7 @@ internal sealed class DotRocksTypeMappingSource(
         [typeof(short)] = new ShortTypeMapping("smallint", DbType.Int16),
         [typeof(int)] = new IntTypeMapping("int", DbType.Int32),
         [typeof(long)] = new LongTypeMapping("bigint", DbType.Int64),
+        [typeof(Int128)] = new DotRocksInt128TypeMapping(),
         [typeof(float)] = new FloatTypeMapping("float", DbType.Single),
         [typeof(double)] = new DoubleTypeMapping("double", DbType.Double),
         [typeof(decimal)] = new DecimalTypeMapping("decimal", DbType.Decimal, null, null),
@@ -60,6 +61,7 @@ internal sealed class DotRocksTypeMappingSource(
         ["integer"] = ClrMappings[typeof(int)],
         ["mediumint"] = ClrMappings[typeof(int)],
         ["bigint"] = ClrMappings[typeof(long)],
+        ["largeint"] = ClrMappings[typeof(Int128)],
         ["float"] = ClrMappings[typeof(float)],
         ["double"] = ClrMappings[typeof(double)],
         ["decimal"] = ClrMappings[typeof(decimal)],
@@ -75,15 +77,7 @@ internal sealed class DotRocksTypeMappingSource(
 
     protected override RelationalTypeMapping? FindMapping(in RelationalTypeMappingInfo mappingInfo)
     {
-        if (
-            string.Equals(
-                mappingInfo.StoreTypeNameBase,
-                "largeint",
-                StringComparison.OrdinalIgnoreCase
-            )
-            || mappingInfo.ClrType == typeof(Int128)
-            || mappingInfo.ClrType == typeof(UInt128)
-        )
+        if (mappingInfo.ClrType == typeof(UInt128))
         {
             return null;
         }

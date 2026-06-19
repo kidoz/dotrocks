@@ -94,7 +94,33 @@ public sealed class DotRocksDataReader
         byte[]? buffer,
         int bufferOffset,
         int length
-    ) => throw new NotSupportedException("Binary streaming is not implemented yet.");
+    )
+    {
+        byte[] bytes = GetFieldValue<byte[]>(ordinal);
+        if (buffer is null)
+        {
+            return bytes.Length;
+        }
+
+        ArgumentOutOfRangeException.ThrowIfNegative(dataOffset);
+        ArgumentOutOfRangeException.ThrowIfNegative(bufferOffset);
+        ArgumentOutOfRangeException.ThrowIfNegative(length);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(bufferOffset, buffer.Length);
+
+        if (dataOffset >= bytes.Length || length == 0 || bufferOffset == buffer.Length)
+        {
+            return 0;
+        }
+
+        int sourceOffset =
+            dataOffset > int.MaxValue
+                ? throw new ArgumentOutOfRangeException(nameof(dataOffset))
+                : (int)dataOffset;
+        int count = Math.Min(length, bytes.Length - sourceOffset);
+        count = Math.Min(count, buffer.Length - bufferOffset);
+        Array.Copy(bytes, sourceOffset, buffer, bufferOffset, count);
+        return count;
+    }
 
     /// <inheritdoc />
     public override char GetChar(int ordinal) =>
@@ -454,6 +480,20 @@ public sealed class DotRocksDataReader
         if (targetType == typeof(long))
         {
             return GetInt64(ordinal);
+        }
+
+        if (targetType == typeof(Int128))
+        {
+            return value switch
+            {
+                Int128 int128 => int128,
+                string text => Int128.Parse(
+                    text,
+                    NumberStyles.Integer,
+                    CultureInfo.InvariantCulture
+                ),
+                _ => (Int128)Convert.ToInt64(value, CultureInfo.InvariantCulture),
+            };
         }
 
         if (targetType == typeof(decimal))

@@ -4,6 +4,8 @@ using System.Globalization;
 using DotRocks.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Storage;
 using Xunit;
 
 namespace DotRocks.EntityFrameworkCore.IntegrationTests;
@@ -260,6 +262,48 @@ public sealed class DotRocksEfCoreIntegrationTests
         Assert.Equal(new TimeOnly(13, 14, 15), row.TimeValue);
         Assert.Equal(Guid.Parse("9f4f591e-3db2-4879-856c-1c54b4241b76"), row.GuidValue);
         Assert.Equal("""{"kind": "alpha", "n": 1}""", row.JsonValue);
+    }
+
+    [Fact]
+    public async Task FromSqlRaw_MaterializesLargeIntAsInt128()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        await using var context = CreateLiveContext();
+
+        List<LargeIntRow> rows = await context
+            .LargeIntRows.FromSqlRaw(
+                """
+                SELECT CAST('170141183460469231731687303715884105727' AS LARGEINT) AS value
+                UNION ALL
+                SELECT CAST('-170141183460469231731687303715884105728' AS LARGEINT) AS value
+                """
+            )
+            .ToListAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+
+        Assert.Equal(
+            Int128.Parse("170141183460469231731687303715884105727", CultureInfo.InvariantCulture),
+            rows[0].Value
+        );
+        Assert.Equal(
+            Int128.Parse("-170141183460469231731687303715884105728", CultureInfo.InvariantCulture),
+            rows[1].Value
+        );
+    }
+
+    [Fact]
+    public void BinaryClrType_RemainsUnsupportedForEfMapping()
+    {
+        using DotRocksTestContext context = CreateContext(
+            "Server=127.0.0.1;Port=9030;User ID=root"
+        );
+        var source = context.GetService<IRelationalTypeMappingSource>();
+
+        Assert.Null(source.FindMapping("varbinary"));
     }
 
     [Fact]
@@ -1085,6 +1129,8 @@ public sealed class DotRocksEfCoreIntegrationTests
 
         public DbSet<ExtraTypeRow> ExtraTypeRows => Set<ExtraTypeRow>();
 
+        public DbSet<LargeIntRow> LargeIntRows => Set<LargeIntRow>();
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             modelBuilder.Entity<DotRocksRow>().HasNoKey();
@@ -1128,6 +1174,12 @@ public sealed class DotRocksEfCoreIntegrationTests
                 .Property(row => row.JsonValue)
                 .HasColumnName("json_value")
                 .HasColumnType("json");
+            modelBuilder.Entity<LargeIntRow>().HasNoKey();
+            modelBuilder
+                .Entity<LargeIntRow>()
+                .Property(row => row.Value)
+                .HasColumnName("value")
+                .HasColumnType("largeint");
             modelBuilder
                 .Entity<DotRocksWidget>()
                 .ToTable(WidgetTableName, LinqDatabaseName)
@@ -1234,6 +1286,16 @@ public sealed class DotRocksEfCoreIntegrationTests
         public Guid GuidValue { get; set; }
 
         public string JsonValue { get; set; } = string.Empty;
+    }
+
+    [SuppressMessage(
+        "Performance",
+        "CA1812:Avoid uninstantiated internal classes",
+        Justification = "EF Core materializes this entity through query projection."
+    )]
+    private sealed class LargeIntRow
+    {
+        public Int128 Value { get; set; }
     }
 
     private sealed record WidgetProjection(int Id, string Name, decimal Amount);

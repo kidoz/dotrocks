@@ -116,8 +116,8 @@ Unsupported EF Core behavior is explicit:
 - `SaveChanges`, `ExecuteUpdate`, and `ExecuteDelete`.
 - `EnsureCreated`, schema creation/deletion, and migrations.
 - joins, `Include`, navigation materialization, and `GroupBy`.
-- binary/varbinary mapping until StarRocks binary wire behavior is verified.
-- `LARGEINT` / `Int128` until the ADO.NET reader has a verified Int128 path.
+- binary/varbinary EF mapping until byte-array query translation and materialization are
+  broader than the verified ADO.NET reader path.
 
 EF Core type mapping:
 
@@ -128,6 +128,7 @@ EF Core type mapping:
 | `SMALLINT` | `short` |
 | `INT`, `INTEGER`, `MEDIUMINT` | `int` |
 | `BIGINT` | `long` |
+| `LARGEINT` | `Int128` |
 | `FLOAT` | `float` |
 | `DOUBLE` | `double` |
 | `DECIMAL(p,s)` where `p <= 29` | `decimal` |
@@ -141,6 +142,9 @@ EF Core type mapping:
 
 Projecting high-precision StarRocks decimals to `decimal` can throw
 `DotRocksPrecisionLossException`; use `DotRocksDecimal` for lossless values.
+ADO.NET verifies `VARBINARY` / `BLOB` result values as `byte[]`, including
+`GetBytes(...)`; EF Core byte-array mapping remains unsupported until the EF query
+surface is verified end to end.
 
 ## Stream Load
 

@@ -17,6 +17,7 @@ public sealed class DotRocksTypeMappingTests
     [InlineData("integer", typeof(int))]
     [InlineData("mediumint", typeof(int))]
     [InlineData("bigint", typeof(long))]
+    [InlineData("largeint", typeof(Int128))]
     [InlineData("date", typeof(DateOnly))]
     [InlineData("datetime", typeof(DateTime))]
     [InlineData("varchar(128)", typeof(string))]
@@ -69,12 +70,23 @@ public sealed class DotRocksTypeMappingTests
     }
 
     [Fact]
-    public void FindMapping_RejectsLargeIntUntilInt128MappingIsImplemented()
+    public void FindMapping_MapsInt128ClrType()
     {
         IRelationalTypeMappingSource source = CreateMappingSource();
 
-        Assert.Null(source.FindMapping("largeint"));
-        Assert.Null(source.FindMapping(typeof(Int128)));
+        RelationalTypeMapping? mapping = source.FindMapping(typeof(Int128));
+
+        Assert.NotNull(mapping);
+        Assert.Equal(typeof(Int128), mapping.ClrType);
+        Assert.Equal("largeint", mapping.StoreType);
+    }
+
+    [Fact]
+    public void FindMapping_RejectsUnsignedInt128()
+    {
+        IRelationalTypeMappingSource source = CreateMappingSource();
+
+        Assert.Null(source.FindMapping(typeof(UInt128)));
     }
 
     [Fact]

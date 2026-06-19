@@ -1,3 +1,4 @@
+using System.Globalization;
 using DotRocks.Data;
 using DotRocks.Data.Protocol.Commands;
 using Xunit;
@@ -44,6 +45,17 @@ public sealed class SqlLiteralFormatterTests
             "12345678901234567890123456789012345678.9000",
             SqlLiteralFormatter.Format(value)
         );
+    }
+
+    [Fact]
+    public void Format_FormatsInt128AsLargeIntLiteral()
+    {
+        Int128 value = Int128.Parse(
+            "170141183460469231731687303715884105727",
+            CultureInfo.InvariantCulture
+        );
+
+        Assert.Equal("170141183460469231731687303715884105727", SqlLiteralFormatter.Format(value));
     }
 
     [Fact]

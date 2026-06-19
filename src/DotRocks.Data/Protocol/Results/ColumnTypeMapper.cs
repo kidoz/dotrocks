@@ -62,14 +62,14 @@ internal static class ColumnTypeMapper
                 typeof(DateTime),
             ColumnType.Time => typeof(TimeSpan),
             ColumnType.Null => typeof(DBNull),
+            ColumnType.TinyBlob
+            or ColumnType.MediumBlob
+            or ColumnType.LongBlob
+            or ColumnType.Blob => typeof(byte[]),
             ColumnType.VarChar
             or ColumnType.Json
             or ColumnType.Enum
             or ColumnType.Set
-            or ColumnType.TinyBlob
-            or ColumnType.MediumBlob
-            or ColumnType.LongBlob
-            or ColumnType.Blob
             or ColumnType.VarString
             or ColumnType.String
             or ColumnType.Geometry
@@ -116,15 +116,15 @@ internal static class ColumnTypeMapper
                 DateTimeStyles.None
             ),
             ColumnType.Time => TimeSpan.Parse(text, CultureInfo.InvariantCulture),
+            ColumnType.TinyBlob
+            or ColumnType.MediumBlob
+            or ColumnType.LongBlob
+            or ColumnType.Blob => bytes.ToArray(),
             ColumnType.Null
             or ColumnType.VarChar
             or ColumnType.Json
             or ColumnType.Enum
             or ColumnType.Set
-            or ColumnType.TinyBlob
-            or ColumnType.MediumBlob
-            or ColumnType.LongBlob
-            or ColumnType.Blob
             or ColumnType.VarString
             or ColumnType.String
             or ColumnType.Geometry

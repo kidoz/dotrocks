@@ -87,6 +87,25 @@ public sealed class TextResultParserTests
     }
 
     [Fact]
+    public async Task ReadAsync_PreservesBlobValuesAsBytes()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using MemoryStream stream = BuildPayloadStream(
+            BuildColumnDefinition("bytes", (byte)ColumnType.Blob),
+            EofPayload(),
+            BuildBinaryRow([0x00, 0xFF, 0x10]),
+            EofPayload()
+        );
+        var packetReader = new PacketReader(stream);
+        packetReader.ResetSequence(1);
+
+        QueryResult result = await TextResultParser.ReadAsync([0x01], packetReader, null, ct);
+
+        byte[] bytes = Assert.IsType<byte[]>(result.Rows[0][0]);
+        Assert.Equal([0x00, 0xFF, 0x10], bytes);
+    }
+
+    [Fact]
     public async Task ReadAsync_ParsesOkResult()
     {
         CancellationToken ct = TestContext.Current.CancellationToken;
@@ -172,6 +191,17 @@ public sealed class TextResultParserTests
         foreach (string value in values)
         {
             writer.WriteLengthEncodedString(value, Encoding.UTF8);
+        }
+
+        return writer.ToArray();
+    }
+
+    private static byte[] BuildBinaryRow(params byte[][] values)
+    {
+        using var writer = new ProtocolWriter();
+        foreach (byte[] value in values)
+        {
+            writer.WriteLengthEncodedBytes(value);
         }
 
         return writer.ToArray();
