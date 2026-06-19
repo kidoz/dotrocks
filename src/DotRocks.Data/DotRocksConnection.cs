@@ -3,6 +3,7 @@ using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
 using System.Net.Sockets;
 using DotRocks.Data.Loading;
+using DotRocks.Data.Protocol.Commands;
 using DotRocks.Data.Protocol.Framing;
 using DotRocks.Data.Protocol.Handshake;
 using DotRocks.Data.Protocol.Results;
@@ -78,6 +79,11 @@ public sealed class DotRocksConnection : DbConnection
     /// <inheritdoc />
     public override void Close()
     {
+        CloseCore();
+    }
+
+    private void CloseCore()
+    {
         _stream?.Dispose();
         _client?.Dispose();
         _stream = null;
@@ -136,22 +142,22 @@ public sealed class DotRocksConnection : DbConnection
         }
         catch (OperationCanceledException)
         {
-            Close();
+            CloseCore();
             throw;
         }
         catch (DotRocksException)
         {
-            Close();
+            CloseCore();
             throw;
         }
         catch (MalformedPacketException ex)
         {
-            Close();
+            CloseCore();
             throw new DotRocksException("StarRocks returned malformed protocol bytes.", ex);
         }
         catch (SocketException ex)
         {
-            Close();
+            CloseCore();
             throw new DotRocksException(
                 "Could not connect to the StarRocks server.",
                 serverErrorCode: null,
@@ -163,7 +169,7 @@ public sealed class DotRocksConnection : DbConnection
         }
         catch (IOException ex)
         {
-            Close();
+            CloseCore();
             throw new DotRocksException(
                 "I/O failed while opening the StarRocks connection.",
                 serverErrorCode: null,
@@ -180,8 +186,32 @@ public sealed class DotRocksConnection : DbConnection
         throw new NotSupportedException("Transactions are not implemented yet.");
 
     /// <inheritdoc />
-    protected override DbCommand CreateDbCommand() =>
-        throw new NotSupportedException("Commands are not implemented yet.");
+    protected override DbCommand CreateDbCommand() => new DotRocksCommand(this);
+
+    internal async ValueTask<QueryResult> ExecuteQueryAsync(
+        string commandText,
+        CancellationToken cancellationToken
+    )
+    {
+        if (_state != ConnectionState.Open || _stream is null)
+        {
+            throw new InvalidOperationException("The connection is not open.");
+        }
+
+        byte[] payload = QueryCommandBuilder.Build(commandText);
+        var writer = new PacketWriter(_stream);
+        writer.ResetSequence();
+        await writer.WritePayloadAsync(payload, cancellationToken).ConfigureAwait(false);
+
+        var reader = new PacketReader(_stream);
+        reader.ResetSequence(1);
+        byte[] firstPayload = await reader
+            .ReadPayloadAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return await TextResultParser
+            .ReadAsync(firstPayload, reader, connectionId: null, cancellationToken)
+            .ConfigureAwait(false);
+    }
 
     /// <inheritdoc />
     protected override void Dispose(bool disposing)
