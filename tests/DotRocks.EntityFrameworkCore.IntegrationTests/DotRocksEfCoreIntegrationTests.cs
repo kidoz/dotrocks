@@ -3,6 +3,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using DotRocks.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Xunit;
 
 namespace DotRocks.EntityFrameworkCore.IntegrationTests;
@@ -529,6 +530,70 @@ public sealed class DotRocksEfCoreIntegrationTests
     }
 
     [Fact]
+    public void LinqCapturedParameters_RenderAtPlaceholdersInGeneratedSql()
+    {
+        using var context = CreateContext("Server=127.0.0.1;Port=9030;User ID=root");
+        int id = 2;
+        string name = "two";
+        decimal amount = 23.45m;
+        int? optionalScore = 20;
+        bool active = false;
+
+        string sql = context
+            .Widgets.Where(widget =>
+                widget.Id == id
+                && widget.Name == name
+                && widget.Amount == amount
+                && widget.OptionalScore == optionalScore
+                && widget.Active == active
+            )
+            .Select(widget => widget.Id)
+            .ToQueryString();
+        string sqlBody = StripParameterPreamble(sql);
+
+        Assert.Contains("@id", sqlBody, StringComparison.Ordinal);
+        Assert.Contains("@name", sqlBody, StringComparison.Ordinal);
+        Assert.Contains("@amount", sqlBody, StringComparison.Ordinal);
+        Assert.Contains("@optionalScore", sqlBody, StringComparison.Ordinal);
+        Assert.Contains("@active", sqlBody, StringComparison.Ordinal);
+        Assert.DoesNotContain("'two'", sqlBody, StringComparison.Ordinal);
+        Assert.DoesNotContain("23.45", sqlBody, StringComparison.Ordinal);
+        Assert.DoesNotContain("FALSE", sqlBody, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void LinqEfParameter_ForcesAtPlaceholdersInGeneratedSql()
+    {
+        using var context = CreateContext("Server=127.0.0.1;Port=9030;User ID=root");
+        int id = 2;
+        string name = "two";
+        decimal amount = 23.45m;
+        int? optionalScore = 20;
+        bool active = false;
+
+        string sql = context
+            .Widgets.Where(widget =>
+                widget.Id == EF.Parameter(id)
+                && widget.Name == EF.Parameter(name)
+                && widget.Amount == EF.Parameter(amount)
+                && widget.OptionalScore == EF.Parameter(optionalScore)
+                && widget.Active == EF.Parameter(active)
+            )
+            .Select(widget => widget.Id)
+            .ToQueryString();
+        string sqlBody = StripParameterPreamble(sql);
+
+        Assert.Contains("@id", sqlBody, StringComparison.Ordinal);
+        Assert.Contains("@name", sqlBody, StringComparison.Ordinal);
+        Assert.Contains("@amount", sqlBody, StringComparison.Ordinal);
+        Assert.Contains("@optionalScore", sqlBody, StringComparison.Ordinal);
+        Assert.Contains("@active", sqlBody, StringComparison.Ordinal);
+        Assert.DoesNotContain("'two'", sqlBody, StringComparison.Ordinal);
+        Assert.DoesNotContain("23.45", sqlBody, StringComparison.Ordinal);
+        Assert.DoesNotContain("FALSE", sqlBody, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task LinqCapturedParameters_UseAtPlaceholdersAndReturnExpectedRows()
     {
         if (!IntegrationTestEnvironment.IsEnabled)
@@ -536,7 +601,72 @@ public sealed class DotRocksEfCoreIntegrationTests
             return;
         }
 
-        await using var context = CreateLiveContext();
+        var interceptor = new CapturingCommandInterceptor();
+        await using var context = CreateLiveContext(interceptor);
+        await EnsureWidgetTableAsync(context).ConfigureAwait(true);
+
+        try
+        {
+            int id = 2;
+            string name = "two";
+            decimal amount = 23.45m;
+            int? optionalScore = 20;
+            bool active = false;
+            IQueryable<int> query = context
+                .Widgets.Where(widget =>
+                    widget.Id == id
+                    && widget.Name == name
+                    && widget.Amount == amount
+                    && widget.OptionalScore == optionalScore
+                    && widget.Active == active
+                )
+                .Select(widget => widget.Id);
+
+            string sql = query.ToQueryString();
+            string sqlBody = StripParameterPreamble(sql);
+            Assert.Contains("@id", sqlBody, StringComparison.Ordinal);
+            Assert.Contains("@name", sqlBody, StringComparison.Ordinal);
+            Assert.Contains("@amount", sqlBody, StringComparison.Ordinal);
+            Assert.Contains("@optionalScore", sqlBody, StringComparison.Ordinal);
+            Assert.Contains("@active", sqlBody, StringComparison.Ordinal);
+            interceptor.Clear();
+
+            int value = await query
+                .SingleAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+            CapturedCommand command = interceptor.SingleSelectCommand(WidgetTableName);
+
+            Assert.Equal(2, value);
+            Assert.Contains("@id", command.CommandText, StringComparison.Ordinal);
+            Assert.Contains("@name", command.CommandText, StringComparison.Ordinal);
+            Assert.Contains("@amount", command.CommandText, StringComparison.Ordinal);
+            Assert.Contains("@optionalScore", command.CommandText, StringComparison.Ordinal);
+            Assert.Contains("@active", command.CommandText, StringComparison.Ordinal);
+            Assert.DoesNotContain("'two'", command.CommandText, StringComparison.Ordinal);
+            Assert.DoesNotContain("23.45", command.CommandText, StringComparison.Ordinal);
+            Assert.DoesNotContain("FALSE", command.CommandText, StringComparison.OrdinalIgnoreCase);
+            AssertParameter(command, "@id", 2, System.Data.DbType.Int32);
+            AssertParameter(command, "@name", name, System.Data.DbType.String);
+            AssertParameter(command, "@amount", amount, System.Data.DbType.Decimal);
+            AssertParameter(command, "@optionalScore", optionalScore, System.Data.DbType.Int32);
+            AssertParameter(command, "@active", active, System.Data.DbType.Boolean);
+        }
+        finally
+        {
+            await DropWidgetTableAsync(context).ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
+    public async Task LinqEfParameter_UsesAtPlaceholdersAndReturnExpectedRows()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        var interceptor = new CapturingCommandInterceptor();
+        await using var context = CreateLiveContext(interceptor);
         await EnsureWidgetTableAsync(context).ConfigureAwait(true);
 
         try
@@ -556,18 +686,172 @@ public sealed class DotRocksEfCoreIntegrationTests
                 )
                 .Select(widget => widget.Id);
 
-            string sql = query.ToQueryString();
-            Assert.Contains("SELECT", sql, StringComparison.Ordinal);
-
+            interceptor.Clear();
             int value = await query
                 .SingleAsync(TestContext.Current.CancellationToken)
                 .ConfigureAwait(true);
+            CapturedCommand command = interceptor.SingleSelectCommand(WidgetTableName);
 
             Assert.Equal(2, value);
+            Assert.Contains("@id", command.CommandText, StringComparison.Ordinal);
+            Assert.Contains("@name", command.CommandText, StringComparison.Ordinal);
+            Assert.Contains("@amount", command.CommandText, StringComparison.Ordinal);
+            Assert.Contains("@optionalScore", command.CommandText, StringComparison.Ordinal);
+            Assert.Contains("@active", command.CommandText, StringComparison.Ordinal);
+            AssertParameter(command, "@id", 2, System.Data.DbType.Int32);
+            AssertParameter(command, "@name", name, System.Data.DbType.String);
+            AssertParameter(command, "@amount", amount, System.Data.DbType.Decimal);
+            AssertParameter(command, "@optionalScore", optionalScore, System.Data.DbType.Int32);
+            AssertParameter(command, "@active", active, System.Data.DbType.Boolean);
         }
         finally
         {
             await DropWidgetTableAsync(context).ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
+    [SuppressMessage(
+        "Security",
+        "EF1003:Method inserts concatenated strings directly into the SQL",
+        Justification = "The insert command is assembled only from fixed sanitized identifiers and parameter placeholders."
+    )]
+    public async Task LinqStringAndNullParameters_KeepSensitiveValuesOutOfSqlText()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        var interceptor = new CapturingCommandInterceptor();
+        await using var context = CreateLiveContext(interceptor);
+        await EnsureWidgetTableAsync(context).ConfigureAwait(true);
+
+        const string quotedName = "quote'\\name";
+        const string jsonName = """{"kind":"alpha","text":"quote'\slash\\"}""";
+        try
+        {
+            await context
+                .Database.ExecuteSqlRawAsync(
+                    "INSERT INTO "
+                        + DelimitedWidgetTable()
+                        + " (id, category, priority, big_value, name, active, created_at, amount, optional_score) "
+                        + "VALUES ({0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, NULL), "
+                        + "({8}, {9}, {10}, {11}, {12}, {13}, {14}, {15}, NULL)",
+                    [
+                        4,
+                        3,
+                        1,
+                        10000000004L,
+                        quotedName,
+                        true,
+                        new DateTime(2026, 6, 19, 13, 0, 0),
+                        45.67m,
+                        5,
+                        3,
+                        1,
+                        10000000005L,
+                        jsonName,
+                        false,
+                        new DateTime(2026, 6, 19, 14, 0, 0),
+                        56.78m,
+                    ],
+                    TestContext.Current.CancellationToken
+                )
+                .ConfigureAwait(true);
+
+            string name = quotedName;
+            int? optionalScore = null;
+            interceptor.Clear();
+            int quotedId = await context
+                .Widgets.Where(widget => widget.Name == name && EF.Parameter(optionalScore) == null)
+                .Select(widget => widget.Id)
+                .SingleAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+            CapturedCommand quotedCommand = interceptor.SingleSelectCommand(WidgetTableName);
+
+            Assert.Equal(4, quotedId);
+            Assert.Contains("@name", quotedCommand.CommandText, StringComparison.Ordinal);
+            Assert.Contains("@optionalScore", quotedCommand.CommandText, StringComparison.Ordinal);
+            Assert.DoesNotContain(quotedName, quotedCommand.CommandText, StringComparison.Ordinal);
+            AssertParameter(quotedCommand, "@name", quotedName, System.Data.DbType.String);
+            AssertNullParameter(quotedCommand, "@optionalScore");
+
+            name = jsonName;
+            interceptor.Clear();
+            int jsonId = await context
+                .Widgets.Where(widget => widget.Name == name && EF.Parameter(optionalScore) == null)
+                .Select(widget => widget.Id)
+                .SingleAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+            CapturedCommand jsonCommand = interceptor.SingleSelectCommand(WidgetTableName);
+
+            Assert.Equal(5, jsonId);
+            Assert.Contains("@name", jsonCommand.CommandText, StringComparison.Ordinal);
+            Assert.DoesNotContain(jsonName, jsonCommand.CommandText, StringComparison.Ordinal);
+            AssertParameter(jsonCommand, "@name", jsonName, System.Data.DbType.String);
+            AssertNullParameter(jsonCommand, "@optionalScore");
+        }
+        finally
+        {
+            await DropWidgetTableAsync(context).ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
+    [SuppressMessage(
+        "Security",
+        "EF1003:Method inserts concatenated strings directly into the SQL",
+        Justification = "The insert command is assembled only from fixed sanitized identifiers and parameter placeholders."
+    )]
+    public async Task LinqDotRocksDecimalParameter_UsesAtPlaceholderAndReturnsExpectedRows()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        var interceptor = new CapturingCommandInterceptor();
+        await using var context = CreateLiveContext(interceptor);
+        await EnsureHighPrecisionTableAsync(context).ConfigureAwait(true);
+
+        try
+        {
+            DotRocksDecimal value = DotRocksDecimal.Parse(
+                "1234567890123456789012345678901234.9000"
+            );
+            await context
+                .Database.ExecuteSqlRawAsync(
+                    "INSERT INTO "
+                        + DelimitedHighPrecisionTable()
+                        + " (id, value) VALUES ({0}, {1})",
+                    [1, value],
+                    TestContext.Current.CancellationToken
+                )
+                .ConfigureAwait(true);
+
+            DotRocksDecimal target = value;
+            IQueryable<int> query = context
+                .HighPrecisionRows.Where(row => row.Value == target)
+                .Select(row => row.Id);
+            string sqlBody = StripParameterPreamble(query.ToQueryString());
+            Assert.Contains("@target", sqlBody, StringComparison.Ordinal);
+            Assert.DoesNotContain(value.ToString(), sqlBody, StringComparison.Ordinal);
+
+            interceptor.Clear();
+            int id = await query
+                .SingleAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+            CapturedCommand command = interceptor.SingleSelectCommand("high_precision_values");
+
+            Assert.Equal(1, id);
+            Assert.Contains("@target", command.CommandText, StringComparison.Ordinal);
+            Assert.DoesNotContain(value.ToString(), command.CommandText, StringComparison.Ordinal);
+            AssertParameter(command, "@target", value, System.Data.DbType.Decimal);
+        }
+        finally
+        {
+            await DropHighPrecisionTableAsync(context).ConfigureAwait(true);
         }
     }
 
@@ -635,13 +919,21 @@ public sealed class DotRocksEfCoreIntegrationTests
         }
     }
 
-    private static DotRocksTestContext CreateLiveContext() =>
-        CreateContext(IntegrationTestEnvironment.ConnectionString);
+    private static DotRocksTestContext CreateLiveContext(params IInterceptor[] interceptors) =>
+        CreateContext(IntegrationTestEnvironment.ConnectionString, interceptors);
 
-    private static DotRocksTestContext CreateContext(string connectionString)
+    private static DotRocksTestContext CreateContext(
+        string connectionString,
+        params IInterceptor[] interceptors
+    )
     {
         var optionsBuilder = new DbContextOptionsBuilder<DotRocksTestContext>();
         optionsBuilder.UseStarRocks(connectionString);
+        if (interceptors.Length > 0)
+        {
+            optionsBuilder.AddInterceptors(interceptors);
+        }
+
         return new DotRocksTestContext(optionsBuilder.Options);
     }
 
@@ -696,6 +988,31 @@ public sealed class DotRocksEfCoreIntegrationTests
         return context.Database.ExecuteSqlRawAsync(sql, TestContext.Current.CancellationToken);
     }
 
+    private static async Task EnsureHighPrecisionTableAsync(DotRocksTestContext context)
+    {
+        await EnsureLinqDatabaseAsync(context).ConfigureAwait(true);
+        await DropHighPrecisionTableAsync(context).ConfigureAwait(true);
+        string createSql = $"""
+            CREATE TABLE {DelimitedHighPrecisionTable()} (
+                id INT NOT NULL,
+                value DECIMAL(38, 4) NOT NULL
+            )
+            DUPLICATE KEY(id)
+            DISTRIBUTED BY HASH(id) BUCKETS 1
+            PROPERTIES ('replication_num' = '1')
+            """;
+
+        await context
+            .Database.ExecuteSqlRawAsync(createSql, TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+    }
+
+    private static Task<int> DropHighPrecisionTableAsync(DotRocksTestContext context)
+    {
+        string sql = "DROP TABLE IF EXISTS " + DelimitedHighPrecisionTable();
+        return context.Database.ExecuteSqlRawAsync(sql, TestContext.Current.CancellationToken);
+    }
+
     [SuppressMessage(
         "Security",
         "CA2100:Review SQL queries for security vulnerabilities",
@@ -709,11 +1026,41 @@ public sealed class DotRocksEfCoreIntegrationTests
     private static string DelimitedWidgetTable() =>
         DelimitIdentifier(LinqDatabaseName) + "." + DelimitIdentifier(WidgetTableName);
 
+    private static string DelimitedHighPrecisionTable() =>
+        DelimitIdentifier(LinqDatabaseName) + "." + DelimitIdentifier("high_precision_values");
+
     private static string CreateUniqueDatabaseName() =>
         "dotrocks_ef_" + Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture)[..12];
 
     private static string DelimitIdentifier(string identifier) =>
         "`" + identifier.Replace("`", "``", StringComparison.Ordinal) + "`";
+
+    private static string StripParameterPreamble(string sql)
+    {
+        string[] lines = sql.Split('\n', StringSplitOptions.TrimEntries);
+        return string.Join(
+            Environment.NewLine,
+            lines.Where(line => !line.StartsWith("--", StringComparison.Ordinal))
+        );
+    }
+
+    private static void AssertParameter(
+        CapturedCommand command,
+        string name,
+        object? value,
+        System.Data.DbType dbType
+    )
+    {
+        CapturedParameter parameter = command.Parameter(name);
+        Assert.Equal(dbType, parameter.DbType);
+        Assert.Equal(value, parameter.Value);
+    }
+
+    private static void AssertNullParameter(CapturedCommand command, string name)
+    {
+        CapturedParameter parameter = command.Parameter(name);
+        Assert.True(parameter.Value is null or DBNull);
+    }
 
     private static bool IsInteresting(string value) =>
         string.Equals(value, "two", StringComparison.Ordinal);
@@ -732,6 +1079,8 @@ public sealed class DotRocksEfCoreIntegrationTests
 
         public DbSet<DotRocksDecimalRow> DecimalRows => Set<DotRocksDecimalRow>();
 
+        public DbSet<HighPrecisionRow> HighPrecisionRows => Set<HighPrecisionRow>();
+
         public DbSet<DecimalOverflowRow> DecimalOverflowRows => Set<DecimalOverflowRow>();
 
         public DbSet<ExtraTypeRow> ExtraTypeRows => Set<ExtraTypeRow>();
@@ -744,6 +1093,14 @@ public sealed class DotRocksEfCoreIntegrationTests
                 .Entity<DotRocksDecimalRow>()
                 .Property(row => row.Value)
                 .HasColumnName("value")
+                .HasColumnType("decimal(38, 4)");
+            modelBuilder
+                .Entity<HighPrecisionRow>()
+                .ToTable("high_precision_values", LinqDatabaseName)
+                .HasKey(row => row.Id);
+            modelBuilder
+                .Entity<HighPrecisionRow>()
+                .Property(row => row.Value)
                 .HasColumnType("decimal(38, 4)");
             modelBuilder.Entity<DecimalOverflowRow>().HasNoKey();
             modelBuilder
@@ -846,6 +1203,18 @@ public sealed class DotRocksEfCoreIntegrationTests
         "CA1812:Avoid uninstantiated internal classes",
         Justification = "EF Core materializes this entity through query projection."
     )]
+    private sealed class HighPrecisionRow
+    {
+        public int Id { get; set; }
+
+        public DotRocksDecimal Value { get; set; }
+    }
+
+    [SuppressMessage(
+        "Performance",
+        "CA1812:Avoid uninstantiated internal classes",
+        Justification = "EF Core materializes this entity through query projection."
+    )]
     private sealed class DecimalOverflowRow
     {
         public decimal Value { get; set; }
@@ -868,4 +1237,70 @@ public sealed class DotRocksEfCoreIntegrationTests
     }
 
     private sealed record WidgetProjection(int Id, string Name, decimal Amount);
+
+    private sealed class CapturingCommandInterceptor : DbCommandInterceptor
+    {
+        private readonly List<CapturedCommand> _commands = [];
+
+        public void Clear() => _commands.Clear();
+
+        public CapturedCommand SingleSelectCommand(string tableName) =>
+            Assert.Single(
+                _commands,
+                command =>
+                    command.CommandText.Contains("SELECT", StringComparison.OrdinalIgnoreCase)
+                    && command.CommandText.Contains(tableName, StringComparison.Ordinal)
+            );
+
+        public override InterceptionResult<DbDataReader> ReaderExecuting(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<DbDataReader> result
+        )
+        {
+            Capture(command);
+            return base.ReaderExecuting(command, eventData, result);
+        }
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default
+        )
+        {
+            Capture(command);
+            return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
+        }
+
+        private void Capture(DbCommand command)
+        {
+            _commands.Add(
+                new CapturedCommand(
+                    command.CommandText,
+                    command
+                        .Parameters.Cast<DbParameter>()
+                        .Select(parameter => new CapturedParameter(
+                            parameter.ParameterName,
+                            parameter.Value,
+                            parameter.DbType
+                        ))
+                        .ToArray()
+                )
+            );
+        }
+    }
+
+    private sealed record CapturedCommand(
+        string CommandText,
+        IReadOnlyList<CapturedParameter> Parameters
+    )
+    {
+        public CapturedParameter Parameter(string name) =>
+            Parameters.Single(parameter =>
+                string.Equals(parameter.Name, name, StringComparison.Ordinal)
+            );
+    }
+
+    private sealed record CapturedParameter(string Name, object? Value, System.Data.DbType DbType);
 }

@@ -95,6 +95,9 @@ Supported EF Core query surface:
 - `Database.ExecuteSqlRawAsync` for raw SQL commands.
 - `DbSet<TEntity>.FromSqlRaw("SELECT ...")` materialization.
 - LINQ `Where`, comparison operators, boolean `&&` / `||`, nullable comparisons.
+- Captured scalar LINQ parameters render as `@...` placeholders with values carried in
+  `DbParameter`s, including strings, decimals, nullable values, bools, and
+  `DotRocksDecimal`.
 - `OrderBy`, `ThenBy`, `OrderByDescending`, `Skip`, `Take`, `Distinct`.
 - `Contains` over constant/parameter collections for `IN (...)`.
 - `StartsWith`, `EndsWith`, and `Contains` for strings using StarRocks `LIKE`.

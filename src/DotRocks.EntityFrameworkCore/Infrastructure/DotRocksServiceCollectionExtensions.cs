@@ -40,6 +40,10 @@ public static class DotRocksServiceCollectionExtensions
         builder.TryAdd<ISqlGenerationHelper, DotRocksSqlGenerationHelper>();
         builder.TryAdd<IRelationalTypeMappingSource, DotRocksTypeMappingSource>();
         builder.TryAdd<IMethodCallTranslatorProvider, DotRocksMethodCallTranslatorProvider>();
+        builder.TryAdd<
+            IRelationalParameterBasedSqlProcessorFactory,
+            DotRocksParameterBasedSqlProcessorFactory
+        >();
         builder.TryAdd<IQuerySqlGeneratorFactory, DotRocksQuerySqlGeneratorFactory>();
         builder.TryAdd<IMigrator, DotRocksMigrator>();
         builder.TryAdd<IUpdateSqlGenerator, DotRocksUpdateSqlGenerator>();
