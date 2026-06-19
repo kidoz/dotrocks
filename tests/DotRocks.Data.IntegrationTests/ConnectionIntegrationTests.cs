@@ -180,6 +180,82 @@ public sealed class ConnectionIntegrationTests
     }
 
     [Fact]
+    public async Task ExecuteReaderAsync_BindsTextCommandParameters()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
+        await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        using System.Data.Common.DbCommand command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT
+                @text AS text_value,
+                @integer AS integer_value,
+                @decimal AS decimal_value,
+                IF(@flag, 'yes', 'no') AS flag_value,
+                @date AS date_value,
+                @time AS time_value,
+                @guid AS guid_value,
+                HEX(@bytes) AS bytes_value,
+                @null_value AS null_value
+            """;
+        command.Parameters.Add(
+            new DotRocksParameter { ParameterName = "text", Value = "O'Reilly" }
+        );
+        command.Parameters.Add(new DotRocksParameter { ParameterName = "integer", Value = 123 });
+        command.Parameters.Add(new DotRocksParameter { ParameterName = "decimal", Value = 12.34m });
+        command.Parameters.Add(new DotRocksParameter { ParameterName = "flag", Value = true });
+        command.Parameters.Add(
+            new DotRocksParameter { ParameterName = "date", Value = new DateOnly(2026, 6, 19) }
+        );
+        command.Parameters.Add(
+            new DotRocksParameter { ParameterName = "time", Value = new TimeOnly(13, 14, 15) }
+        );
+        command.Parameters.Add(
+            new DotRocksParameter
+            {
+                ParameterName = "guid",
+                Value = Guid.Parse("9f4f591e-3db2-4879-856c-1c54b4241b76"),
+            }
+        );
+        command.Parameters.Add(
+            new DotRocksParameter
+            {
+                ParameterName = "bytes",
+                Value = new byte[] { 0x00, 0xFF, 0x10 },
+            }
+        );
+        command.Parameters.Add(
+            new DotRocksParameter { ParameterName = "null_value", Value = DBNull.Value }
+        );
+
+        using System.Data.Common.DbDataReader reader = await command
+            .ExecuteReaderAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+
+        Assert.True(
+            await reader.ReadAsync(TestContext.Current.CancellationToken).ConfigureAwait(true)
+        );
+        Assert.Equal("O'Reilly", reader.GetString(0));
+        Assert.Equal(123, reader.GetInt32(1));
+        Assert.Equal(12.34m, reader.GetDecimal(2));
+        Assert.Equal("yes", reader.GetString(3));
+        Assert.Equal(new DateTime(2026, 6, 19), reader.GetDateTime(4));
+        Assert.Equal("13:14:15", reader.GetString(5));
+        Assert.Equal("9f4f591e-3db2-4879-856c-1c54b4241b76", reader.GetString(6));
+        Assert.Equal("00FF10", reader.GetString(7));
+        Assert.True(
+            await reader
+                .IsDBNullAsync(8, TestContext.Current.CancellationToken)
+                .ConfigureAwait(true)
+        );
+    }
+
+    [Fact]
     public async Task ExecuteScalarAsync_ReturnsNullForSqlNull()
     {
         if (!IntegrationTestEnvironment.IsEnabled)

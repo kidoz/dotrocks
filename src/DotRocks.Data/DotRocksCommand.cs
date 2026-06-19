@@ -1,6 +1,7 @@
 using System.Data;
 using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
+using DotRocks.Data.Protocol.Commands;
 using DotRocks.Data.Protocol.Results;
 
 namespace DotRocks.Data;
@@ -172,13 +173,9 @@ public sealed class DotRocksCommand : DbCommand
             throw new InvalidOperationException("Command requires a DotRocksConnection.");
         }
 
-        if (_parameters.Count > 0)
-        {
-            throw new NotSupportedException("Command parameters are not implemented yet.");
-        }
-
+        string commandText = CommandTextParameterBinder.Bind(CommandText, _parameters);
         QueryResult result = await _connection
-            .ExecuteQueryAsync(CommandText, cancellationToken)
+            .ExecuteQueryAsync(commandText, cancellationToken)
             .ConfigureAwait(false);
         return new DotRocksDataReader(result, _connection, behavior);
     }

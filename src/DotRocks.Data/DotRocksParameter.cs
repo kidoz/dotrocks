@@ -5,7 +5,7 @@ using System.Diagnostics.CodeAnalysis;
 namespace DotRocks.Data;
 
 /// <summary>
-/// Represents a DotRocks command parameter. Parameter execution is not implemented yet.
+/// Represents a DotRocks command parameter.
 /// </summary>
 public sealed class DotRocksParameter : DbParameter
 {
