@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.ObjectModel;
 using System.Data;
 using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
@@ -10,11 +11,16 @@ namespace DotRocks.Data;
 /// <summary>
 /// Reads rows returned by a DotRocks command.
 /// </summary>
-public sealed class DotRocksDataReader : DbDataReader, IEnumerable<IDataRecord>
+public sealed class DotRocksDataReader
+    : DbDataReader,
+        IEnumerable<IDataRecord>,
+        IDbColumnSchemaGenerator
 {
+    private const ushort NotNullColumnFlag = 0x0001;
     private readonly QueryResult _result;
     private readonly DotRocksConnection? _connection;
     private readonly CommandBehavior _behavior;
+    private ReadOnlyCollection<DbColumn>? _columnSchema;
     private int _rowIndex = -1;
     private bool _isClosed;
 
@@ -108,6 +114,16 @@ public sealed class DotRocksDataReader : DbDataReader, IEnumerable<IDataRecord>
     }
 
     /// <inheritdoc />
+    public override T GetFieldValue<T>(int ordinal) => (T)GetTypedFieldValue(ordinal, typeof(T))!;
+
+    /// <inheritdoc />
+    public override Task<T> GetFieldValueAsync<T>(int ordinal, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(GetFieldValue<T>(ordinal));
+    }
+
+    /// <inheritdoc />
     public override float GetFloat(int ordinal) =>
         Convert.ToSingle(GetNonNullValue(ordinal), CultureInfo.InvariantCulture);
 
@@ -183,6 +199,26 @@ public sealed class DotRocksDataReader : DbDataReader, IEnumerable<IDataRecord>
     public override bool IsDBNull(int ordinal) => GetValue(ordinal) == DBNull.Value;
 
     /// <inheritdoc />
+    public ReadOnlyCollection<DbColumn> GetColumnSchema()
+    {
+        if (_isClosed)
+        {
+            throw new InvalidOperationException("The reader is closed.");
+        }
+
+        return _columnSchema ??= BuildColumnSchema();
+    }
+
+    /// <inheritdoc />
+    public override Task<ReadOnlyCollection<DbColumn>> GetColumnSchemaAsync(
+        CancellationToken cancellationToken = default
+    )
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(GetColumnSchema());
+    }
+
+    /// <inheritdoc />
     public override bool NextResult() => false;
 
     /// <inheritdoc />
@@ -227,6 +263,129 @@ public sealed class DotRocksDataReader : DbDataReader, IEnumerable<IDataRecord>
         {
             _connection?.Close();
         }
+    }
+
+    private ReadOnlyCollection<DbColumn> BuildColumnSchema()
+    {
+        var columns = new DbColumn[_result.Columns.Count];
+        for (int i = 0; i < _result.Columns.Count; i++)
+        {
+            ColumnDefinition definition = _result.Columns[i];
+            columns[i] = new DotRocksDbColumn(
+                definition.Name,
+                i,
+                ColumnTypeMapper.GetFieldType(definition.ColumnType),
+                ColumnTypeMapper.GetDataTypeName(definition.ColumnType),
+                (definition.Flags & NotNullColumnFlag) == 0,
+                definition.Catalog.Length == 0 ? null : definition.Catalog,
+                definition.Schema.Length == 0 ? null : definition.Schema,
+                definition.Table.Length == 0 ? null : definition.Table,
+                definition.OriginalName.Length == 0 ? null : definition.OriginalName,
+                definition.ColumnLength > int.MaxValue ? int.MaxValue : (int)definition.ColumnLength
+            );
+        }
+
+        return Array.AsReadOnly(columns);
+    }
+
+    private object? GetTypedFieldValue(int ordinal, Type requestedType)
+    {
+        ArgumentNullException.ThrowIfNull(requestedType);
+        object value = GetValue(ordinal);
+        if (value == DBNull.Value)
+        {
+            return GetDbNullFieldValue(requestedType);
+        }
+
+        Type targetType = Nullable.GetUnderlyingType(requestedType) ?? requestedType;
+        try
+        {
+            object converted = GetNonNullTypedFieldValue(ordinal, targetType, value);
+            return converted;
+        }
+        catch (Exception ex)
+            when (ex is FormatException or InvalidCastException or OverflowException)
+        {
+            throw new InvalidCastException(
+                $"Column value cannot be converted to {requestedType.Name}.",
+                ex
+            );
+        }
+    }
+
+    private static DBNull? GetDbNullFieldValue(Type requestedType)
+    {
+        if (requestedType == typeof(DBNull) || requestedType == typeof(object))
+        {
+            return DBNull.Value;
+        }
+
+        if (Nullable.GetUnderlyingType(requestedType) is not null)
+        {
+            return null;
+        }
+
+        throw new InvalidCastException("Column value is NULL.");
+    }
+
+    private object GetNonNullTypedFieldValue(int ordinal, Type targetType, object value)
+    {
+        if (targetType == typeof(object))
+        {
+            return value;
+        }
+
+        if (targetType.IsInstanceOfType(value))
+        {
+            return value;
+        }
+
+        if (targetType == typeof(int))
+        {
+            return GetInt32(ordinal);
+        }
+
+        if (targetType == typeof(long))
+        {
+            return GetInt64(ordinal);
+        }
+
+        if (targetType == typeof(decimal))
+        {
+            return GetDecimal(ordinal);
+        }
+
+        if (targetType == typeof(double))
+        {
+            return GetDouble(ordinal);
+        }
+
+        if (targetType == typeof(float))
+        {
+            return GetFloat(ordinal);
+        }
+
+        if (targetType == typeof(string))
+        {
+            return GetString(ordinal);
+        }
+
+        if (targetType == typeof(DateTime))
+        {
+            return GetDateTime(ordinal);
+        }
+
+        if (targetType == typeof(bool))
+        {
+            return GetBoolean(ordinal);
+        }
+
+        if (targetType == typeof(byte[]) && value is byte[] bytes)
+        {
+            return bytes;
+        }
+
+        throw new InvalidCastException($"Column value cannot be converted to {targetType.Name}.");
     }
 
     private object GetNonNullValue(int ordinal)

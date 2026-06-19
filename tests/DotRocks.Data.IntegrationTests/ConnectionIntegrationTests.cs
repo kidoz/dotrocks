@@ -1,4 +1,6 @@
+using System.Collections.ObjectModel;
 using System.Data;
+using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using Xunit;
@@ -178,6 +180,101 @@ public sealed class ConnectionIntegrationTests
         Assert.Equal(typeof(double), reader.GetFieldType(3));
         Assert.Equal(typeof(DateTime), reader.GetFieldType(4));
         Assert.Equal(typeof(DateTime), reader.GetFieldType(5));
+        Assert.False(
+            await reader.ReadAsync(TestContext.Current.CancellationToken).ConfigureAwait(true)
+        );
+    }
+
+    [Fact]
+    public async Task ExecuteReaderAsync_ExposesColumnSchemaAndGenericFieldValues()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
+        await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        using DbCommand command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT
+                CAST(123 AS INT) AS i32,
+                CAST(123 AS BIGINT) AS i64,
+                CAST(12.34 AS DECIMAL(10, 2)) AS amount,
+                CAST(1.5 AS DOUBLE) AS ratio,
+                CAST(1.25 AS FLOAT) AS single_value,
+                CAST('2026-06-19 13:14:15' AS DATETIME) AS created_at,
+                'hello' AS text_value
+            """;
+
+        using DbDataReader reader = await command
+            .ExecuteReaderAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+        ReadOnlyCollection<DbColumn> schema = reader.GetColumnSchema();
+
+        Assert.Equal(7, schema.Count);
+        Assert.Equal("i32", schema[0].ColumnName);
+        Assert.Equal(0, schema[0].ColumnOrdinal);
+        Assert.Equal(typeof(int), schema[0].DataType);
+        Assert.Equal("i64", schema[1].ColumnName);
+        Assert.Equal(typeof(long), schema[1].DataType);
+        Assert.Equal("amount", schema[2].ColumnName);
+        Assert.Equal(typeof(decimal), schema[2].DataType);
+        Assert.Equal("ratio", schema[3].ColumnName);
+        Assert.Equal(typeof(double), schema[3].DataType);
+        Assert.Equal("single_value", schema[4].ColumnName);
+        Assert.Equal(typeof(float), schema[4].DataType);
+        Assert.Equal("created_at", schema[5].ColumnName);
+        Assert.Equal(typeof(DateTime), schema[5].DataType);
+        Assert.Equal("text_value", schema[6].ColumnName);
+        Assert.Equal(typeof(string), schema[6].DataType);
+
+        Assert.True(
+            await reader.ReadAsync(TestContext.Current.CancellationToken).ConfigureAwait(true)
+        );
+        Assert.Equal(
+            123,
+            await reader
+                .GetFieldValueAsync<int>(0, TestContext.Current.CancellationToken)
+                .ConfigureAwait(true)
+        );
+        Assert.Equal(
+            123L,
+            await reader
+                .GetFieldValueAsync<long>(1, TestContext.Current.CancellationToken)
+                .ConfigureAwait(true)
+        );
+        Assert.Equal(
+            12.34m,
+            await reader
+                .GetFieldValueAsync<decimal>(2, TestContext.Current.CancellationToken)
+                .ConfigureAwait(true)
+        );
+        Assert.Equal(
+            1.5d,
+            await reader
+                .GetFieldValueAsync<double>(3, TestContext.Current.CancellationToken)
+                .ConfigureAwait(true)
+        );
+        Assert.Equal(
+            1.25f,
+            await reader
+                .GetFieldValueAsync<float>(4, TestContext.Current.CancellationToken)
+                .ConfigureAwait(true)
+        );
+        Assert.Equal(
+            new DateTime(2026, 6, 19, 13, 14, 15),
+            await reader
+                .GetFieldValueAsync<DateTime>(5, TestContext.Current.CancellationToken)
+                .ConfigureAwait(true)
+        );
+        Assert.Equal(
+            "hello",
+            await reader
+                .GetFieldValueAsync<string>(6, TestContext.Current.CancellationToken)
+                .ConfigureAwait(true)
+        );
         Assert.False(
             await reader.ReadAsync(TestContext.Current.CancellationToken).ConfigureAwait(true)
         );
