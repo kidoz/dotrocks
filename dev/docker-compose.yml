@@ -3,7 +3,7 @@
 # digest. Host ports are configurable so CI can randomize them and avoid collisions.
 services:
   starrocks:
-    image: starrocks/allin1-ubuntu:${STARROCKS_VERSION:-3.3.5}
+    image: starrocks/allin1-ubuntu:${STARROCKS_VERSION:-4.0.7}
     container_name: dotrocks-starrocks
     ports:
       # FE MySQL-protocol query port (DotRocks.Data connects here).

@@ -23,7 +23,7 @@ public sealed class DataSourceIntegrationTests
             .ConfigureAwait(true);
 
         Assert.Equal(ConnectionState.Open, connection.State);
-        Assert.Equal("5.1.0", connection.ServerVersion);
+        Assert.False(string.IsNullOrWhiteSpace(connection.ServerVersion));
     }
 
     [Fact]
