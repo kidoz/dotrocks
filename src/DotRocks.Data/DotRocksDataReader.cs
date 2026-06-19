@@ -121,8 +121,13 @@ public sealed class DotRocksDataReader
         Convert.ToDateTime(GetNonNullValue(ordinal), CultureInfo.InvariantCulture);
 
     /// <inheritdoc />
-    public override decimal GetDecimal(int ordinal) =>
-        Convert.ToDecimal(GetNonNullValue(ordinal), CultureInfo.InvariantCulture);
+    public override decimal GetDecimal(int ordinal)
+    {
+        object value = GetNonNullValue(ordinal);
+        return value is DotRocksDecimal dotRocksDecimal
+            ? dotRocksDecimal.ToDecimal()
+            : Convert.ToDecimal(value, CultureInfo.InvariantCulture);
+    }
 
     /// <inheritdoc />
     public override double GetDouble(int ordinal) =>
@@ -454,6 +459,11 @@ public sealed class DotRocksDataReader
         if (targetType == typeof(decimal))
         {
             return GetDecimal(ordinal);
+        }
+
+        if (targetType == typeof(DotRocksDecimal) && value is decimal decimalValue)
+        {
+            return DotRocksDecimal.FromDecimal(decimalValue);
         }
 
         if (targetType == typeof(double))

@@ -176,7 +176,7 @@ public sealed class ConnectionIntegrationTests
         Assert.Equal(new DateTime(2026, 6, 19, 13, 14, 15), reader.GetDateTime(5));
         Assert.Equal(typeof(int), reader.GetFieldType(0));
         Assert.Equal(typeof(long), reader.GetFieldType(1));
-        Assert.Equal(typeof(decimal), reader.GetFieldType(2));
+        Assert.Equal(typeof(DotRocksDecimal), reader.GetFieldType(2));
         Assert.Equal(typeof(double), reader.GetFieldType(3));
         Assert.Equal(typeof(DateTime), reader.GetFieldType(4));
         Assert.Equal(typeof(DateTime), reader.GetFieldType(5));
@@ -220,7 +220,7 @@ public sealed class ConnectionIntegrationTests
         Assert.Equal("i64", schema[1].ColumnName);
         Assert.Equal(typeof(long), schema[1].DataType);
         Assert.Equal("amount", schema[2].ColumnName);
-        Assert.Equal(typeof(decimal), schema[2].DataType);
+        Assert.Equal(typeof(DotRocksDecimal), schema[2].DataType);
         Assert.Equal("ratio", schema[3].ColumnName);
         Assert.Equal(typeof(double), schema[3].DataType);
         Assert.Equal("single_value", schema[4].ColumnName);
@@ -252,6 +252,12 @@ public sealed class ConnectionIntegrationTests
                 .ConfigureAwait(true)
         );
         Assert.Equal(
+            DotRocksDecimal.Parse("12.34"),
+            await reader
+                .GetFieldValueAsync<DotRocksDecimal>(2, TestContext.Current.CancellationToken)
+                .ConfigureAwait(true)
+        );
+        Assert.Equal(
             1.5d,
             await reader
                 .GetFieldValueAsync<double>(3, TestContext.Current.CancellationToken)
@@ -278,6 +284,46 @@ public sealed class ConnectionIntegrationTests
         Assert.False(
             await reader.ReadAsync(TestContext.Current.CancellationToken).ConfigureAwait(true)
         );
+    }
+
+    [Fact]
+    public async Task ExecuteReaderAsync_MapsDecimalBoundariesLosslessly()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
+        await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        using DbCommand command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT
+                CAST('1234567890123456789012345678901234.9000' AS DECIMAL(38, 4)) AS huge_decimal,
+                CAST('12.3400' AS DECIMAL(10, 4)) AS exact_decimal
+            """;
+
+        using DbDataReader reader = await command
+            .ExecuteReaderAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+
+        Assert.Equal(typeof(DotRocksDecimal), reader.GetFieldType(0));
+        Assert.Equal(typeof(DotRocksDecimal), reader.GetFieldType(1));
+        Assert.True(
+            await reader.ReadAsync(TestContext.Current.CancellationToken).ConfigureAwait(true)
+        );
+
+        DotRocksDecimal huge = await reader
+            .GetFieldValueAsync<DotRocksDecimal>(0, TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+        DotRocksDecimal exact = await reader
+            .GetFieldValueAsync<DotRocksDecimal>(1, TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+        Assert.Equal("1234567890123456789012345678901234.9000", huge.ToString());
+        Assert.Equal("12.3400", exact.ToString());
+        Assert.Throws<DotRocksPrecisionLossException>(() => reader.GetDecimal(0));
+        Assert.Equal(12.3400m, reader.GetDecimal(1));
     }
 
     [Fact]

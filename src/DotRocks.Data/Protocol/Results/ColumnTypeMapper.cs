@@ -55,7 +55,7 @@ internal static class ColumnTypeMapper
             or ColumnType.Int24
             or ColumnType.Year => typeof(int),
             ColumnType.LongLong => typeof(long),
-            ColumnType.Decimal or ColumnType.NewDecimal => typeof(decimal),
+            ColumnType.Decimal or ColumnType.NewDecimal => typeof(DotRocksDecimal),
             ColumnType.Float => typeof(float),
             ColumnType.Double => typeof(double),
             ColumnType.Date or ColumnType.NewDate or ColumnType.DateTime or ColumnType.Timestamp =>
@@ -96,11 +96,7 @@ internal static class ColumnTypeMapper
                 NumberStyles.Integer,
                 CultureInfo.InvariantCulture
             ),
-            ColumnType.Decimal or ColumnType.NewDecimal => decimal.Parse(
-                text,
-                NumberStyles.Number,
-                CultureInfo.InvariantCulture
-            ),
+            ColumnType.Decimal or ColumnType.NewDecimal => DotRocksDecimal.Parse(text),
             ColumnType.Float => float.Parse(text, NumberStyles.Float, CultureInfo.InvariantCulture),
             ColumnType.Double => double.Parse(
                 text,

@@ -80,7 +80,7 @@ public sealed class TextResultParserTests
         object?[] row = result.Rows[0];
         Assert.Equal(42, row[0]);
         Assert.Equal(9007199254740991L, row[1]);
-        Assert.Equal(12.34m, row[2]);
+        Assert.Equal(DotRocksDecimal.Parse("12.34"), row[2]);
         Assert.Equal(1.5d, row[3]);
         Assert.Equal(new DateTime(2026, 6, 19), row[4]);
         Assert.Equal(new DateTime(2026, 6, 19, 13, 14, 15), row[5]);

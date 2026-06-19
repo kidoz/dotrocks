@@ -42,14 +42,14 @@ public sealed class DotRocksDataReaderTests
                     Column("name"),
                 ],
                 [
-                    [7, 12.34m, "seven"],
+                    [7, DotRocksDecimal.Parse("12.34"), "seven"],
                 ]
             )
         );
 
         Assert.Equal(typeof(int), reader.GetFieldType(0));
         Assert.Equal("LONG", reader.GetDataTypeName(0));
-        Assert.Equal(typeof(decimal), reader.GetFieldType(1));
+        Assert.Equal(typeof(DotRocksDecimal), reader.GetFieldType(1));
         Assert.Equal("NEWDECIMAL", reader.GetDataTypeName(1));
         Assert.Equal(typeof(string), reader.GetFieldType(2));
         Assert.Equal("VAR_STRING", reader.GetDataTypeName(2));
@@ -66,7 +66,7 @@ public sealed class DotRocksDataReaderTests
                     Column("name"),
                 ],
                 [
-                    [7, 12.34m, "seven"],
+                    [7, DotRocksDecimal.Parse("12.34"), "seven"],
                 ]
             )
         );
@@ -82,7 +82,7 @@ public sealed class DotRocksDataReaderTests
         Assert.Equal(11, schema[0].ColumnSize);
         Assert.Equal("amount", schema[1].ColumnName);
         Assert.Equal(1, schema[1].ColumnOrdinal);
-        Assert.Equal(typeof(decimal), schema[1].DataType);
+        Assert.Equal(typeof(DotRocksDecimal), schema[1].DataType);
         Assert.Equal("NEWDECIMAL", schema[1].DataTypeName);
         Assert.True(schema[1].AllowDBNull);
         Assert.Equal("name", schema[2].ColumnName);
@@ -130,7 +130,17 @@ public sealed class DotRocksDataReaderTests
                     Column("bytes", (byte)ColumnType.Blob),
                 ],
                 [
-                    [7, 8L, 12.34m, 1.5d, 1.25f, "seven", createdAt, true, bytes],
+                    [
+                        7,
+                        8L,
+                        DotRocksDecimal.Parse("12.34"),
+                        1.5d,
+                        1.25f,
+                        "seven",
+                        createdAt,
+                        true,
+                        bytes,
+                    ],
                 ]
             )
         );
@@ -139,6 +149,7 @@ public sealed class DotRocksDataReaderTests
         Assert.Equal(reader.GetInt32(0), reader.GetFieldValue<int>(0));
         Assert.Equal(reader.GetInt64(1), reader.GetFieldValue<long>(1));
         Assert.Equal(reader.GetDecimal(2), reader.GetFieldValue<decimal>(2));
+        Assert.Equal(DotRocksDecimal.Parse("12.34"), reader.GetFieldValue<DotRocksDecimal>(2));
         Assert.Equal(reader.GetDouble(3), reader.GetFieldValue<double>(3));
         Assert.Equal(reader.GetFloat(4), reader.GetFieldValue<float>(4));
         Assert.Equal(reader.GetString(5), reader.GetFieldValue<string>(5));
@@ -204,6 +215,27 @@ public sealed class DotRocksDataReaderTests
 
         Assert.True(reader.Read());
         Assert.Throws<InvalidCastException>(() => reader.GetFieldValue<int>(0));
+    }
+
+    [Fact]
+    public void GetFieldValue_DecimalPrecisionLoss_ThrowsDotRocksPrecisionLossException()
+    {
+        using var reader = new DotRocksDataReader(
+            QueryResult.FromRows(
+                [Column("amount", (byte)ColumnType.NewDecimal)],
+                [
+                    [DotRocksDecimal.Parse("12345678901234567890123456789012345678.9000")],
+                ]
+            )
+        );
+
+        Assert.True(reader.Read());
+        Assert.Throws<DotRocksPrecisionLossException>(() => reader.GetDecimal(0));
+        Assert.Throws<DotRocksPrecisionLossException>(() => reader.GetFieldValue<decimal>(0));
+        Assert.Equal(
+            DotRocksDecimal.Parse("12345678901234567890123456789012345678.9000"),
+            reader.GetFieldValue<DotRocksDecimal>(0)
+        );
     }
 
     [Fact]
