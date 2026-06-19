@@ -14,6 +14,13 @@ public sealed class DotRocksConnection : DbConnection
 {
     private DotRocksConnectionOptions _options;
     private DotRocksConnectionPoolLease? _lease;
+
+    [SuppressMessage(
+        "Usage",
+        "CA2213:Disposable fields should be disposed",
+        Justification = "The active transaction is owned by the caller; the connection only tracks and completes it."
+    )]
+    private DotRocksTransaction? _activeTransaction;
     private string _serverVersion = string.Empty;
     private ConnectionState _state;
 
@@ -97,6 +104,13 @@ public sealed class DotRocksConnection : DbConnection
 
     private void CloseCore(bool reusable)
     {
+        if (_activeTransaction is not null)
+        {
+            _activeTransaction.MarkCompletedBecauseConnectionClosed();
+            _activeTransaction = null;
+            reusable = false;
+        }
+
         DotRocksConnectionPoolLease? lease = _lease;
         _lease = null;
         _serverVersion = string.Empty;
@@ -137,7 +151,36 @@ public sealed class DotRocksConnection : DbConnection
 
     /// <inheritdoc />
     protected override DbTransaction BeginDbTransaction(IsolationLevel isolationLevel) =>
-        throw new NotSupportedException("Transactions are not implemented yet.");
+        BeginDbTransactionAsync(isolationLevel, CancellationToken.None)
+            .AsTask()
+            .GetAwaiter()
+            .GetResult();
+
+    /// <inheritdoc />
+    protected override async ValueTask<DbTransaction> BeginDbTransactionAsync(
+        IsolationLevel isolationLevel,
+        CancellationToken cancellationToken
+    )
+    {
+        ValidateTransactionIsolationLevel(isolationLevel);
+        if (_state != ConnectionState.Open || _lease is null)
+        {
+            throw new InvalidOperationException("The connection is not open.");
+        }
+
+        if (_activeTransaction is not null)
+        {
+            throw new InvalidOperationException(
+                "The DotRocks connection already has an active transaction."
+            );
+        }
+
+        var transaction = new DotRocksTransaction(this, isolationLevel);
+        await ExecuteTransactionCommandAsync("START TRANSACTION", transaction, cancellationToken)
+            .ConfigureAwait(false);
+        _activeTransaction = transaction;
+        return transaction;
+    }
 
     /// <inheritdoc />
     protected override DbCommand CreateDbCommand() => new DotRocksCommand(this);
@@ -170,6 +213,75 @@ public sealed class DotRocksConnection : DbConnection
         }
     }
 
+    internal async ValueTask ExecuteTransactionCommandAsync(
+        string commandText,
+        DotRocksTransaction transaction,
+        CancellationToken cancellationToken
+    )
+    {
+        ArgumentNullException.ThrowIfNull(transaction);
+        if (!ReferenceEquals(transaction.DotRocksConnection, this))
+        {
+            throw new InvalidOperationException(
+                "The transaction does not belong to this DotRocks connection."
+            );
+        }
+
+        QueryResult result = await ExecuteQueryAsync(commandText, cancellationToken)
+            .ConfigureAwait(false);
+        if (result.HasResultSet)
+        {
+            throw new DotRocksException(
+                "StarRocks returned a result set for a transaction control command."
+            );
+        }
+    }
+
+    internal void ClearActiveTransaction(DotRocksTransaction transaction)
+    {
+        if (ReferenceEquals(_activeTransaction, transaction))
+        {
+            _activeTransaction = null;
+        }
+    }
+
+    internal void AbortTransaction(DotRocksTransaction transaction)
+    {
+        if (!ReferenceEquals(_activeTransaction, transaction))
+        {
+            return;
+        }
+
+        _activeTransaction = null;
+        Abort();
+    }
+
+    internal void ValidateCommandTransaction(DotRocksTransaction? transaction)
+    {
+        if (transaction is not null)
+        {
+            transaction.EnsureActive();
+            if (!ReferenceEquals(transaction.DotRocksConnection, this))
+            {
+                throw new InvalidOperationException(
+                    "The command transaction does not belong to its DotRocks connection."
+                );
+            }
+        }
+
+        if (_activeTransaction is null)
+        {
+            return;
+        }
+
+        if (!ReferenceEquals(_activeTransaction, transaction))
+        {
+            throw new InvalidOperationException(
+                "Commands executed while a transaction is active must reference that transaction."
+            );
+        }
+    }
+
     private async ValueTask<DotRocksConnectionPoolLease> OpenLeaseAsync(
         CancellationToken cancellationToken
     )
@@ -186,6 +298,18 @@ public sealed class DotRocksConnection : DbConnection
             .OpenAsync(_options, cancellationToken)
             .ConfigureAwait(false);
         return DotRocksConnectionPoolLease.Unpooled(physicalConnection);
+    }
+
+    private static void ValidateTransactionIsolationLevel(IsolationLevel isolationLevel)
+    {
+        if (isolationLevel is IsolationLevel.Unspecified or IsolationLevel.ReadCommitted)
+        {
+            return;
+        }
+
+        throw new NotSupportedException(
+            $"DotRocks does not support transaction isolation level '{isolationLevel}'."
+        );
     }
 
     /// <inheritdoc />

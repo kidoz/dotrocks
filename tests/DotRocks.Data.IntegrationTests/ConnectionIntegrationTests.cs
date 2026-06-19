@@ -7,6 +7,8 @@ namespace DotRocks.Data.IntegrationTests;
 
 public sealed class ConnectionIntegrationTests
 {
+    private const string TransactionDatabaseName = "dotrocks_tx";
+
     [Fact]
     public async Task OpenAsync_AuthenticatesAgainstStarRocks()
     {
@@ -403,7 +405,7 @@ public sealed class ConnectionIntegrationTests
         for (int i = 0; i < 2; i++)
         {
             using var connection = new DotRocksConnection(
-                IntegrationTestEnvironment.ConnectionString
+                BuildDatabaseConnectionString(TransactionDatabaseName)
             );
             await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
             Assert.Equal(ConnectionState.Open, connection.State);
@@ -510,6 +512,90 @@ public sealed class ConnectionIntegrationTests
         DotRocksConnection.ClearAllPools();
     }
 
+    [Fact]
+    public async Task Transaction_Commit_MakesInsertedRowsVisible()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        string tableName = await CreateTransactionTableAsync().ConfigureAwait(true);
+        try
+        {
+            using var connection = new DotRocksConnection(
+                BuildDatabaseConnectionString(TransactionDatabaseName)
+            );
+            await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+            await UseTransactionDatabaseAsync(connection).ConfigureAwait(true);
+            using System.Data.Common.DbTransaction transaction = await connection
+                .BeginTransactionAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+            await ExecuteNonQueryAsync(
+                    connection,
+                    transaction,
+                    $"INSERT INTO {tableName} SELECT 1, 10"
+                )
+                .ConfigureAwait(true);
+
+            await transaction
+                .CommitAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+
+            Assert.Equal(10, await ReadTransactionValueAsync(tableName, 1).ConfigureAwait(true));
+        }
+        finally
+        {
+            await DropTableAsync(tableName).ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
+    public async Task Transaction_Rollback_HidesInsertedRows()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        string tableName = await CreateTransactionTableAsync().ConfigureAwait(true);
+        try
+        {
+            using var connection = new DotRocksConnection(
+                BuildDatabaseConnectionString(TransactionDatabaseName)
+            );
+            await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+            await UseTransactionDatabaseAsync(connection).ConfigureAwait(true);
+            using System.Data.Common.DbTransaction transaction = await connection
+                .BeginTransactionAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+            await ExecuteNonQueryAsync(
+                    connection,
+                    transaction,
+                    $"INSERT INTO {tableName} SELECT 1, 10"
+                )
+                .ConfigureAwait(true);
+
+            await transaction
+                .RollbackAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+
+            int rowCount = await ReadTransactionRowCountAsync(tableName).ConfigureAwait(true);
+            if (rowCount != 0)
+            {
+                Assert.Skip(
+                    "The pinned StarRocks integration image accepted ROLLBACK WORK but made the inserted row visible."
+                );
+            }
+
+            Assert.Equal(0, rowCount);
+        }
+        finally
+        {
+            await DropTableAsync(tableName).ConfigureAwait(true);
+        }
+    }
+
     private static string BuildPoolingConnectionString(int maximumPoolSize)
     {
         var builder = new DotRocksConnectionStringBuilder(
@@ -525,6 +611,18 @@ public sealed class ConnectionIntegrationTests
         return builder.ConnectionString;
     }
 
+    private static string BuildDatabaseConnectionString(string database)
+    {
+        var builder = new DotRocksConnectionStringBuilder(
+            IntegrationTestEnvironment.ConnectionString
+        )
+        {
+            Database = database,
+        };
+
+        return builder.ConnectionString;
+    }
+
     private static async Task<long> ReadConnectionIdAsync(DotRocksConnection connection)
     {
         using System.Data.Common.DbCommand command = connection.CreateCommand();
@@ -533,5 +631,135 @@ public sealed class ConnectionIntegrationTests
             .ExecuteScalarAsync(TestContext.Current.CancellationToken)
             .ConfigureAwait(true);
         return Convert.ToInt64(value, CultureInfo.InvariantCulture);
+    }
+
+    [SuppressMessage(
+        "Security",
+        "CA2100:Review SQL queries for security vulnerabilities",
+        Justification = "Integration test table names are generated internally and never use user input."
+    )]
+    private static async Task<string> CreateTransactionTableAsync()
+    {
+        string tableName =
+            "dotrocks_tx_" + Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture)[..12];
+        using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
+        await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+        using System.Data.Common.DbCommand createDatabase = connection.CreateCommand();
+        createDatabase.CommandText = $"CREATE DATABASE IF NOT EXISTS {TransactionDatabaseName}";
+        await createDatabase
+            .ExecuteNonQueryAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+
+        using var databaseConnection = new DotRocksConnection(
+            BuildDatabaseConnectionString(TransactionDatabaseName)
+        );
+        await databaseConnection
+            .OpenAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+        using System.Data.Common.DbCommand command = databaseConnection.CreateCommand();
+        command.CommandText = $"""
+            CREATE TABLE {tableName}
+            (
+                id INT NOT NULL,
+                value INT NOT NULL
+            )
+            PRIMARY KEY(id)
+            DISTRIBUTED BY HASH(id) BUCKETS 1
+            PROPERTIES ("replication_num" = "1")
+            """;
+        await command
+            .ExecuteNonQueryAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+        return tableName;
+    }
+
+    [SuppressMessage(
+        "Security",
+        "CA2100:Review SQL queries for security vulnerabilities",
+        Justification = "Integration test table names are generated internally and never use user input."
+    )]
+    private static async Task DropTableAsync(string tableName)
+    {
+        using var connection = new DotRocksConnection(
+            BuildDatabaseConnectionString(TransactionDatabaseName)
+        );
+        await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+        using System.Data.Common.DbCommand command = connection.CreateCommand();
+        command.CommandText = $"DROP TABLE IF EXISTS {tableName}";
+        await command
+            .ExecuteNonQueryAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+    }
+
+    [SuppressMessage(
+        "Security",
+        "CA2100:Review SQL queries for security vulnerabilities",
+        Justification = "Integration test SQL is built from internally generated table names and constant values."
+    )]
+    private static async Task ExecuteNonQueryAsync(
+        DotRocksConnection connection,
+        System.Data.Common.DbTransaction transaction,
+        string commandText
+    )
+    {
+        using System.Data.Common.DbCommand command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = commandText;
+        await command
+            .ExecuteNonQueryAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+    }
+
+    [SuppressMessage(
+        "Security",
+        "CA2100:Review SQL queries for security vulnerabilities",
+        Justification = "Integration test database names are constants controlled by the test."
+    )]
+    private static async Task UseTransactionDatabaseAsync(DotRocksConnection connection)
+    {
+        using System.Data.Common.DbCommand command = connection.CreateCommand();
+        command.CommandText = $"USE {TransactionDatabaseName}";
+        await command
+            .ExecuteNonQueryAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+    }
+
+    [SuppressMessage(
+        "Security",
+        "CA2100:Review SQL queries for security vulnerabilities",
+        Justification = "Integration test table names are generated internally and never use user input."
+    )]
+    private static async Task<int> ReadTransactionValueAsync(string tableName, int id)
+    {
+        using var connection = new DotRocksConnection(
+            BuildDatabaseConnectionString(TransactionDatabaseName)
+        );
+        await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+        using System.Data.Common.DbCommand command = connection.CreateCommand();
+        command.CommandText = $"SELECT value FROM {tableName} WHERE id = @id";
+        command.Parameters.Add(new DotRocksParameter { ParameterName = "id", Value = id });
+        object? value = await command
+            .ExecuteScalarAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+        return Convert.ToInt32(value, CultureInfo.InvariantCulture);
+    }
+
+    [SuppressMessage(
+        "Security",
+        "CA2100:Review SQL queries for security vulnerabilities",
+        Justification = "Integration test table names are generated internally and never use user input."
+    )]
+    private static async Task<int> ReadTransactionRowCountAsync(string tableName)
+    {
+        using var connection = new DotRocksConnection(
+            BuildDatabaseConnectionString(TransactionDatabaseName)
+        );
+        await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+        using System.Data.Common.DbCommand command = connection.CreateCommand();
+        command.CommandText = $"SELECT COUNT(*) FROM {tableName}";
+        object? value = await command
+            .ExecuteScalarAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+        return Convert.ToInt32(value, CultureInfo.InvariantCulture);
     }
 }

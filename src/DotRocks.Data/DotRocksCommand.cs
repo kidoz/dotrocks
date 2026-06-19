@@ -99,12 +99,32 @@ public sealed class DotRocksCommand : DbCommand
         get => _transaction;
         set
         {
-            if (value is not null)
+            if (value is null)
             {
-                throw new NotSupportedException("Transactions are not implemented yet.");
+                _transaction = null;
+                return;
             }
 
-            _transaction = null;
+            if (value is not DotRocksTransaction transaction)
+            {
+                throw new InvalidOperationException(
+                    "DotRocksCommand accepts only DotRocksTransaction instances."
+                );
+            }
+
+            transaction.EnsureActive();
+            if (
+                _connection is not null
+                && !ReferenceEquals(_connection, transaction.DotRocksConnection)
+            )
+            {
+                throw new InvalidOperationException(
+                    "The command transaction does not belong to the command connection."
+                );
+            }
+
+            _connection ??= transaction.DotRocksConnection;
+            _transaction = transaction;
         }
     }
 
@@ -198,6 +218,7 @@ public sealed class DotRocksCommand : DbCommand
             throw new InvalidOperationException("Command requires a DotRocksConnection.");
         }
 
+        _connection.ValidateCommandTransaction((DotRocksTransaction?)_transaction);
         string commandText = CommandTextParameterBinder.Bind(CommandText, _parameters);
         using var commandCancellation = new CancellationTokenSource();
         using CancellationTokenSource? timeoutCancellation = CreateTimeoutCancellation();

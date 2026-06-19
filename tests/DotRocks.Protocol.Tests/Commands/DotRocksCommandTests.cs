@@ -61,4 +61,42 @@ public sealed class DotRocksCommandTests
 
         command.Cancel();
     }
+
+    [Fact]
+    public void Transaction_AssignmentSetsConnectionWhenMissing()
+    {
+        using var connection = new DotRocksConnection();
+        using var transaction = new DotRocksTransaction(connection, IsolationLevel.ReadCommitted);
+        using var command = new DotRocksCommand();
+
+        command.Transaction = transaction;
+
+        Assert.Same(connection, command.Connection);
+        Assert.Same(transaction, command.Transaction);
+    }
+
+    [Fact]
+    public void Transaction_AssignmentRejectsForeignConnection()
+    {
+        using var commandConnection = new DotRocksConnection();
+        using var transactionConnection = new DotRocksConnection();
+        using var transaction = new DotRocksTransaction(
+            transactionConnection,
+            IsolationLevel.ReadCommitted
+        );
+        using var command = new DotRocksCommand { Connection = commandConnection };
+
+        Assert.Throws<InvalidOperationException>(() => command.Transaction = transaction);
+    }
+
+    [Fact]
+    public void Transaction_AssignmentRejectsCompletedTransaction()
+    {
+        using var connection = new DotRocksConnection();
+        using var transaction = new DotRocksTransaction(connection, IsolationLevel.ReadCommitted);
+        transaction.MarkCompletedBecauseConnectionClosed();
+        using var command = new DotRocksCommand { Connection = connection };
+
+        Assert.Throws<InvalidOperationException>(() => command.Transaction = transaction);
+    }
 }
