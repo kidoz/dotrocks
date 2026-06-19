@@ -56,6 +56,189 @@ public sealed class StreamLoadIntegrationTests
         }
     }
 
+    [Fact]
+    public async Task TransactionalLoadCsvAsync_Commit_MakesRowsVisible()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        string tableName = await CreateStreamLoadTableAsync().ConfigureAwait(true);
+        try
+        {
+            using var client = new DotRocksStreamLoadClient(
+                IntegrationTestEnvironment.ConnectionString
+            );
+            DotRocksStreamLoadTransaction transaction = await client
+                .BeginTransactionAsync(
+                    StreamLoadDatabaseName,
+                    tableName,
+                    new DotRocksStreamLoadTransactionOptions
+                    {
+                        Label =
+                            "dotrocks_tx_"
+                            + Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture),
+                    },
+                    TestContext.Current.CancellationToken
+                )
+                .ConfigureAwait(true);
+
+            using var payload = new MemoryStream(Encoding.UTF8.GetBytes("1,one\n2,two\n"));
+            DotRocksStreamLoadResult load = await transaction
+                .LoadCsvAsync(
+                    payload,
+                    new DotRocksStreamLoadOptions
+                    {
+                        Columns = "id,value",
+                        ColumnSeparator = ",",
+                        RowDelimiter = "\\n",
+                    },
+                    TestContext.Current.CancellationToken
+                )
+                .ConfigureAwait(true);
+            DotRocksStreamLoadResult prepare = await transaction
+                .PrepareAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+            DotRocksStreamLoadResult commit = await transaction
+                .CommitAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+
+            Assert.True(load.IsSuccess);
+            Assert.True(prepare.IsSuccess);
+            Assert.True(commit.IsSuccess);
+            Assert.Equal(2, await ReadRowCountAsync(tableName).ConfigureAwait(true));
+        }
+        finally
+        {
+            await DropTableAsync(tableName).ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
+    public async Task TransactionalLoadCsvAsync_Rollback_HidesRows()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        string tableName = await CreateStreamLoadTableAsync().ConfigureAwait(true);
+        try
+        {
+            using var client = new DotRocksStreamLoadClient(
+                IntegrationTestEnvironment.ConnectionString
+            );
+            DotRocksStreamLoadTransaction transaction = await client
+                .BeginTransactionAsync(
+                    StreamLoadDatabaseName,
+                    tableName,
+                    new DotRocksStreamLoadTransactionOptions
+                    {
+                        Label =
+                            "dotrocks_tx_"
+                            + Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture),
+                    },
+                    TestContext.Current.CancellationToken
+                )
+                .ConfigureAwait(true);
+
+            using var payload = new MemoryStream(Encoding.UTF8.GetBytes("1,one\n2,two\n"));
+            DotRocksStreamLoadResult load = await transaction
+                .LoadCsvAsync(
+                    payload,
+                    new DotRocksStreamLoadOptions
+                    {
+                        Columns = "id,value",
+                        ColumnSeparator = ",",
+                        RowDelimiter = "\\n",
+                    },
+                    TestContext.Current.CancellationToken
+                )
+                .ConfigureAwait(true);
+            DotRocksStreamLoadResult rollback = await transaction
+                .RollbackAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+
+            Assert.True(load.IsSuccess);
+            Assert.True(rollback.IsSuccess);
+            Assert.Equal(0, await ReadRowCountAsync(tableName).ConfigureAwait(true));
+        }
+        finally
+        {
+            await DropTableAsync(tableName).ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
+    public async Task TransactionalLoadCsvAsync_FailedLoad_RejectsFurtherOperations()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        string tableName = await CreateStreamLoadTableAsync().ConfigureAwait(true);
+        try
+        {
+            using var client = new DotRocksStreamLoadClient(
+                IntegrationTestEnvironment.ConnectionString
+            );
+            DotRocksStreamLoadTransaction transaction = await client
+                .BeginTransactionAsync(
+                    StreamLoadDatabaseName,
+                    tableName,
+                    new DotRocksStreamLoadTransactionOptions
+                    {
+                        Label =
+                            "dotrocks_tx_"
+                            + Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture),
+                    },
+                    TestContext.Current.CancellationToken
+                )
+                .ConfigureAwait(true);
+
+            using var payload = new MemoryStream(Encoding.UTF8.GetBytes("1,one\n"));
+            await Assert
+                .ThrowsAsync<DotRocksStreamLoadException>(async () =>
+                    await transaction
+                        .LoadCsvAsync(
+                            tableName + "_missing",
+                            payload,
+                            new DotRocksStreamLoadOptions
+                            {
+                                Columns = "id,value",
+                                ColumnSeparator = ",",
+                                RowDelimiter = "\\n",
+                            },
+                            TestContext.Current.CancellationToken
+                        )
+                        .ConfigureAwait(true)
+                )
+                .ConfigureAwait(true);
+
+            await Assert
+                .ThrowsAsync<InvalidOperationException>(async () =>
+                    await transaction
+                        .PrepareAsync(TestContext.Current.CancellationToken)
+                        .ConfigureAwait(true)
+                )
+                .ConfigureAwait(true);
+            await Assert
+                .ThrowsAsync<InvalidOperationException>(async () =>
+                    await transaction
+                        .RollbackAsync(TestContext.Current.CancellationToken)
+                        .ConfigureAwait(true)
+                )
+                .ConfigureAwait(true);
+            Assert.Equal(0, await ReadRowCountAsync(tableName).ConfigureAwait(true));
+        }
+        finally
+        {
+            await DropTableAsync(tableName).ConfigureAwait(true);
+        }
+    }
+
     [SuppressMessage(
         "Security",
         "CA2100:Review SQL queries for security vulnerabilities",

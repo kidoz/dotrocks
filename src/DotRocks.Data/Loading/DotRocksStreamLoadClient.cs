@@ -91,6 +91,35 @@ public sealed class DotRocksStreamLoadClient : IDisposable
             cancellationToken
         );
 
+    /// <summary>
+    /// Begins a StarRocks Stream Load transaction.
+    /// </summary>
+    /// <param name="databaseName">The database name for the transaction.</param>
+    /// <param name="tableName">The default table name for the transaction.</param>
+    /// <param name="options">The transaction options. A label is required.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The active Stream Load transaction.</returns>
+    public async Task<DotRocksStreamLoadTransaction> BeginTransactionAsync(
+        string databaseName,
+        string tableName,
+        DotRocksStreamLoadTransactionOptions options,
+        CancellationToken cancellationToken = default
+    )
+    {
+        ObjectDisposedException.ThrowIf(_isDisposed, this);
+        ValidateIdentifier(databaseName, nameof(databaseName));
+        ValidateIdentifier(tableName, nameof(tableName));
+        ArgumentNullException.ThrowIfNull(options);
+
+        DotRocksStreamLoadResult result = await SendTransactionOperationAsync(
+                "begin",
+                options.BuildBeginHeaders(databaseName, tableName),
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+        return new DotRocksStreamLoadTransaction(this, databaseName, tableName, options, result);
+    }
+
     /// <inheritdoc />
     public void Dispose()
     {
@@ -123,17 +152,90 @@ public sealed class DotRocksStreamLoadClient : IDisposable
 
         options ??= new DotRocksStreamLoadOptions();
         IReadOnlyDictionary<string, string> headers = options.BuildHeaders(format);
-        Uri requestUri = BuildStreamLoadUri(databaseName, tableName);
-        long initialPosition = payload.CanSeek ? payload.Position : 0;
+        return await SendPayloadRequestAsync(
+                BuildStreamLoadUri(databaseName, tableName),
+                headers,
+                payload,
+                mediaType,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+    }
+
+    internal Task<DotRocksStreamLoadResult> SendTransactionLoadAsync(
+        string databaseName,
+        string tableName,
+        Stream payload,
+        IReadOnlyDictionary<string, string> headers,
+        string mediaType,
+        CancellationToken cancellationToken
+    )
+    {
+        ObjectDisposedException.ThrowIf(_isDisposed, this);
+        ValidateIdentifier(databaseName, nameof(databaseName));
+        ValidateIdentifier(tableName, nameof(tableName));
+        ArgumentNullException.ThrowIfNull(payload);
+        return SendPayloadRequestAsync(
+            BuildTransactionUri("load"),
+            headers,
+            payload,
+            mediaType,
+            cancellationToken
+        );
+    }
+
+    internal Task<DotRocksStreamLoadResult> SendTransactionOperationAsync(
+        string operation,
+        IReadOnlyDictionary<string, string> headers,
+        CancellationToken cancellationToken
+    )
+    {
+        ObjectDisposedException.ThrowIf(_isDisposed, this);
+        return SendRequestAsync(
+            HttpMethod.Post,
+            BuildTransactionUri(operation),
+            headers,
+            payload: null,
+            mediaType: null,
+            cancellationToken
+        );
+    }
+
+    private Task<DotRocksStreamLoadResult> SendPayloadRequestAsync(
+        Uri requestUri,
+        IReadOnlyDictionary<string, string> headers,
+        Stream payload,
+        string mediaType,
+        CancellationToken cancellationToken
+    ) =>
+        SendRequestAsync(
+            HttpMethod.Put,
+            requestUri,
+            headers,
+            payload,
+            mediaType,
+            cancellationToken
+        );
+
+    private async Task<DotRocksStreamLoadResult> SendRequestAsync(
+        HttpMethod method,
+        Uri requestUri,
+        IReadOnlyDictionary<string, string> headers,
+        Stream? payload,
+        string? mediaType,
+        CancellationToken cancellationToken
+    )
+    {
+        long initialPosition = payload?.CanSeek == true ? payload.Position : 0;
 
         for (int redirectCount = 0; redirectCount <= MaximumRedirects; redirectCount++)
         {
-            if (payload.CanSeek)
+            if (payload?.CanSeek == true)
             {
                 payload.Position = initialPosition;
             }
 
-            using var request = CreateRequest(requestUri, payload, headers, mediaType);
+            using var request = CreateRequest(method, requestUri, payload, headers, mediaType);
             using HttpResponseMessage response = await _httpClient
                 .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
                 .ConfigureAwait(false);
@@ -176,13 +278,14 @@ public sealed class DotRocksStreamLoadClient : IDisposable
     }
 
     private HttpRequestMessage CreateRequest(
+        HttpMethod method,
         Uri requestUri,
-        Stream payload,
+        Stream? payload,
         IReadOnlyDictionary<string, string> headers,
-        string mediaType
+        string? mediaType
     )
     {
-        var request = new HttpRequestMessage(HttpMethod.Put, requestUri);
+        var request = new HttpRequestMessage(method, requestUri);
         request.Headers.Authorization = CreateAuthorizationHeader();
         request.Headers.ExpectContinue = true;
         foreach (KeyValuePair<string, string> header in headers)
@@ -190,8 +293,12 @@ public sealed class DotRocksStreamLoadClient : IDisposable
             request.Headers.TryAddWithoutValidation(header.Key, header.Value);
         }
 
-        request.Content = new StreamContent(new NonDisposingStream(payload));
-        request.Content.Headers.ContentType = new MediaTypeHeaderValue(mediaType);
+        if (payload is not null && mediaType is not null)
+        {
+            request.Content = new StreamContent(new NonDisposingStream(payload));
+            request.Content.Headers.ContentType = new MediaTypeHeaderValue(mediaType);
+        }
+
         return request;
     }
 
@@ -205,6 +312,15 @@ public sealed class DotRocksStreamLoadClient : IDisposable
                 + "/"
                 + Uri.EscapeDataString(tableName)
                 + "/_stream_load",
+        };
+        return builder.Uri;
+    }
+
+    private Uri BuildTransactionUri(string operation)
+    {
+        var builder = new UriBuilder(_options.StreamLoadEndpoint)
+        {
+            Path = "/api/transaction/" + Uri.EscapeDataString(operation),
         };
         return builder.Uri;
     }

@@ -292,6 +292,196 @@ public sealed class DotRocksStreamLoadClientTests
         Assert.DoesNotContain("secret diagnostic", exception.ToString(), StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task BeginTransactionAsync_SendsTransactionHeaders()
+    {
+        using var handler = new RecordingHandler(
+            static (_, _) =>
+                Task.FromResult(
+                    JsonResponse(
+                        """
+                        {
+                          "Status": "OK",
+                          "Message": "",
+                          "Label": "tx_label",
+                          "TxnId": 42
+                        }
+                        """
+                    )
+                )
+        );
+        using var httpClient = new HttpClient(handler);
+        using var client = CreateClient(httpClient);
+
+        DotRocksStreamLoadTransaction transaction = await client
+            .BeginTransactionAsync(
+                "warehouse",
+                "events",
+                new DotRocksStreamLoadTransactionOptions
+                {
+                    Label = "tx_label",
+                    Timeout = TimeSpan.FromSeconds(30),
+                    IdleTimeout = TimeSpan.FromSeconds(10),
+                },
+                TestContext.Current.CancellationToken
+            )
+            .ConfigureAwait(true);
+
+        Assert.Equal("tx_label", transaction.Label);
+        Assert.Equal(42, transaction.BeginResult.TransactionId);
+        Assert.NotNull(handler.Request);
+        HttpRequestMessage request = handler.Request;
+        Assert.Equal(HttpMethod.Post, request.Method);
+        Assert.Equal(
+            "http://starrocks.local:8030/api/transaction/begin",
+            request.RequestUri!.AbsoluteUri
+        );
+        Assert.True(request.Headers.ExpectContinue);
+        AssertHeader(request.Headers, "label", "tx_label");
+        AssertHeader(request.Headers, "db", "warehouse");
+        AssertHeader(request.Headers, "table", "events");
+        AssertHeader(request.Headers, "timeout", "30");
+        AssertHeader(request.Headers, "idle_transaction_timeout", "10");
+    }
+
+    [Fact]
+    public async Task TransactionLoadCsvAsync_FollowsRedirectAndPreservesPayload()
+    {
+        using var handler = new TransactionRedirectingHandler();
+        using var httpClient = new HttpClient(handler);
+        using var client = CreateClient(httpClient);
+        DotRocksStreamLoadTransaction transaction = await client
+            .BeginTransactionAsync(
+                "warehouse",
+                "events",
+                new DotRocksStreamLoadTransactionOptions { Label = "tx_label" },
+                TestContext.Current.CancellationToken
+            )
+            .ConfigureAwait(true);
+        using var payload = new MemoryStream(Encoding.UTF8.GetBytes("1,one\\n"));
+
+        DotRocksStreamLoadResult result = await transaction
+            .LoadCsvAsync(
+                payload,
+                new DotRocksStreamLoadOptions { Columns = "id,name", ColumnSeparator = "," },
+                TestContext.Current.CancellationToken
+            )
+            .ConfigureAwait(true);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(3, handler.Requests.Count);
+        Assert.Equal(
+            "http://starrocks.local:8030/api/transaction/load",
+            handler.Requests[1].RequestUri!.AbsoluteUri
+        );
+        Assert.Equal(
+            "http://be.starrocks.local:8040/api/transaction/load",
+            handler.Requests[2].RequestUri!.AbsoluteUri
+        );
+        Assert.Equal("1,one\\n", handler.RedirectedBody);
+        AssertHeader(handler.Requests[2].Headers, "label", "tx_label");
+        AssertHeader(handler.Requests[2].Headers, "db", "warehouse");
+        AssertHeader(handler.Requests[2].Headers, "table", "events");
+        AssertHeader(handler.Requests[2].Headers, "columns", "id,name");
+    }
+
+    [Fact]
+    public async Task TransactionPrepareCommit_RejectsDoubleCompletion()
+    {
+        using var handler = new TransactionSequenceHandler();
+        using var httpClient = new HttpClient(handler);
+        using var client = CreateClient(httpClient);
+        DotRocksStreamLoadTransaction transaction = await client
+            .BeginTransactionAsync(
+                "warehouse",
+                "events",
+                new DotRocksStreamLoadTransactionOptions
+                {
+                    Label = "tx_label",
+                    PreparedTimeout = TimeSpan.FromSeconds(60),
+                },
+                TestContext.Current.CancellationToken
+            )
+            .ConfigureAwait(true);
+
+        await transaction.PrepareAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+        DotRocksStreamLoadResult commit = await transaction
+            .CommitAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+
+        Assert.True(commit.IsSuccess);
+        await Assert
+            .ThrowsAsync<InvalidOperationException>(async () =>
+                await transaction
+                    .CommitAsync(TestContext.Current.CancellationToken)
+                    .ConfigureAwait(true)
+            )
+            .ConfigureAwait(true);
+        Assert.Equal(3, handler.Requests.Count);
+        AssertHeader(handler.Requests[1].Headers, "prepared_timeout", "60");
+    }
+
+    [Fact]
+    public async Task TransactionRollback_RejectsDoubleCompletion()
+    {
+        using var handler = new TransactionSequenceHandler();
+        using var httpClient = new HttpClient(handler);
+        using var client = CreateClient(httpClient);
+        DotRocksStreamLoadTransaction transaction = await client
+            .BeginTransactionAsync(
+                "warehouse",
+                "events",
+                new DotRocksStreamLoadTransactionOptions { Label = "tx_label" },
+                TestContext.Current.CancellationToken
+            )
+            .ConfigureAwait(true);
+
+        DotRocksStreamLoadResult rollback = await transaction
+            .RollbackAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+
+        Assert.True(rollback.IsSuccess);
+        await Assert
+            .ThrowsAsync<InvalidOperationException>(async () =>
+                await transaction
+                    .RollbackAsync(TestContext.Current.CancellationToken)
+                    .ConfigureAwait(true)
+            )
+            .ConfigureAwait(true);
+    }
+
+    [Fact]
+    public async Task TransactionCommitFailure_MarksTransactionFailed()
+    {
+        using var handler = new TransactionSequenceHandler(commitSucceeds: false);
+        using var httpClient = new HttpClient(handler);
+        using var client = CreateClient(httpClient);
+        DotRocksStreamLoadTransaction transaction = await client
+            .BeginTransactionAsync(
+                "warehouse",
+                "events",
+                new DotRocksStreamLoadTransactionOptions { Label = "tx_label" },
+                TestContext.Current.CancellationToken
+            )
+            .ConfigureAwait(true);
+
+        await transaction.PrepareAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+        await Assert
+            .ThrowsAsync<DotRocksStreamLoadException>(async () =>
+                await transaction
+                    .CommitAsync(TestContext.Current.CancellationToken)
+                    .ConfigureAwait(true)
+            )
+            .ConfigureAwait(true);
+        await Assert
+            .ThrowsAsync<InvalidOperationException>(async () =>
+                await transaction
+                    .RollbackAsync(TestContext.Current.CancellationToken)
+                    .ConfigureAwait(true)
+            )
+            .ConfigureAwait(true);
+    }
+
     private static DotRocksStreamLoadClient CreateClient(HttpClient httpClient)
     {
         DotRocksConnectionOptions options = DotRocksConnectionOptions.Parse(
@@ -376,4 +566,92 @@ public sealed class DotRocksStreamLoadClientTests
             return JsonResponse();
         }
     }
+
+    private sealed class TransactionRedirectingHandler : HttpMessageHandler
+    {
+        public List<HttpRequestMessage> Requests { get; } = [];
+
+        public string? RedirectedBody { get; private set; }
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken
+        )
+        {
+            Requests.Add(request);
+            if (Requests.Count == 1)
+            {
+                return TransactionResponse();
+            }
+
+            if (Requests.Count == 2)
+            {
+                return new HttpResponseMessage(HttpStatusCode.TemporaryRedirect)
+                {
+                    Headers =
+                    {
+                        Location = new Uri("http://be.starrocks.local:8040/api/transaction/load"),
+                    },
+                };
+            }
+
+            RedirectedBody = await request
+                .Content!.ReadAsStringAsync(cancellationToken)
+                .ConfigureAwait(true);
+            return TransactionResponse();
+        }
+    }
+
+    private sealed class TransactionSequenceHandler(bool commitSucceeds = true) : HttpMessageHandler
+    {
+        public List<HttpRequestMessage> Requests { get; } = [];
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken
+        )
+        {
+            Requests.Add(request);
+            string path = request.RequestUri!.AbsolutePath;
+            if (path.EndsWith("/commit", StringComparison.Ordinal) && !commitSucceeds)
+            {
+                return Task.FromResult(
+                    TransactionResponse(
+                        """
+                        {
+                          "Status": "FAILED",
+                          "Message": "commit timeout",
+                          "Label": "tx_label",
+                          "TxnId": 42
+                        }
+                        """
+                    )
+                );
+            }
+
+            return Task.FromResult(TransactionResponse());
+        }
+    }
+
+    private static HttpResponseMessage TransactionResponse(
+        string json =
+            """
+                {
+                  "Status": "OK",
+                  "Message": "",
+                  "Label": "tx_label",
+                  "TxnId": 42,
+                  "NumberTotalRows": 1,
+                  "NumberLoadedRows": 1,
+                  "NumberFilteredRows": 0,
+                  "NumberUnselectedRows": 0,
+                  "LoadBytes": 6,
+                  "LoadTimeMs": 1
+                }
+                """
+    ) =>
+        new(HttpStatusCode.OK)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json"),
+        };
 }

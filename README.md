@@ -97,6 +97,41 @@ DotRocksStreamLoadResult result = await client.LoadCsvAsync(
 );
 ```
 
+Transactional Stream Load uses the StarRocks begin/load/prepare/commit HTTP flow. The
+transaction object is single-use; after commit, rollback, or a failed remote call it rejects
+further operations.
+
+```csharp
+using DotRocks.Data.Loading;
+
+using var client = new DotRocksStreamLoadClient(
+    "Server=127.0.0.1;Port=9030;User ID=root;Stream Load Endpoint=http://127.0.0.1:8030"
+);
+
+DotRocksStreamLoadTransaction transaction = await client.BeginTransactionAsync(
+    "warehouse",
+    "events",
+    new DotRocksStreamLoadTransactionOptions { Label = "events_tx_20260619" }
+);
+
+await using Stream csv = File.OpenRead("events.csv");
+await transaction.LoadCsvAsync(
+    csv,
+    new DotRocksStreamLoadOptions
+    {
+        Columns = "id,name,created_at",
+        ColumnSeparator = ",",
+        RowDelimiter = "\\n",
+    }
+);
+
+await transaction.PrepareAsync();
+await transaction.CommitAsync();
+
+// To abandon an active or prepared transaction before commit:
+// await transaction.RollbackAsync();
+```
+
 ## Build and test
 
 Common tasks are exposed via [`just`](https://github.com/casey/just) (see `justfile`):

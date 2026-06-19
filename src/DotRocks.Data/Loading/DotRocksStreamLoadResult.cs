@@ -18,7 +18,9 @@ public sealed class DotRocksStreamLoadResult
         long numberUnselectedRows,
         long loadBytes,
         long loadTimeMilliseconds,
-        Uri? errorUrl
+        Uri? errorUrl,
+        long? transactionId,
+        int? sequence
     )
     {
         Status = status;
@@ -31,6 +33,8 @@ public sealed class DotRocksStreamLoadResult
         LoadBytes = loadBytes;
         LoadTimeMilliseconds = loadTimeMilliseconds;
         ErrorUrl = errorUrl;
+        TransactionId = transactionId;
+        Sequence = sequence;
     }
 
     /// <summary>
@@ -84,9 +88,21 @@ public sealed class DotRocksStreamLoadResult
     public Uri? ErrorUrl { get; }
 
     /// <summary>
+    /// Gets the StarRocks transaction identifier, when the response includes one.
+    /// </summary>
+    public long? TransactionId { get; }
+
+    /// <summary>
+    /// Gets the transaction load sequence, when the response includes one.
+    /// </summary>
+    public int? Sequence { get; }
+
+    /// <summary>
     /// Gets a value indicating whether StarRocks reported the load as successful.
     /// </summary>
-    public bool IsSuccess => string.Equals(Status, "Success", StringComparison.OrdinalIgnoreCase);
+    public bool IsSuccess =>
+        string.Equals(Status, "Success", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(Status, "OK", StringComparison.OrdinalIgnoreCase);
 
     internal static DotRocksStreamLoadResult Parse(string responseText)
     {
@@ -104,7 +120,9 @@ public sealed class DotRocksStreamLoadResult
                 GetInt64(root, "NumberUnselectedRows"),
                 GetInt64(root, "LoadBytes"),
                 GetInt64(root, "LoadTimeMs"),
-                CreateUri(GetString(root, "ErrorURL"))
+                CreateUri(GetString(root, "ErrorURL")),
+                GetNullableInt64(root, "TxnId"),
+                GetNullableInt32(root, "Seq")
             );
         }
         catch (JsonException ex)
@@ -147,6 +165,38 @@ public sealed class DotRocksStreamLoadResult
                 ) => value,
             _ => 0,
         };
+    }
+
+    private static long? GetNullableInt64(JsonElement root, string name)
+    {
+        if (!TryGetProperty(root, name, out JsonElement property))
+        {
+            return null;
+        }
+
+        return property.ValueKind switch
+        {
+            JsonValueKind.Number => property.GetInt64(),
+            JsonValueKind.String
+                when long.TryParse(
+                    property.GetString(),
+                    NumberStyles.Integer,
+                    CultureInfo.InvariantCulture,
+                    out long value
+                ) => value,
+            _ => null,
+        };
+    }
+
+    private static int? GetNullableInt32(JsonElement root, string name)
+    {
+        long? value = GetNullableInt64(root, name);
+        if (value is null)
+        {
+            return null;
+        }
+
+        return value is >= int.MinValue and <= int.MaxValue ? (int)value : null;
     }
 
     private static Uri? CreateUri(string? value) =>
