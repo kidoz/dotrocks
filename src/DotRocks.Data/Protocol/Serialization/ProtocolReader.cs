@@ -55,12 +55,12 @@ internal ref struct ProtocolReader
     /// <summary>Reads a little-endian fixed-width unsigned integer of 1 to 8 bytes.</summary>
     public ulong ReadFixedInteger(int byteCount)
     {
-        if ((uint)byteCount > 8)
+        if (byteCount is < 1 or > 8)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(byteCount),
                 byteCount,
-                "Fixed-width integers are 0 to 8 bytes."
+                "Fixed-width integers are 1 to 8 bytes."
             );
         }
 

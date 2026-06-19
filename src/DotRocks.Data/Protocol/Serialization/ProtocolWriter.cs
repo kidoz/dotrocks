@@ -39,12 +39,12 @@ internal sealed class ProtocolWriter : IDisposable
     /// <summary>Writes a little-endian fixed-width unsigned integer of 1 to 8 bytes.</summary>
     public void WriteFixedInteger(ulong value, int byteCount)
     {
-        if ((uint)byteCount > 8)
+        if (byteCount is < 1 or > 8)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(byteCount),
                 byteCount,
-                "Fixed-width integers are 0 to 8 bytes."
+                "Fixed-width integers are 1 to 8 bytes."
             );
         }
 

@@ -36,6 +36,7 @@ public sealed class FixedIntegerTests
     }
 
     [Theory]
+    [InlineData(0)]
     [InlineData(9)]
     [InlineData(-1)]
     public void RejectsOutOfRangeWidth(int byteCount)
