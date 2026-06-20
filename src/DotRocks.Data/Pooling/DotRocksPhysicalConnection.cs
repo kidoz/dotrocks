@@ -31,15 +31,15 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
 
     public bool IsReusable => !_isDisposed && !_isBroken && _client.Connected && IsSocketAlive();
 
-    // TcpClient.Connected only reflects the last I/O. Poll detects a peer that closed the
-    // connection while it was idle in the pool (server restart, idle kill): a readable socket
-    // with no available bytes means a FIN was received, so the connection must not be reused.
+    // TcpClient.Connected only reflects the last I/O. A correctly drained idle pooled connection
+    // has nothing to read, so anything readable means it must not be reused: a readable socket is
+    // either closed (FIN/RST, Available == 0) or carries leftover/unsolicited bytes that would
+    // desynchronize the protocol on the next command.
     private bool IsSocketAlive()
     {
         try
         {
-            Socket socket = _client.Client;
-            return !(socket.Poll(0, SelectMode.SelectRead) && socket.Available == 0);
+            return !_client.Client.Poll(0, SelectMode.SelectRead);
         }
         catch (SocketException)
         {
