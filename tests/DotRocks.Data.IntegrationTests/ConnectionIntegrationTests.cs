@@ -1107,6 +1107,57 @@ public sealed class ConnectionIntegrationTests
     }
 
     [Fact]
+    public async Task CancelingActiveReaderRead_DiscardsPooledPhysicalConnection()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        DotRocksConnection.ClearAllPools();
+        string connectionString = BuildPoolingConnectionString(maximumPoolSize: 1);
+        long firstConnectionId;
+
+        using (var first = new DotRocksConnection(connectionString))
+        {
+            await first.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+            firstConnectionId = await ReadConnectionIdAsync(first).ConfigureAwait(true);
+
+            using DbCommand command = first.CreateCommand();
+            command.CommandText = "SELECT 1 UNION ALL SELECT SLEEP(3)";
+            command.CommandTimeout = 0;
+            using DbDataReader reader = await command
+                .ExecuteReaderAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+            Assert.True(
+                await reader.ReadAsync(TestContext.Current.CancellationToken).ConfigureAwait(true)
+            );
+            using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(
+                TestContext.Current.CancellationToken
+            );
+            cancellation.CancelAfter(TimeSpan.FromMilliseconds(100));
+
+            await Assert
+                .ThrowsAsync<OperationCanceledException>(async () =>
+                    await reader.ReadAsync(cancellation.Token).ConfigureAwait(true)
+                )
+                .ConfigureAwait(true);
+            Assert.Equal(ConnectionState.Closed, first.State);
+        }
+
+        using (var second = new DotRocksConnection(connectionString))
+        {
+            await second.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+            long secondConnectionId = await ReadConnectionIdAsync(second).ConfigureAwait(true);
+
+            Assert.NotEqual(firstConnectionId, secondConnectionId);
+            await second.CloseAsync().ConfigureAwait(true);
+        }
+
+        DotRocksConnection.ClearAllPools();
+    }
+
+    [Fact]
     public async Task ReaderClose_RespectsCommandBehaviorCloseConnection()
     {
         if (!IntegrationTestEnvironment.IsEnabled)

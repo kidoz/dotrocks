@@ -84,6 +84,40 @@ public sealed class PackageContentTests
     }
 
     [Fact]
+    public async Task Packages_CanBeConsumedFromLocalNuGetSourceAndRunAnalyzers()
+    {
+        string packageDirectory = await PackSourcePackagesAsync().ConfigureAwait(true);
+        string consumerDirectory = Path.Combine(
+            Path.GetTempPath(),
+            "dotrocks-package-consumer-" + Guid.NewGuid().ToString("N")
+        );
+        Directory.CreateDirectory(consumerDirectory);
+
+        await WriteConsumerProjectAsync(consumerDirectory, packageDirectory).ConfigureAwait(true);
+
+        CommandResult restore = await RunDotnetAsync(
+                "restore Consumer.csproj --configfile NuGet.config --disable-build-servers",
+                consumerDirectory
+            )
+            .ConfigureAwait(true);
+        AssertCommandSucceeded(restore);
+
+        CommandResult build = await RunDotnetAsync(
+                "build Consumer.csproj --no-restore --disable-build-servers",
+                consumerDirectory
+            )
+            .ConfigureAwait(true);
+
+        AssertCommandSucceeded(build);
+        Assert.Contains("DTR0001", build.Output, StringComparison.Ordinal);
+        Assert.Contains("DTR0002", build.Output, StringComparison.Ordinal);
+        Assert.Contains("DTR0003", build.Output, StringComparison.Ordinal);
+        Assert.Contains("DTR0004", build.Output, StringComparison.Ordinal);
+        Assert.DoesNotContain("CS8032", build.Output, StringComparison.Ordinal);
+        Assert.DoesNotContain("AD0001", build.Output, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ThirdPartyNotices_ListCentralPackageDependencies()
     {
         string root = FindRepositoryRoot();
@@ -263,7 +297,182 @@ public sealed class PackageContentTests
         return outputDirectory;
     }
 
-    private static async Task<CommandResult> RunDotnetAsync(string arguments)
+    private static async Task WriteConsumerProjectAsync(
+        string consumerDirectory,
+        string packageDirectory
+    )
+    {
+        string nugetConfigPath = Path.Combine(consumerDirectory, "NuGet.config");
+        string projectPath = Path.Combine(consumerDirectory, "Consumer.csproj");
+        string programPath = Path.Combine(consumerDirectory, "Program.cs");
+
+        await File.WriteAllTextAsync(
+                nugetConfigPath,
+                CreateNuGetConfig(packageDirectory),
+                TestContext.Current.CancellationToken
+            )
+            .ConfigureAwait(true);
+
+        await File.WriteAllTextAsync(
+                projectPath,
+                CreateConsumerProject(packageDirectory),
+                TestContext.Current.CancellationToken
+            )
+            .ConfigureAwait(true);
+
+        await File.WriteAllTextAsync(
+                programPath,
+                ConsumerProgram,
+                TestContext.Current.CancellationToken
+            )
+            .ConfigureAwait(true);
+    }
+
+    private static string CreateNuGetConfig(string packageDirectory) =>
+        new XDocument(
+            new XElement(
+                "configuration",
+                new XElement(
+                    "packageSources",
+                    new XElement("clear"),
+                    new XElement(
+                        "add",
+                        new XAttribute("key", "local"),
+                        new XAttribute("value", packageDirectory)
+                    ),
+                    new XElement(
+                        "add",
+                        new XAttribute("key", "nuget.org"),
+                        new XAttribute("value", "https://api.nuget.org/v3/index.json"),
+                        new XAttribute("protocolVersion", "3")
+                    )
+                ),
+                new XElement(
+                    "packageSourceMapping",
+                    new XElement(
+                        "packageSource",
+                        new XAttribute("key", "local"),
+                        new XElement("package", new XAttribute("pattern", "DotRocks.*"))
+                    ),
+                    new XElement(
+                        "packageSource",
+                        new XAttribute("key", "nuget.org"),
+                        new XElement("package", new XAttribute("pattern", "*"))
+                    )
+                )
+            )
+        ).ToString();
+
+    private static string CreateConsumerProject(string packageDirectory)
+    {
+        var project = new XDocument(
+            new XElement(
+                "Project",
+                new XAttribute("Sdk", "Microsoft.NET.Sdk"),
+                new XElement(
+                    "PropertyGroup",
+                    new XElement("OutputType", "Exe"),
+                    new XElement("TargetFramework", "net10.0"),
+                    new XElement("Nullable", "enable"),
+                    new XElement("ImplicitUsings", "enable"),
+                    new XElement("TreatWarningsAsErrors", "false")
+                ),
+                new XElement(
+                    "ItemGroup",
+                    RuntimePackageIds.Select(packageId =>
+                        CreatePackageReference(packageDirectory, packageId, privateAssets: false)
+                    ),
+                    AnalyzerPackageIds.Select(packageId =>
+                        CreatePackageReference(packageDirectory, packageId, privateAssets: true)
+                    )
+                )
+            )
+        );
+
+        return project.ToString();
+    }
+
+    private static XElement CreatePackageReference(
+        string packageDirectory,
+        string packageId,
+        bool privateAssets
+    )
+    {
+        string version = GetPackageVersion(
+            SingleRegularPackage(packageDirectory, packageId),
+            packageId
+        );
+        var element = new XElement(
+            "PackageReference",
+            new XAttribute("Include", packageId),
+            new XAttribute("Version", version)
+        );
+        if (privateAssets)
+        {
+            element.Add(new XAttribute("PrivateAssets", "all"));
+        }
+
+        return element;
+    }
+
+    private static string GetPackageVersion(string packagePath, string packageId)
+    {
+        string fileName = Path.GetFileNameWithoutExtension(packagePath);
+        string version = fileName[(packageId.Length + 1)..];
+        Assert.True(Version.TryParse(version, out _), "Package version: " + version);
+        return version;
+    }
+
+    private static void AssertCommandSucceeded(CommandResult result)
+    {
+        Assert.True(
+            result.ExitCode == 0,
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"dotnet command failed with exit code {result.ExitCode}:{Environment.NewLine}{result.Output}"
+            )
+        );
+    }
+
+    private const string ConsumerProgram = """
+        using DotRocks.Data;
+        using DotRocks.Data.Loading;
+        using Microsoft.EntityFrameworkCore;
+
+        _ = new DotRocksStreamLoadClient(
+            "Server=127.0.0.1;User ID=root;Password=secret;Stream Load Endpoint=http://127.0.0.1:8030"
+        );
+
+        internal sealed class ConsumerContext : DbContext
+        {
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+            {
+                modelBuilder.Entity<Widget>().HasKey(widget => widget.Id);
+                modelBuilder.Entity<Widget>().Property(widget => widget.Payload).HasColumnType("varbinary");
+            }
+        }
+
+        internal sealed class Widget
+        {
+            public int Id { get; set; }
+
+            public byte[] Payload { get; set; } = [];
+        }
+
+        internal static class TransactionConsumer
+        {
+            public static void Complete(DotRocksTransaction transaction)
+            {
+                transaction.Commit();
+                transaction.Rollback();
+            }
+        }
+        """;
+
+    private static async Task<CommandResult> RunDotnetAsync(
+        string arguments,
+        string? workingDirectory = null
+    )
     {
         using var process = new Process();
         process.StartInfo = new ProcessStartInfo("dotnet", arguments)
@@ -271,13 +480,13 @@ public sealed class PackageContentTests
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
-            WorkingDirectory = FindRepositoryRoot(),
+            WorkingDirectory = workingDirectory ?? FindRepositoryRoot(),
         };
         process.StartInfo.Environment["DOTNET_CLI_DO_NOT_USE_MSBUILD_SERVER"] = "1";
         process.Start();
         string output = await process.StandardOutput.ReadToEndAsync().ConfigureAwait(true);
         string error = await process.StandardError.ReadToEndAsync().ConfigureAwait(true);
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(120));
         using CancellationTokenSource linkedCancellation =
             CancellationTokenSource.CreateLinkedTokenSource(
                 timeout.Token,

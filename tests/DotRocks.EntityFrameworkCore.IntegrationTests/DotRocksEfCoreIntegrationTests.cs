@@ -423,6 +423,201 @@ public sealed class DotRocksEfCoreIntegrationTests
     }
 
     [Fact]
+    public async Task SaveChangesAsync_MultipleEntitiesUseSeparateParameterizedCommands()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        var interceptor = new CapturingCommandInterceptor();
+        await using var context = CreateLiveContext(interceptor);
+        await EnsureWriteWidgetTableAsync(context).ConfigureAwait(true);
+
+        try
+        {
+            var first = new EfWriteWidget
+            {
+                Id = 20,
+                Name = "first",
+                Active = true,
+                Amount = 20.01m,
+            };
+            var second = new EfWriteWidget
+            {
+                Id = 21,
+                Name = "second",
+                Active = false,
+                Amount = 21.02m,
+            };
+            var third = new EfWriteWidget
+            {
+                Id = 22,
+                Name = "third",
+                Active = true,
+                Amount = 22.03m,
+            };
+            context.WriteWidgets.AddRange(first, second, third);
+
+            interceptor.Clear();
+            Assert.Equal(
+                3,
+                await context
+                    .SaveChangesAsync(TestContext.Current.CancellationToken)
+                    .ConfigureAwait(true)
+            );
+            CapturedCommand[] insertCommands = interceptor.NonQueryCommands("INSERT");
+            Assert.Equal(3, insertCommands.Length);
+            Assert.All(insertCommands, AssertParameterizedDml);
+
+            first.Name = "first-updated";
+            second.Amount = 210.20m;
+            interceptor.Clear();
+            Assert.Equal(
+                2,
+                await context
+                    .SaveChangesAsync(TestContext.Current.CancellationToken)
+                    .ConfigureAwait(true)
+            );
+            CapturedCommand[] updateCommands = interceptor.NonQueryCommands("UPDATE");
+            Assert.Equal(2, updateCommands.Length);
+            Assert.All(updateCommands, AssertPrimaryKeyParameterizedDml);
+
+            context.WriteWidgets.RemoveRange(first, third);
+            interceptor.Clear();
+            Assert.Equal(
+                2,
+                await context
+                    .SaveChangesAsync(TestContext.Current.CancellationToken)
+                    .ConfigureAwait(true)
+            );
+            CapturedCommand[] deleteCommands = interceptor.NonQueryCommands("DELETE");
+            Assert.Equal(2, deleteCommands.Length);
+            Assert.All(deleteCommands, AssertPrimaryKeyParameterizedDml);
+
+            List<int> remainingIds = await context
+                .WriteWidgets.AsNoTracking()
+                .OrderBy(widget => widget.Id)
+                .Select(widget => widget.Id)
+                .ToListAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+            Assert.Equal([21], remainingIds);
+        }
+        finally
+        {
+            await DropWriteWidgetTableAsync(context).ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
+    public async Task SaveChangesAsync_InsideEfTransactionCommitPersistsRows()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        await using var context = CreateLiveContext();
+        await EnsureWriteWidgetTableAsync(context).ConfigureAwait(true);
+
+        try
+        {
+            using Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction transaction =
+                await context
+                    .Database.BeginTransactionAsync(TestContext.Current.CancellationToken)
+                    .ConfigureAwait(true);
+            context.WriteWidgets.Add(
+                new EfWriteWidget
+                {
+                    Id = 30,
+                    Name = "committed",
+                    Active = true,
+                    Amount = 30.30m,
+                }
+            );
+
+            Assert.Equal(
+                1,
+                await context
+                    .SaveChangesAsync(TestContext.Current.CancellationToken)
+                    .ConfigureAwait(true)
+            );
+            await transaction
+                .CommitAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+
+            Assert.Equal(
+                1,
+                await context
+                    .WriteWidgets.AsNoTracking()
+                    .CountAsync(widget => widget.Id == 30, TestContext.Current.CancellationToken)
+                    .ConfigureAwait(true)
+            );
+        }
+        finally
+        {
+            await DropWriteWidgetTableAsync(context).ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
+    public async Task SaveChangesAsync_InsideEfTransactionRollbackHidesRowsWhenSupported()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        await using var context = CreateLiveContext();
+        await EnsureWriteWidgetTableAsync(context).ConfigureAwait(true);
+
+        try
+        {
+            using Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction transaction =
+                await context
+                    .Database.BeginTransactionAsync(TestContext.Current.CancellationToken)
+                    .ConfigureAwait(true);
+            context.WriteWidgets.Add(
+                new EfWriteWidget
+                {
+                    Id = 31,
+                    Name = "rolled-back",
+                    Active = true,
+                    Amount = 31.31m,
+                }
+            );
+
+            Assert.Equal(
+                1,
+                await context
+                    .SaveChangesAsync(TestContext.Current.CancellationToken)
+                    .ConfigureAwait(true)
+            );
+            await transaction
+                .RollbackAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+            context.ChangeTracker.Clear();
+
+            int rowCount = await context
+                .WriteWidgets.AsNoTracking()
+                .CountAsync(widget => widget.Id == 31, TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+            if (rowCount != 0)
+            {
+                Assert.Skip(
+                    "The pinned StarRocks integration image accepted ROLLBACK WORK but made the inserted EF row visible."
+                );
+            }
+
+            Assert.Equal(0, rowCount);
+        }
+        finally
+        {
+            await DropWriteWidgetTableAsync(context).ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
     [SuppressMessage(
         "Security",
         "EF1003:Method inserts concatenated strings directly into the SQL",
@@ -1316,6 +1511,22 @@ public sealed class DotRocksEfCoreIntegrationTests
         Assert.True(parameter.Value is null or DBNull);
     }
 
+    private static void AssertParameterizedDml(CapturedCommand command)
+    {
+        Assert.Contains("@p", command.CommandText, StringComparison.Ordinal);
+        Assert.DoesNotContain("first", command.CommandText, StringComparison.Ordinal);
+        Assert.DoesNotContain("second", command.CommandText, StringComparison.Ordinal);
+        Assert.DoesNotContain("third", command.CommandText, StringComparison.Ordinal);
+        Assert.NotEmpty(command.Parameters);
+    }
+
+    private static void AssertPrimaryKeyParameterizedDml(CapturedCommand command)
+    {
+        AssertParameterizedDml(command);
+        Assert.Contains(" WHERE ", command.CommandText, StringComparison.Ordinal);
+        Assert.Contains("`id` = @p", command.CommandText, StringComparison.Ordinal);
+    }
+
     private static bool IsInteresting(string value) =>
         string.Equals(value, "two", StringComparison.Ordinal);
 
@@ -1642,6 +1853,13 @@ public sealed class DotRocksEfCoreIntegrationTests
                 _commands,
                 command => command.CommandText.StartsWith(verb, StringComparison.OrdinalIgnoreCase)
             );
+
+        public CapturedCommand[] NonQueryCommands(string verb) =>
+            _commands
+                .Where(command =>
+                    command.CommandText.StartsWith(verb, StringComparison.OrdinalIgnoreCase)
+                )
+                .ToArray();
 
         public override InterceptionResult<DbDataReader> ReaderExecuting(
             DbCommand command,
