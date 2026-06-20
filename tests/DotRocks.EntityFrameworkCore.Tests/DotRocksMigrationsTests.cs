@@ -1,10 +1,14 @@
+using DotRocks.EntityFrameworkCore.Design;
 using DotRocks.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Design;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Migrations.Design;
 using Microsoft.EntityFrameworkCore.Migrations.Internal;
 using Microsoft.EntityFrameworkCore.Migrations.Operations;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace DotRocks.EntityFrameworkCore.Tests;
@@ -140,6 +144,64 @@ public sealed class DotRocksMigrationsTests
     }
 
     [Fact]
+    public void CSharpMigrationGenerator_PreservesTableShapeAnnotationsInGeneratedCode()
+    {
+        using var context = CreateTableShapeContext();
+        var differ = context.GetService<IMigrationsModelDiffer>();
+        IRelationalModel model = context.GetService<IDesignTimeModel>().Model.GetRelationalModel();
+        CreateTableOperation operation = Assert.Single(
+            differ.GetDifferences(null, model).OfType<CreateTableOperation>()
+        );
+        IMigrationsCodeGenerator generator = SelectCSharpMigrationsGenerator();
+
+        string migration = generator.GenerateMigration(
+            "DotRocks.EntityFrameworkCore.Tests.Migrations",
+            "CreateTableShape",
+            [operation],
+            []
+        );
+        string snapshot = generator.GenerateSnapshot(
+            "DotRocks.EntityFrameworkCore.Tests.Migrations",
+            typeof(TableShapeContext),
+            "TableShapeContextModelSnapshot",
+            context.GetService<IDesignTimeModel>().Model
+        );
+
+        Assert.Contains(
+            ".Annotation(\"DotRocks:KeyModel\", DotRocksTableKeyModel.PrimaryKey)",
+            migration,
+            StringComparison.Ordinal
+        );
+        Assert.Contains(
+            ".Annotation(\"DotRocks:KeyColumns\", new[] { \"id\" })",
+            migration,
+            StringComparison.Ordinal
+        );
+        Assert.Contains(
+            ".Annotation(\"DotRocks:DistributionColumns\", new[] { \"id\" })",
+            migration,
+            StringComparison.Ordinal
+        );
+        Assert.Contains(
+            ".Annotation(\"DotRocks:DistributionBuckets\", 4)",
+            migration,
+            StringComparison.Ordinal
+        );
+        Assert.Contains(
+            ".Annotation(\"DotRocks:ReplicationNum\", 2)",
+            migration,
+            StringComparison.Ordinal
+        );
+        Assert.Contains(".HasStarRocksPrimaryKey(\"id\")", snapshot, StringComparison.Ordinal);
+        Assert.Contains(
+            ".HasStarRocksHashDistribution(4, \"id\")",
+            snapshot,
+            StringComparison.Ordinal
+        );
+        Assert.Contains(".HasStarRocksReplicationNum(2)", snapshot, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void EntityTypeBuilderExtensions_RejectInvalidTableShapeValues()
     {
         var builder = new ModelBuilder();
@@ -261,6 +323,10 @@ public sealed class DotRocksMigrationsTests
             { CreateAddPrimaryKeyOperation(), "ADD PRIMARY KEY" },
             { CreateDropPrimaryKeyOperation(), "DROP PRIMARY KEY" },
             { CreateForeignKeyOperation(), "ADD FOREIGN KEY" },
+            {
+                new SqlOperation { Sql = "TRUNCATE TABLE `widgets`" },
+                "TRUNCATE TABLE"
+            },
         };
 
     public static TheoryData<string, object, string> UnsupportedTableShapeAnnotations() =>
@@ -422,6 +488,22 @@ public sealed class DotRocksMigrationsTests
         var optionsBuilder = new DbContextOptionsBuilder<UnitContext>();
         optionsBuilder.UseStarRocks("Server=127.0.0.1;Port=9030;User ID=root");
         return new UnitContext(optionsBuilder.Options);
+    }
+
+    private static TableShapeContext CreateTableShapeContext()
+    {
+        var optionsBuilder = new DbContextOptionsBuilder<TableShapeContext>();
+        optionsBuilder.UseStarRocks("Server=127.0.0.1;Port=9030;User ID=root");
+        return new TableShapeContext(optionsBuilder.Options);
+    }
+
+    private static IMigrationsCodeGenerator SelectCSharpMigrationsGenerator()
+    {
+        var services = new ServiceCollection();
+        services.AddEntityFrameworkDesignTimeServices();
+        new DotRocksDesignTimeServices().ConfigureDesignTimeServices(services);
+        using ServiceProvider provider = services.BuildServiceProvider();
+        return provider.GetRequiredService<IMigrationsCodeGeneratorSelector>().Select("C#");
     }
 
     private sealed class UnitContext(DbContextOptions<UnitContext> options) : DbContext(options)

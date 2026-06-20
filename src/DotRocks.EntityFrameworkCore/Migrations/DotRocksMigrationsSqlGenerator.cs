@@ -125,6 +125,24 @@ internal sealed class DotRocksMigrationsSqlGenerator(
         }
     }
 
+    protected override void Generate(
+        SqlOperation operation,
+        IModel? model,
+        MigrationCommandListBuilder builder
+    )
+    {
+        if (
+            operation
+                .Sql.TrimStart()
+                .StartsWith("TRUNCATE TABLE", StringComparison.OrdinalIgnoreCase)
+        )
+        {
+            throw CreateUnsupportedMigrationOperationException("TRUNCATE TABLE");
+        }
+
+        base.Generate(operation, model, builder);
+    }
+
     protected override void ColumnDefinition(
         string? schema,
         string table,

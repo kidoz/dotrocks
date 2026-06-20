@@ -6,6 +6,8 @@ namespace DotRocks.EntityFrameworkCore.Tests;
 
 public sealed class DotRocksModelValidationTests
 {
+    private static readonly string[] IdStoreColumn = ["id"];
+
     [Fact]
     public void GeneratedKey_ThrowsNotSupportedException()
     {
@@ -68,6 +70,41 @@ public sealed class DotRocksModelValidationTests
         NotSupportedException exception = Assert.Throws<NotSupportedException>(() => context.Model);
 
         Assert.Contains("single-column primary key", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TableShapeColumnThatDoesNotMapToStoreColumn_ThrowsNotSupportedException()
+    {
+        using var context = CreateContext<TableShapeMissingStoreColumnContext>();
+
+        NotSupportedException exception = Assert.Throws<NotSupportedException>(() => context.Model);
+
+        Assert.Contains(
+            "unknown store column",
+            exception.Message,
+            StringComparison.OrdinalIgnoreCase
+        );
+    }
+
+    [Fact]
+    public void UnsupportedTableShapeKeyModel_ThrowsNotSupportedException()
+    {
+        using var context = CreateContext<UnsupportedTableShapeKeyModelContext>();
+
+        NotSupportedException exception = Assert.Throws<NotSupportedException>(() => context.Model);
+
+        Assert.Contains("table key model", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void SharedTableWithConflictingTableShapeAnnotations_ThrowsNotSupportedException()
+    {
+        using var context = CreateContext<ConflictingSharedTableShapeContext>();
+
+        NotSupportedException exception = Assert.Throws<NotSupportedException>(() => context.Model);
+
+        Assert.Contains("conflicting", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("DotRocks:KeyModel", exception.Message, StringComparison.Ordinal);
     }
 
     private static TContext CreateContext<TContext>()
@@ -210,6 +247,84 @@ public sealed class DotRocksModelValidationTests
     [SuppressMessage(
         "Performance",
         "CA1812:Avoid uninstantiated internal classes",
+        Justification = "The test methods instantiate this nested context through reflection."
+    )]
+    private sealed class TableShapeMissingStoreColumnContext(
+        DbContextOptions<TableShapeMissingStoreColumnContext> options
+    ) : DbContext(options)
+    {
+        public DbSet<TableShapeEntity> Entities => Set<TableShapeEntity>();
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<TableShapeEntity>(entity =>
+            {
+                entity.ToTable("table_shape_entities", "unit_db");
+                entity.HasKey(value => value.Id);
+                entity.Property(value => value.Id).ValueGeneratedNever().HasColumnName("id");
+                entity.HasStarRocksPrimaryKey("Id");
+            });
+        }
+    }
+
+    [SuppressMessage(
+        "Performance",
+        "CA1812:Avoid uninstantiated internal classes",
+        Justification = "The test methods instantiate this nested context through reflection."
+    )]
+    private sealed class UnsupportedTableShapeKeyModelContext(
+        DbContextOptions<UnsupportedTableShapeKeyModelContext> options
+    ) : DbContext(options)
+    {
+        public DbSet<TableShapeEntity> Entities => Set<TableShapeEntity>();
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<TableShapeEntity>(entity =>
+            {
+                entity.ToTable("unsupported_table_shape_entities", "unit_db");
+                entity.HasKey(value => value.Id);
+                entity.Property(value => value.Id).ValueGeneratedNever().HasColumnName("id");
+                entity.Metadata.SetAnnotation("DotRocks:KeyModel", "AGGREGATE KEY");
+                entity.Metadata.SetAnnotation("DotRocks:KeyColumns", IdStoreColumn);
+            });
+        }
+    }
+
+    [SuppressMessage(
+        "Performance",
+        "CA1812:Avoid uninstantiated internal classes",
+        Justification = "The test methods instantiate this nested context through reflection."
+    )]
+    private sealed class ConflictingSharedTableShapeContext(
+        DbContextOptions<ConflictingSharedTableShapeContext> options
+    ) : DbContext(options)
+    {
+        public DbSet<SharedTableBase> Entities => Set<SharedTableBase>();
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<SharedTableBase>(entity =>
+            {
+                entity.ToTable("shared_table_shape_entities", "unit_db");
+                entity.HasKey(value => value.Id);
+                entity.Property(value => value.Id).ValueGeneratedNever().HasColumnName("id");
+                entity.HasDiscriminator<string>("kind");
+                entity.HasStarRocksPrimaryKey("id");
+            });
+
+            modelBuilder.Entity<SharedTableDerived>(entity =>
+            {
+                entity.HasBaseType<SharedTableBase>();
+                entity.Metadata.SetAnnotation("DotRocks:KeyModel", "DUPLICATE KEY");
+                entity.Metadata.SetAnnotation("DotRocks:KeyColumns", IdStoreColumn);
+            });
+        }
+    }
+
+    [SuppressMessage(
+        "Performance",
+        "CA1812:Avoid uninstantiated internal classes",
         Justification = "EF Core uses this entity type through DbSet metadata."
     )]
     private sealed class GeneratedKeyEntity
@@ -297,4 +412,31 @@ public sealed class DotRocksModelValidationTests
 
         public string Name { get; set; } = string.Empty;
     }
+
+    [SuppressMessage(
+        "Performance",
+        "CA1812:Avoid uninstantiated internal classes",
+        Justification = "EF Core uses this entity type through DbSet metadata."
+    )]
+    private sealed class TableShapeEntity
+    {
+        public int Id { get; set; }
+    }
+
+    [SuppressMessage(
+        "Performance",
+        "CA1812:Avoid uninstantiated internal classes",
+        Justification = "EF Core uses this entity type through DbSet metadata."
+    )]
+    private class SharedTableBase
+    {
+        public int Id { get; set; }
+    }
+
+    [SuppressMessage(
+        "Performance",
+        "CA1812:Avoid uninstantiated internal classes",
+        Justification = "EF Core uses this entity type through DbSet metadata."
+    )]
+    private sealed class SharedTableDerived : SharedTableBase;
 }

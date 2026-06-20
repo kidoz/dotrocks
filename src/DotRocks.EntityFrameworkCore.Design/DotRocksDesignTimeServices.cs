@@ -14,5 +14,8 @@ public sealed class DotRocksDesignTimeServices : IDesignTimeServices
     {
         ArgumentNullException.ThrowIfNull(serviceCollection);
         serviceCollection.AddEntityFrameworkDotRocks();
+        var builder = new EntityFrameworkRelationalDesignServicesBuilder(serviceCollection);
+        builder.TryAdd<IAnnotationCodeGenerator, DotRocksAnnotationCodeGenerator>();
+        builder.TryAddCoreServices();
     }
 }

@@ -2,6 +2,7 @@ using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using DotRocks.Data;
+using DotRocks.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -18,6 +19,9 @@ public sealed class DotRocksEfCoreIntegrationTests
     private const string WriteWidgetTableName = "ef_write_widgets";
     private const string MigrationWidgetTableName = "ef_migration_widgets";
     private const string MigrationId = "202606190001_CreateEfMigrationWidget";
+    private const string TableShapeMigrationWidgetTableName = "ef_table_shape_migration_widgets";
+    private const string TableShapeMigrationId = "202606200001_CreateEfTableShapeMigrationWidget";
+    private static readonly string[] IdStoreColumn = ["id"];
 
     [Fact]
     public void UseStarRocks_ConfiguresProviderName()
@@ -696,6 +700,82 @@ public sealed class DotRocksEfCoreIntegrationTests
     }
 
     [Fact]
+    [SuppressMessage(
+        "Security",
+        "EF1003:Method inserts concatenated strings directly into the SQL",
+        Justification = "The migration cleanup, verification, and SHOW CREATE SQL is assembled only from fixed sanitized identifiers and parameter placeholders."
+    )]
+    public async Task MigrateAsync_CreatesConfiguredTableShape()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        await using DotRocksTestContext setupContext = CreateLiveContext();
+        await EnsureLinqDatabaseAsync(setupContext).ConfigureAwait(true);
+        await setupContext
+            .Database.ExecuteSqlRawAsync(
+                "DROP TABLE IF EXISTS "
+                    + DelimitIdentifier(LinqDatabaseName)
+                    + "."
+                    + DelimitIdentifier(TableShapeMigrationWidgetTableName),
+                TestContext.Current.CancellationToken
+            )
+            .ConfigureAwait(true);
+        await setupContext
+            .Database.ExecuteSqlRawAsync(
+                "DROP TABLE IF EXISTS "
+                    + DelimitIdentifier(LinqDatabaseName)
+                    + "."
+                    + DelimitIdentifier("__EFMigrationsHistory"),
+                TestContext.Current.CancellationToken
+            )
+            .ConfigureAwait(true);
+
+        using var context = new TableShapeMigrationTestContext(
+            CreateTableShapeMigrationContextOptions(BuildDatabaseConnectionString(LinqDatabaseName))
+        );
+
+        await context
+            .Database.MigrateAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+        Assert.Equal(
+            1,
+            await context
+                .Database.ExecuteSqlRawAsync(
+                    "INSERT INTO "
+                        + DelimitIdentifier(TableShapeMigrationWidgetTableName)
+                        + " ("
+                        + DelimitIdentifier("id")
+                        + ", "
+                        + DelimitIdentifier("name")
+                        + ") VALUES ({0}, {1})",
+                    [1, "configured"],
+                    TestContext.Current.CancellationToken
+                )
+                .ConfigureAwait(true)
+        );
+
+        EfMigrationWidget row = await context
+            .MigrationWidgets.AsNoTracking()
+            .SingleAsync(widget => widget.Id == 1, TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+        string createTableSql = await ReadShowCreateTableAsync(
+                context,
+                TableShapeMigrationWidgetTableName
+            )
+            .ConfigureAwait(true);
+
+        Assert.Equal("configured", row.Name);
+        Assert.Contains("PRIMARY KEY", createTableSql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("`id`", createTableSql, StringComparison.Ordinal);
+        Assert.Contains("BUCKETS 3", createTableSql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("replication_num", createTableSql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("1", createTableSql, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task UnsupportedLinqTranslation_ThrowsInvalidOperationException()
     {
         await using var context = CreateContext("Server=127.0.0.1;Port=9030;User ID=root");
@@ -1345,6 +1425,15 @@ public sealed class DotRocksEfCoreIntegrationTests
         return optionsBuilder.Options;
     }
 
+    private static DbContextOptions<TableShapeMigrationTestContext> CreateTableShapeMigrationContextOptions(
+        string connectionString
+    )
+    {
+        var optionsBuilder = new DbContextOptionsBuilder<TableShapeMigrationTestContext>();
+        optionsBuilder.UseStarRocks(connectionString);
+        return optionsBuilder.Options;
+    }
+
     private static async Task EnsureLinqDatabaseAsync(DotRocksTestContext context)
     {
         string sql = "CREATE DATABASE IF NOT EXISTS " + DelimitIdentifier(LinqDatabaseName);
@@ -1483,6 +1572,30 @@ public sealed class DotRocksEfCoreIntegrationTests
 
     private static string DelimitIdentifier(string identifier) =>
         "`" + identifier.Replace("`", "``", StringComparison.Ordinal) + "`";
+
+    [SuppressMessage(
+        "Security",
+        "CA2100:Review SQL queries for security vulnerabilities",
+        Justification = "The SHOW CREATE command is assembled only from a fixed sanitized table identifier."
+    )]
+    private static async Task<string> ReadShowCreateTableAsync(DbContext context, string tableName)
+    {
+        DbConnection connection = context.Database.GetDbConnection();
+        if (connection.State != System.Data.ConnectionState.Open)
+        {
+            await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+        }
+
+        using DbCommand command = connection.CreateCommand();
+        command.CommandText = "SHOW CREATE TABLE " + DelimitIdentifier(tableName);
+        using DbDataReader reader = await command
+            .ExecuteReaderAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+        Assert.True(
+            await reader.ReadAsync(TestContext.Current.CancellationToken).ConfigureAwait(true)
+        );
+        return reader.GetString(1);
+    }
 
     private static string StripParameterPreamble(string sql)
     {
@@ -1676,6 +1789,32 @@ public sealed class DotRocksEfCoreIntegrationTests
         }
     }
 
+    [SuppressMessage(
+        "Performance",
+        "CA1812:Avoid uninstantiated internal classes",
+        Justification = "The test methods instantiate this nested context through its primary constructor."
+    )]
+    private sealed class TableShapeMigrationTestContext(
+        DbContextOptions<TableShapeMigrationTestContext> options
+    ) : DbContext(options)
+    {
+        public DbSet<EfMigrationWidget> MigrationWidgets => Set<EfMigrationWidget>();
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<EfMigrationWidget>(entity =>
+            {
+                entity.ToTable(TableShapeMigrationWidgetTableName, LinqDatabaseName);
+                entity.HasKey(widget => widget.Id);
+                entity.Property(widget => widget.Id).ValueGeneratedNever().HasColumnName("id");
+                entity.Property(widget => widget.Name).HasColumnName("name").HasMaxLength(64);
+                entity.HasStarRocksPrimaryKey("id");
+                entity.HasStarRocksHashDistribution(3, "id");
+                entity.HasStarRocksReplicationNum(1);
+            });
+        }
+    }
+
     [DbContext(typeof(MigrationTestContext))]
     [Migration(MigrationId)]
     [SuppressMessage(
@@ -1705,6 +1844,51 @@ public sealed class DotRocksEfCoreIntegrationTests
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(name: MigrationWidgetTableName, schema: LinqDatabaseName);
+        }
+    }
+
+    [DbContext(typeof(TableShapeMigrationTestContext))]
+    [Migration(TableShapeMigrationId)]
+    [SuppressMessage(
+        "Performance",
+        "CA1812:Avoid uninstantiated internal classes",
+        Justification = "EF Core discovers this migration through assembly metadata."
+    )]
+    private sealed class CreateEfTableShapeMigrationWidget : Migration
+    {
+        protected override void Up(MigrationBuilder migrationBuilder)
+        {
+            migrationBuilder
+                .CreateTable(
+                    name: TableShapeMigrationWidgetTableName,
+                    schema: LinqDatabaseName,
+                    columns: table => new
+                    {
+                        Id = table.Column<int>(name: "id", nullable: false),
+                        Name = table.Column<string>(
+                            name: "name",
+                            type: "varchar(64)",
+                            nullable: false
+                        ),
+                    },
+                    constraints: table =>
+                    {
+                        table.PrimaryKey("PK_ef_table_shape_migration_widgets", row => row.Id);
+                    }
+                )
+                .Annotation("DotRocks:KeyModel", DotRocksTableKeyModel.PrimaryKey)
+                .Annotation("DotRocks:KeyColumns", IdStoreColumn)
+                .Annotation("DotRocks:DistributionColumns", IdStoreColumn)
+                .Annotation("DotRocks:DistributionBuckets", 3)
+                .Annotation("DotRocks:ReplicationNum", 1);
+        }
+
+        protected override void Down(MigrationBuilder migrationBuilder)
+        {
+            migrationBuilder.DropTable(
+                name: TableShapeMigrationWidgetTableName,
+                schema: LinqDatabaseName
+            );
         }
     }
 
