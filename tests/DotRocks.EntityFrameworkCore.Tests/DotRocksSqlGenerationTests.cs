@@ -30,6 +30,20 @@ public sealed class DotRocksSqlGenerationTests
     }
 
     [Fact]
+    public void TransactionFactory_IsDotRocksFactoryThatDisablesSavepoints()
+    {
+        using var context = CreateContext();
+        var factory = context.GetService<IRelationalTransactionFactory>();
+
+        // StarRocks has no SAVEPOINT, so the provider must supply its own transaction factory.
+        Assert.Equal(
+            "DotRocksRelationalTransactionFactory",
+            factory.GetType().Name,
+            StringComparer.Ordinal
+        );
+    }
+
+    [Fact]
     public void ToQueryString_FormatsSchemaAndTableWithBackticks()
     {
         using var context = CreateContext();

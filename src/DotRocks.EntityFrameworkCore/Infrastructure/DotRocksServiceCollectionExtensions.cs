@@ -38,6 +38,7 @@ public static class DotRocksServiceCollectionExtensions
         builder.TryAdd<LoggingDefinitions, DotRocksLoggingDefinitions>();
         builder.TryAdd<IDatabase, DotRocksDatabase>();
         builder.TryAdd<IRelationalConnection, DotRocksRelationalConnection>();
+        builder.TryAdd<IRelationalTransactionFactory, DotRocksRelationalTransactionFactory>();
         builder.TryAdd<IDatabaseCreator, DotRocksDatabaseCreator>();
         builder.TryAdd<IRelationalDatabaseCreator, DotRocksDatabaseCreator>();
         builder.TryAdd<ISqlGenerationHelper, DotRocksSqlGenerationHelper>();
