@@ -5,6 +5,9 @@
     <Project Path="src/DotRocks.EntityFrameworkCore/DotRocks.EntityFrameworkCore.csproj" />
     <Project Path="src/DotRocks.EntityFrameworkCore.Design/DotRocks.EntityFrameworkCore.Design.csproj" />
   </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/DotRocks.Samples.EntityFrameworkCore/DotRocks.Samples.EntityFrameworkCore.csproj" />
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/DotRocks.Protocol.Tests/DotRocks.Protocol.Tests.csproj" />
     <Project Path="tests/DotRocks.Analyzers.Tests/DotRocks.Analyzers.Tests.csproj" />

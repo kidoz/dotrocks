@@ -129,6 +129,11 @@ Unsupported EF Core behavior is explicit:
 - binary/varbinary EF mapping until byte-array query translation and materialization are
   broader than the verified ADO.NET reader path.
 
+A compilable EF Core sample lives at
+[`samples/DotRocks.Samples.EntityFrameworkCore`](samples/DotRocks.Samples.EntityFrameworkCore).
+It demonstrates `UseStarRocks`, `ValueGeneratedNever()`, `SaveChangesAsync` insert/update/delete,
+and a minimal hand-authored migration.
+
 EF Core type mapping:
 
 | StarRocks type | EF CLR type |
