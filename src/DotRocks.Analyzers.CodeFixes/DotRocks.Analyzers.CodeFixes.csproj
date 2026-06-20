@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <IsPackable>true</IsPackable>
+    <PackageId>DotRocks.Analyzers.CodeFixes</PackageId>
+    <Title>DotRocks.Analyzers.CodeFixes</Title>
+    <Description>Code fixes for DotRocks Roslyn analyzers.</Description>
+    <PackageTags>starrocks;dotrocks;roslyn;analyzers;code-fixes</PackageTags>
+    <IsRoslynComponent>true</IsRoslynComponent>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+    <IncludeSymbols>false</IncludeSymbols>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None
+      Include="$(MSBuildThisFileDirectory)../../README.md"
+      Pack="true"
+      PackagePath="\"
+      Visible="false"
+    />
+    <None
+      Include="$(OutputPath)$(AssemblyName).dll"
+      Pack="true"
+      PackagePath="analyzers/dotnet/cs"
+      Visible="false"
+    />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" PrivateAssets="all" />
+    <ProjectReference
+      Include="../DotRocks.Analyzers/DotRocks.Analyzers.csproj"
+      PrivateAssets="all"
+    />
+  </ItemGroup>
+</Project>

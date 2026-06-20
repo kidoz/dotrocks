@@ -4,10 +4,16 @@ using System.Globalization;
 using System.IO.Compression;
 using System.Reflection;
 using System.Xml.Linq;
-using DotRocks.Analyzers;
+using DotRocks.Analyzers.CodeFixes;
+using DotRocks.Analyzers.Driver;
+using DotRocks.Analyzers.EntityFrameworkCore;
+using DotRocks.Analyzers.Infrastructure;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CodeActions;
+using Microsoft.CodeAnalysis.CodeFixes;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Diagnostics;
+using Microsoft.CodeAnalysis.Text;
 using Xunit;
 
 namespace DotRocks.Analyzers.Tests;
@@ -37,7 +43,36 @@ public sealed class DotRocksUsageAnalyzerTests
         Assert.Contains(
             diagnostics,
             diagnostic =>
-                diagnostic.Id == DotRocksUsageAnalyzer.InsecureStreamLoadEndpointDiagnosticId
+                diagnostic.Id
+                == DotRocksDiagnosticDescriptors.InsecureStreamLoadEndpointDiagnosticId
+        );
+    }
+
+    [Fact]
+    public async Task InsecureStreamLoadEndpointLocalVar_ReportsDiagnostic()
+    {
+        Diagnostic[] diagnostics = await AnalyzeAsync(
+                DotRocksStubs
+                    + """
+
+                    internal static class Sample
+                    {
+                        public static void Create()
+                        {
+                            var connectionString =
+                                "Server=127.0.0.1;User ID=root;Password=secret;Stream Load Endpoint=http://127.0.0.1:8030";
+                            _ = new DotRocks.Data.Loading.DotRocksStreamLoadClient(connectionString);
+                        }
+                    }
+                    """
+            )
+            .ConfigureAwait(true);
+
+        Assert.Contains(
+            diagnostics,
+            diagnostic =>
+                diagnostic.Id
+                == DotRocksDiagnosticDescriptors.InsecureStreamLoadEndpointDiagnosticId
         );
     }
 
@@ -66,7 +101,39 @@ public sealed class DotRocksUsageAnalyzerTests
         Assert.Contains(
             diagnostics,
             diagnostic =>
-                diagnostic.Id == DotRocksUsageAnalyzer.InsecureStreamLoadEndpointDiagnosticId
+                diagnostic.Id
+                == DotRocksDiagnosticDescriptors.InsecureStreamLoadEndpointDiagnosticId
+        );
+    }
+
+    [Fact]
+    public async Task InsecureConnectionStringBuilderConnectionStringFlow_ReportsDiagnostic()
+    {
+        Diagnostic[] diagnostics = await AnalyzeAsync(
+                DotRocksStubs
+                    + """
+
+                    internal static class Sample
+                    {
+                        public static void Create()
+                        {
+                            var builder = new DotRocks.Data.DotRocksConnectionStringBuilder
+                            {
+                                Password = "secret",
+                                StreamLoadEndpoint = "http://127.0.0.1:8030",
+                            };
+                            _ = new DotRocks.Data.Loading.DotRocksStreamLoadClient(builder.ConnectionString);
+                        }
+                    }
+                    """
+            )
+            .ConfigureAwait(true);
+
+        Assert.Contains(
+            diagnostics,
+            diagnostic =>
+                diagnostic.Id
+                == DotRocksDiagnosticDescriptors.InsecureStreamLoadEndpointDiagnosticId
         );
     }
 
@@ -94,7 +161,8 @@ public sealed class DotRocksUsageAnalyzerTests
         Assert.DoesNotContain(
             diagnostics,
             diagnostic =>
-                diagnostic.Id == DotRocksUsageAnalyzer.InsecureStreamLoadEndpointDiagnosticId
+                diagnostic.Id
+                == DotRocksDiagnosticDescriptors.InsecureStreamLoadEndpointDiagnosticId
         );
     }
 
@@ -115,7 +183,8 @@ public sealed class DotRocksUsageAnalyzerTests
         Assert.DoesNotContain(
             diagnostics,
             diagnostic =>
-                diagnostic.Id == DotRocksUsageAnalyzer.InsecureStreamLoadEndpointDiagnosticId
+                diagnostic.Id
+                == DotRocksDiagnosticDescriptors.InsecureStreamLoadEndpointDiagnosticId
         );
     }
 
@@ -141,7 +210,8 @@ public sealed class DotRocksUsageAnalyzerTests
         Assert.DoesNotContain(
             diagnostics,
             diagnostic =>
-                diagnostic.Id == DotRocksUsageAnalyzer.InsecureStreamLoadEndpointDiagnosticId
+                diagnostic.Id
+                == DotRocksDiagnosticDescriptors.InsecureStreamLoadEndpointDiagnosticId
         );
     }
 
@@ -171,7 +241,8 @@ public sealed class DotRocksUsageAnalyzerTests
         Assert.Contains(
             diagnostics,
             diagnostic =>
-                diagnostic.Id == DotRocksUsageAnalyzer.MissingValueGeneratedNeverDiagnosticId
+                diagnostic.Id
+                    == DotRocksDiagnosticDescriptors.MissingValueGeneratedNeverDiagnosticId
                 && diagnostic
                     .GetMessage(CultureInfo.InvariantCulture)
                     .Contains("Id", StringComparison.Ordinal)
@@ -205,7 +276,8 @@ public sealed class DotRocksUsageAnalyzerTests
         Assert.DoesNotContain(
             diagnostics,
             diagnostic =>
-                diagnostic.Id == DotRocksUsageAnalyzer.MissingValueGeneratedNeverDiagnosticId
+                diagnostic.Id
+                == DotRocksDiagnosticDescriptors.MissingValueGeneratedNeverDiagnosticId
         );
     }
 
@@ -237,7 +309,8 @@ public sealed class DotRocksUsageAnalyzerTests
         Diagnostic diagnostic = Assert.Single(
             diagnostics,
             diagnostic =>
-                diagnostic.Id == DotRocksUsageAnalyzer.MissingValueGeneratedNeverDiagnosticId
+                diagnostic.Id
+                == DotRocksDiagnosticDescriptors.MissingValueGeneratedNeverDiagnosticId
         );
         Assert.Contains(
             "Category",
@@ -276,7 +349,7 @@ public sealed class DotRocksUsageAnalyzerTests
         Assert.Contains(
             diagnostics,
             diagnostic =>
-                diagnostic.Id == DotRocksUsageAnalyzer.UnsupportedBinaryMappingDiagnosticId
+                diagnostic.Id == DotRocksDiagnosticDescriptors.UnsupportedBinaryMappingDiagnosticId
         );
     }
 
@@ -302,7 +375,8 @@ public sealed class DotRocksUsageAnalyzerTests
         Assert.Contains(
             diagnostics,
             diagnostic =>
-                diagnostic.Id == DotRocksUsageAnalyzer.TransactionDoubleCompletionDiagnosticId
+                diagnostic.Id
+                == DotRocksDiagnosticDescriptors.TransactionDoubleCompletionDiagnosticId
         );
     }
 
@@ -332,7 +406,8 @@ public sealed class DotRocksUsageAnalyzerTests
         Assert.DoesNotContain(
             diagnostics,
             diagnostic =>
-                diagnostic.Id == DotRocksUsageAnalyzer.TransactionDoubleCompletionDiagnosticId
+                diagnostic.Id
+                == DotRocksDiagnosticDescriptors.TransactionDoubleCompletionDiagnosticId
         );
     }
 
@@ -371,22 +446,22 @@ public sealed class DotRocksUsageAnalyzerTests
 
         Assert.Equal(0, result.ExitCode);
         Assert.Contains(
-            DotRocksUsageAnalyzer.InsecureStreamLoadEndpointDiagnosticId,
+            DotRocksDiagnosticDescriptors.InsecureStreamLoadEndpointDiagnosticId,
             result.Output,
             StringComparison.Ordinal
         );
         Assert.Contains(
-            DotRocksUsageAnalyzer.MissingValueGeneratedNeverDiagnosticId,
+            DotRocksDiagnosticDescriptors.MissingValueGeneratedNeverDiagnosticId,
             result.Output,
             StringComparison.Ordinal
         );
         Assert.Contains(
-            DotRocksUsageAnalyzer.UnsupportedBinaryMappingDiagnosticId,
+            DotRocksDiagnosticDescriptors.UnsupportedBinaryMappingDiagnosticId,
             result.Output,
             StringComparison.Ordinal
         );
         Assert.Contains(
-            DotRocksUsageAnalyzer.TransactionDoubleCompletionDiagnosticId,
+            DotRocksDiagnosticDescriptors.TransactionDoubleCompletionDiagnosticId,
             result.Output,
             StringComparison.Ordinal
         );
@@ -399,6 +474,77 @@ public sealed class DotRocksUsageAnalyzerTests
 
         Assert.Equal(0, result.ExitCode);
         Assert.DoesNotContain("DTR000", result.Output, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task InsecureStreamLoadEndpointCodeFix_UsesHttps()
+    {
+        const string source = """
+            namespace DotRocks.Data.Loading
+            {
+                public sealed class DotRocksStreamLoadClient
+                {
+                    public DotRocksStreamLoadClient(string connectionString) { }
+                }
+            }
+
+            internal static class Sample
+            {
+                public static void Create()
+                {
+                    _ = new DotRocks.Data.Loading.DotRocksStreamLoadClient(
+                        "Server=127.0.0.1;User ID=root;Password=secret;Stream Load Endpoint=http://127.0.0.1:8030");
+                }
+            }
+            """;
+
+        string fixedSource = await ApplyFirstCodeFixAsync(
+                source,
+                new InsecureStreamLoadEndpointAnalyzer(),
+                new InsecureStreamLoadEndpointCodeFixProvider()
+            )
+            .ConfigureAwait(true);
+
+        Assert.Contains(
+            "Stream Load Endpoint=https://127.0.0.1:8030",
+            fixedSource,
+            StringComparison.Ordinal
+        );
+    }
+
+    [Fact]
+    public async Task EfValueGeneratedNeverCodeFix_AddsPropertyConfiguration()
+    {
+        string source =
+            EfStubs
+            + """
+
+                internal sealed class Widget
+                {
+                    public int Id { get; set; }
+                }
+
+                internal sealed class SampleContext : Microsoft.EntityFrameworkCore.DbContext
+                {
+                    protected override void OnModelCreating(Microsoft.EntityFrameworkCore.ModelBuilder modelBuilder)
+                    {
+                        modelBuilder.Entity<Widget>().HasKey(widget => widget.Id);
+                    }
+                }
+                """;
+
+        string fixedSource = await ApplyFirstCodeFixAsync(
+                source,
+                new EfValueGeneratedNeverAnalyzer(),
+                new EfValueGeneratedNeverCodeFixProvider()
+            )
+            .ConfigureAwait(true);
+
+        Assert.Contains(
+            "modelBuilder.Entity<Widget>().Property(widget => widget.Id).ValueGeneratedNever();",
+            fixedSource,
+            StringComparison.Ordinal
+        );
     }
 
     private static async Task<Diagnostic[]> AnalyzeAsync(string source)
@@ -415,14 +561,74 @@ public sealed class DotRocksUsageAnalyzerTests
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)
         );
 
-        var analyzer = new DotRocksUsageAnalyzer();
+        DiagnosticAnalyzer[] analyzers =
+        [
+            new InsecureStreamLoadEndpointAnalyzer(),
+            new EfValueGeneratedNeverAnalyzer(),
+            new UnsupportedBinaryMappingAnalyzer(),
+            new TransactionCompletionAnalyzer(),
+        ];
         CompilationWithAnalyzers compilationWithAnalyzers = compilation.WithAnalyzers(
-            ImmutableArray.Create<DiagnosticAnalyzer>(analyzer)
+            ImmutableArray.Create(analyzers)
         );
         ImmutableArray<Diagnostic> diagnostics = await compilationWithAnalyzers
             .GetAnalyzerDiagnosticsAsync()
             .ConfigureAwait(true);
         return diagnostics.OrderBy(diagnostic => diagnostic.Id, StringComparer.Ordinal).ToArray();
+    }
+
+    private static async Task<string> ApplyFirstCodeFixAsync(
+        string source,
+        DiagnosticAnalyzer analyzer,
+        CodeFixProvider codeFixProvider
+    )
+    {
+        using AdhocWorkspace workspace = new();
+        Project project = workspace
+            .AddProject("CodeFixTarget", LanguageNames.CSharp)
+            .WithCompilationOptions(
+                new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)
+            )
+            .WithParseOptions(
+                CSharpParseOptions.Default.WithLanguageVersion(LanguageVersion.Preview)
+            );
+        foreach (MetadataReference reference in CreateReferences())
+        {
+            project = project.AddMetadataReference(reference);
+        }
+
+        Document document = project.AddDocument("Target.cs", SourceText.From(source));
+        Compilation? compilation = await document
+            .Project.GetCompilationAsync()
+            .ConfigureAwait(true);
+        Assert.NotNull(compilation);
+        ImmutableArray<Diagnostic> diagnostics = await compilation!
+            .WithAnalyzers(ImmutableArray.Create(analyzer))
+            .GetAnalyzerDiagnosticsAsync()
+            .ConfigureAwait(true);
+        Diagnostic diagnostic = Assert.Single(diagnostics);
+
+        List<CodeAction> actions = [];
+        var context = new CodeFixContext(
+            document,
+            diagnostic,
+            (action, _) => actions.Add(action),
+            TestContext.Current.CancellationToken
+        );
+        await codeFixProvider.RegisterCodeFixesAsync(context).ConfigureAwait(true);
+        CodeAction codeAction = Assert.Single(actions);
+        ImmutableArray<CodeActionOperation> operations = await codeAction
+            .GetOperationsAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+        ApplyChangesOperation applyChanges = Assert.IsType<ApplyChangesOperation>(
+            Assert.Single(operations)
+        );
+        Document? changedDocument = applyChanges.ChangedSolution.GetDocument(document.Id);
+        Assert.NotNull(changedDocument);
+        SourceText text = await changedDocument!
+            .GetTextAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+        return text.ToString();
     }
 
     private static MetadataReference[] CreateReferences()

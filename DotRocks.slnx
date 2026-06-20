@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/DotRocks.Analyzers/DotRocks.Analyzers.csproj" />
+    <Project Path="src/DotRocks.Analyzers.CodeFixes/DotRocks.Analyzers.CodeFixes.csproj" />
     <Project Path="src/DotRocks.Data/DotRocks.Data.csproj" />
     <Project Path="src/DotRocks.EntityFrameworkCore/DotRocks.EntityFrameworkCore.csproj" />
     <Project Path="src/DotRocks.EntityFrameworkCore.Design/DotRocks.EntityFrameworkCore.Design.csproj" />

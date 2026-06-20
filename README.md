@@ -17,7 +17,8 @@ Roslyn analyzer suite built specifically for [StarRocks](https://www.starrocks.i
 | `DotRocks.Data` | Native ADO.NET provider with its own managed StarRocks protocol implementation. |
 | `DotRocks.EntityFrameworkCore` | EF Core relational provider built on `DotRocks.Data`. |
 | `DotRocks.EntityFrameworkCore.Design` | Design-time EF Core services for migrations. |
-| `DotRocks.Analyzers` | Roslyn analyzers (and code fixes) for correct, secure DotRocks usage. |
+| `DotRocks.Analyzers` | Roslyn analyzers for correct, secure DotRocks usage. |
+| `DotRocks.Analyzers.CodeFixes` | Optional IDE code fixes for mechanical DotRocks analyzer diagnostics. |
 
 ## Status
 
@@ -164,21 +165,24 @@ surface is verified end to end.
 ## Analyzers
 
 `DotRocks.Analyzers` ships Roslyn diagnostics for source-visible DotRocks security and
-provider-compatibility issues. Reference it as a development-time analyzer package; it
-does not add runtime assemblies to application output.
+provider-compatibility issues. `DotRocks.Analyzers.CodeFixes` ships optional IDE code
+fixes for diagnostics where the correction is mechanical. Reference these as
+development-time analyzer packages; they do not add runtime assemblies to application
+output.
 
 Current diagnostics:
 
 | ID | Severity | Detects | Fix |
 | --- | --- | --- | --- |
-| `DTR0001` | Warning | HTTP Stream Load endpoint used with credentials in a visible DotRocks connection string or `DotRocksConnectionStringBuilder` initializer. | Use an HTTPS Stream Load endpoint when credentials are present. |
-| `DTR0002` | Warning | EF Core key properties without a visible `ValueGeneratedNever()` configuration. | Configure each writable key property with `ValueGeneratedNever()`. |
-| `DTR0003` | Warning | EF Core `binary` / `varbinary` column type mappings. | Avoid EF binary mappings until DotRocks verifies EF read/write binary support. |
-| `DTR0004` | Warning | Source-visible double completion of `DotRocksTransaction` or `DotRocksStreamLoadTransaction`. | Commit or roll back a transaction object once and do not reuse it after completion. |
+| `DTR0001` | Warning | HTTP Stream Load endpoint used with credentials in a visible DotRocks connection string or `DotRocksConnectionStringBuilder` initializer. | Use an HTTPS Stream Load endpoint when credentials are present. A code fix updates simple source-visible literals from `http://` to `https://`. |
+| `DTR0002` | Warning | EF Core key properties without a visible `ValueGeneratedNever()` configuration. | Configure each writable key property with `ValueGeneratedNever()`. A code fix adds the property configuration for simple `HasKey(entity => entity.Id)` chains. |
+| `DTR0003` | Warning | EF Core `binary` / `varbinary` column type mappings. | Avoid EF binary mappings until DotRocks verifies EF read/write binary support. No automatic fix is provided. |
+| `DTR0004` | Warning | Source-visible double completion of `DotRocksTransaction` or `DotRocksStreamLoadTransaction`. | Commit or roll back a transaction object once and do not reuse it after completion. No automatic fix is provided because transaction flow needs human intent. |
 
-Analyzer limits: diagnostics currently inspect source-visible constants, initializers,
-and local method bodies. They do not perform interprocedural data-flow analysis, inspect
-runtime-built connection strings, or prove transaction state across method boundaries.
+Analyzer limits: diagnostics currently inspect source-visible constants, local string
+assignments, `DotRocksConnectionStringBuilder` initializers, and local method bodies.
+They do not perform interprocedural data-flow analysis, inspect runtime-built connection
+strings, or prove transaction state across method boundaries.
 
 ## Stream Load
 
