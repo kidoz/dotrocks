@@ -444,8 +444,7 @@ public sealed class DotRocksConnection : DbConnection
         if (_options.Pooling)
         {
             return await DotRocksConnectionPool
-                .GetPool(_options)
-                .LeaseAsync(cancellationToken)
+                .LeaseFromPoolAsync(_options, cancellationToken)
                 .ConfigureAwait(false);
         }
 

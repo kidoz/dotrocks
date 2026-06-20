@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using DotRocks.Data.Loading;
 
 namespace DotRocks.Data.Pooling;
@@ -12,6 +13,12 @@ internal sealed class DotRocksConnectionPool : IDisposable
 
     private readonly object _gate = new();
     private readonly DotRocksConnectionOptions _options;
+
+    [SuppressMessage(
+        "Usage",
+        "CA2213:Disposable fields should be disposed",
+        Justification = "Disposing the SemaphoreSlim strands pending WaitAsync waiters (deadlocking in-flight leases on ClearAllPools); it holds no unmanaged handle, so it is intentionally left undisposed."
+    )]
     private readonly SemaphoreSlim _leaseGate;
     private readonly Queue<PooledPhysicalConnection> _idleConnections = new();
     private readonly Timer? _evictionTimer;
@@ -38,7 +45,49 @@ internal sealed class DotRocksConnectionPool : IDisposable
     public static DotRocksConnectionPool GetPool(DotRocksConnectionOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
-        return Pools.GetOrAdd(options.CreatePoolKey(), _ => new DotRocksConnectionPool(options));
+        DotRocksConnectionPoolKey key = options.CreatePoolKey();
+        while (true)
+        {
+            DotRocksConnectionPool pool = Pools.GetOrAdd(
+                key,
+                _ => new DotRocksConnectionPool(options)
+            );
+            if (!pool._isDisposed)
+            {
+                return pool;
+            }
+
+            // A concurrent ClearAllPools() disposed the cached pool; evict that exact instance
+            // (only if it is still the cached one) and try again with a fresh pool.
+            (
+                (ICollection<KeyValuePair<DotRocksConnectionPoolKey, DotRocksConnectionPool>>)Pools
+            ).Remove(
+                new KeyValuePair<DotRocksConnectionPoolKey, DotRocksConnectionPool>(key, pool)
+            );
+        }
+    }
+
+    // Leases from the current pool for the options, transparently retrying when a concurrent
+    // ClearAllPools()/Dispose() disposes the pool mid-lease so callers never observe the race.
+    public static async ValueTask<DotRocksConnectionPoolLease> LeaseFromPoolAsync(
+        DotRocksConnectionOptions options,
+        CancellationToken cancellationToken
+    )
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            DotRocksConnectionPool pool = GetPool(options);
+            try
+            {
+                return await pool.LeaseAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (ObjectDisposedException)
+            {
+                // The pool was disposed between selection and lease; loop to a fresh pool.
+            }
+        }
     }
 
     public async ValueTask<DotRocksConnectionPoolLease> LeaseAsync(
@@ -214,7 +263,12 @@ internal sealed class DotRocksConnectionPool : IDisposable
         }
 
         _evictionTimer?.Dispose();
-        _leaseGate.Dispose();
+
+        // Deliberately do NOT dispose _leaseGate. Disposing a SemaphoreSlim does not cancel
+        // pending WaitAsync waiters — it strands them forever, which deadlocks any lease that is
+        // in flight when ClearAllPools()/Dispose() runs. The semaphore holds no unmanaged handle
+        // (AvailableWaitHandle is never used), so leaving it undisposed is safe; stranded waiters
+        // instead complete normally as outstanding leases are returned.
     }
 
     private sealed record PooledPhysicalConnection(
