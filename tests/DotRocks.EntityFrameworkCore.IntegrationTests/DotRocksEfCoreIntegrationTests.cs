@@ -353,6 +353,9 @@ public sealed class DotRocksEfCoreIntegrationTests
             CapturedCommand insertCommand = interceptor.SingleNonQueryCommand("INSERT");
             Assert.Contains("@p", insertCommand.CommandText, StringComparison.Ordinal);
             Assert.DoesNotContain("inserted", insertCommand.CommandText, StringComparison.Ordinal);
+            Assert.DoesNotContain("12.34", insertCommand.CommandText, StringComparison.Ordinal);
+            Assert.Contains("inserted", insertCommand.ParameterValues());
+            Assert.Contains(12.34m, insertCommand.ParameterValues());
 
             EfWriteWidget inserted = await context
                 .WriteWidgets.AsNoTracking()
@@ -374,7 +377,11 @@ public sealed class DotRocksEfCoreIntegrationTests
             CapturedCommand updateCommand = interceptor.SingleNonQueryCommand("UPDATE");
             Assert.Contains(" WHERE ", updateCommand.CommandText, StringComparison.Ordinal);
             Assert.Contains("@p", updateCommand.CommandText, StringComparison.Ordinal);
+            Assert.Contains("`id` = @p", updateCommand.CommandText, StringComparison.Ordinal);
             Assert.DoesNotContain("updated", updateCommand.CommandText, StringComparison.Ordinal);
+            Assert.DoesNotContain("56.78", updateCommand.CommandText, StringComparison.Ordinal);
+            Assert.Contains("updated", updateCommand.ParameterValues());
+            Assert.Contains(56.78m, updateCommand.ParameterValues());
 
             EfWriteWidget updated = await context
                 .WriteWidgets.AsNoTracking()
@@ -395,6 +402,9 @@ public sealed class DotRocksEfCoreIntegrationTests
             CapturedCommand deleteCommand = interceptor.SingleNonQueryCommand("DELETE");
             Assert.Contains(" WHERE ", deleteCommand.CommandText, StringComparison.Ordinal);
             Assert.Contains("@p", deleteCommand.CommandText, StringComparison.Ordinal);
+            Assert.Contains("`id` = @p", deleteCommand.CommandText, StringComparison.Ordinal);
+            Assert.DoesNotContain("10", deleteCommand.CommandText, StringComparison.Ordinal);
+            Assert.Contains(10, deleteCommand.ParameterValues());
 
             Assert.Equal(
                 0,
@@ -1702,6 +1712,9 @@ public sealed class DotRocksEfCoreIntegrationTests
             Parameters.Single(parameter =>
                 string.Equals(parameter.Name, name, StringComparison.Ordinal)
             );
+
+        public object?[] ParameterValues() =>
+            Parameters.Select(parameter => parameter.Value).ToArray();
     }
 
     private sealed record CapturedParameter(string Name, object? Value, System.Data.DbType DbType);

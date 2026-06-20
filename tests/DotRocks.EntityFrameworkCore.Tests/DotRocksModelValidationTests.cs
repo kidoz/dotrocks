@@ -60,6 +60,16 @@ public sealed class DotRocksModelValidationTests
         Assert.Contains("Byte[]", exception.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void CompositeKey_ThrowsNotSupportedException()
+    {
+        using var context = CreateContext<CompositeKeyContext>();
+
+        NotSupportedException exception = Assert.Throws<NotSupportedException>(() => context.Model);
+
+        Assert.Contains("single-column primary key", exception.Message, StringComparison.Ordinal);
+    }
+
     private static TContext CreateContext<TContext>()
         where TContext : DbContext
     {
@@ -174,6 +184,32 @@ public sealed class DotRocksModelValidationTests
     [SuppressMessage(
         "Performance",
         "CA1812:Avoid uninstantiated internal classes",
+        Justification = "The test methods instantiate this nested context through reflection."
+    )]
+    private sealed class CompositeKeyContext(DbContextOptions<CompositeKeyContext> options)
+        : DbContext(options)
+    {
+        public DbSet<CompositeKeyEntity> Entities => Set<CompositeKeyEntity>();
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            modelBuilder
+                .Entity<CompositeKeyEntity>()
+                .HasKey(entity => new { entity.Id, entity.Category });
+            modelBuilder
+                .Entity<CompositeKeyEntity>()
+                .Property(entity => entity.Id)
+                .ValueGeneratedNever();
+            modelBuilder
+                .Entity<CompositeKeyEntity>()
+                .Property(entity => entity.Category)
+                .ValueGeneratedNever();
+        }
+    }
+
+    [SuppressMessage(
+        "Performance",
+        "CA1812:Avoid uninstantiated internal classes",
         Justification = "EF Core uses this entity type through DbSet metadata."
     )]
     private sealed class GeneratedKeyEntity
@@ -246,5 +282,19 @@ public sealed class DotRocksModelValidationTests
         public int Id { get; set; }
 
         public byte[] Data { get; set; } = [];
+    }
+
+    [SuppressMessage(
+        "Performance",
+        "CA1812:Avoid uninstantiated internal classes",
+        Justification = "EF Core uses this entity type through DbSet metadata."
+    )]
+    private sealed class CompositeKeyEntity
+    {
+        public int Id { get; set; }
+
+        public int Category { get; set; }
+
+        public string Name { get; set; } = string.Empty;
     }
 }

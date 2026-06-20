@@ -111,9 +111,9 @@ Supported EF Core query surface:
 - Aggregate basics: `Min`, `Max`, `Sum`, `Average`.
 - Projection into anonymous objects and simple DTOs.
 - `SaveChangesAsync` for a constrained single-table write model: explicit primary key,
-  scalar properties only, `ValueGeneratedNever()`, no navigations, no generated values,
-  and no concurrency tokens. Supported DML is parameterized `INSERT`, `UPDATE ... WHERE
-  pk = @p`, and `DELETE ... WHERE pk = @p`.
+  scalar properties only, single-column keys, `ValueGeneratedNever()`, no navigations, no
+  generated values, and no concurrency tokens. Supported DML is parameterized `INSERT`,
+  `UPDATE ... WHERE pk = @p`, and `DELETE ... WHERE pk = @p`.
 - Minimal migrations can create StarRocks primary-key tables and the EF migrations
   history table. The design-time package is `DotRocks.EntityFrameworkCore.Design`.
 
@@ -121,7 +121,10 @@ Unsupported EF Core behavior is explicit:
 
 - `ExecuteUpdate`, and `ExecuteDelete`.
 - `EnsureCreated` and schema deletion.
-- migration operations beyond the initial `CREATE TABLE` path.
+- migration operations beyond the initial `CREATE TABLE` path, including add/alter
+  column, indexes, foreign keys, defaults, and computed columns.
+- idempotent migration scripts.
+- composite-key writes.
 - joins, `Include`, navigation materialization, and `GroupBy`.
 - binary/varbinary EF mapping until byte-array query translation and materialization are
   broader than the verified ADO.NET reader path.

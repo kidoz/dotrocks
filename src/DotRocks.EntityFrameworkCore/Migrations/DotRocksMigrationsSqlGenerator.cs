@@ -121,9 +121,36 @@ internal sealed class DotRocksMigrationsSqlGenerator(
         bool terminate = true
     )
     {
-        throw new NotSupportedException(
-            "DotRocks EF Core migrations support only CREATE TABLE in this release."
-        );
+        throw CreateUnsupportedMigrationOperationException("ADD COLUMN");
+    }
+
+    protected override void Generate(
+        AlterColumnOperation operation,
+        IModel? model,
+        MigrationCommandListBuilder builder
+    )
+    {
+        throw CreateUnsupportedMigrationOperationException("ALTER COLUMN");
+    }
+
+    protected override void Generate(
+        CreateIndexOperation operation,
+        IModel? model,
+        MigrationCommandListBuilder builder,
+        bool terminate = true
+    )
+    {
+        throw CreateUnsupportedMigrationOperationException("CREATE INDEX");
+    }
+
+    protected override void Generate(
+        AddForeignKeyOperation operation,
+        IModel? model,
+        MigrationCommandListBuilder builder,
+        bool terminate = true
+    )
+    {
+        throw CreateUnsupportedMigrationOperationException("ADD FOREIGN KEY");
     }
 
     private void AppendDelimitedColumnList(MigrationCommandListBuilder builder, string[] columns)
@@ -158,4 +185,11 @@ internal sealed class DotRocksMigrationsSqlGenerator(
 
         return columnType;
     }
+
+    private static NotSupportedException CreateUnsupportedMigrationOperationException(
+        string operation
+    ) =>
+        new(
+            $"DotRocks EF Core migrations do not support {operation}; only initial CREATE TABLE migrations are supported in this release."
+        );
 }

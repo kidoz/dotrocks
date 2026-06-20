@@ -38,9 +38,17 @@ internal sealed class DotRocksModelValidator(
             );
         }
 
-        if (entityType.FindPrimaryKey() is null)
+        IKey? primaryKey = entityType.FindPrimaryKey();
+        if (primaryKey is null)
         {
             return;
+        }
+
+        if (primaryKey.Properties.Count != 1)
+        {
+            throw new NotSupportedException(
+                $"DotRocks EF Core writable entity type '{entityType.DisplayName()}' requires a single-column primary key; composite keys are not supported."
+            );
         }
 
         if (entityType.GetNavigations().Any() || entityType.GetSkipNavigations().Any())
