@@ -158,6 +158,46 @@ public sealed class DotRocksConnectionCancellationTests
     }
 
     [Fact]
+    public async Task OpenAsync_RetriesTransientFailure_WhenConnectionRetriesConfigured()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using var listener = new TcpListener(IPAddress.Loopback, port: 0);
+        listener.Start();
+        int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+
+        Task serverTask = Task.Run(
+            async () =>
+            {
+                // First attempt: accept then abort with RST to force a transient I/O failure.
+                using (
+                    TcpClient first = await listener.AcceptTcpClientAsync(ct).ConfigureAwait(false)
+                )
+                {
+                    first.LingerState = new LingerOption(enable: true, seconds: 0);
+                }
+
+                // Second attempt: complete a normal handshake.
+                using TcpClient second = await listener
+                    .AcceptTcpClientAsync(ct)
+                    .ConfigureAwait(false);
+                using NetworkStream stream = second.GetStream();
+                await CompleteAuthenticationAsync(stream).ConfigureAwait(false);
+                await Task.Delay(TimeSpan.FromMilliseconds(250), ct).ConfigureAwait(false);
+            },
+            ct
+        );
+
+        string connectionString =
+            $"Server=127.0.0.1;Port={port};User ID=alice;Password={Secret};Connection Timeout=5;Connection Retries=2;Connection Retry Delay=50";
+        using var connection = new DotRocksConnection(connectionString);
+
+        await connection.OpenAsync(ct).ConfigureAwait(true);
+
+        Assert.Equal(ConnectionState.Open, connection.State);
+        await serverTask.ConfigureAwait(true);
+    }
+
+    [Fact]
     public async Task OpenAsync_CancellationWhileWaitingForHandshake_ClosesConnectionWithoutSecretLeak()
     {
         using var listener = new TcpListener(IPAddress.Loopback, port: 0);

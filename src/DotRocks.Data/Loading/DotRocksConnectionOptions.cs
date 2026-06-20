@@ -21,6 +21,8 @@ internal sealed record DotRocksConnectionOptions(
     X509RevocationMode SslRevocationMode,
     Uri StreamLoadEndpoint,
     bool AllowInsecureStreamLoad,
+    int MaxConnectionRetries,
+    TimeSpan ConnectionRetryDelay,
     string ConnectionString
 )
 {
@@ -34,6 +36,8 @@ internal sealed record DotRocksConnectionOptions(
     public const int DefaultConnectionIdleTimeoutSeconds = 300;
     public const int DefaultStreamLoadPort = 8030;
     public const X509RevocationMode DefaultSslRevocationMode = X509RevocationMode.Offline;
+    public const int DefaultMaxConnectionRetries = 0;
+    public const int DefaultConnectionRetryDelayMilliseconds = 200;
 
     public static DotRocksConnectionOptions Default { get; } =
         new(
@@ -52,6 +56,8 @@ internal sealed record DotRocksConnectionOptions(
             DefaultSslRevocationMode,
             BuildDefaultStreamLoadEndpoint(DefaultServer),
             false,
+            DefaultMaxConnectionRetries,
+            TimeSpan.FromMilliseconds(DefaultConnectionRetryDelayMilliseconds),
             string.Empty
         );
 
@@ -100,6 +106,18 @@ internal sealed record DotRocksConnectionOptions(
             BuildDefaultStreamLoadEndpoint(server)
         );
         bool allowInsecureStreamLoad = GetBoolean(builder, "Allow Insecure Stream Load", false);
+        int maxConnectionRetries = GetInt32(
+            builder,
+            "Connection Retries",
+            DefaultMaxConnectionRetries
+        );
+        int connectionRetryDelayMs = GetInt32(
+            builder,
+            "Connection Retry Delay",
+            DefaultConnectionRetryDelayMilliseconds
+        );
+        ArgumentOutOfRangeException.ThrowIfNegative(maxConnectionRetries);
+        ArgumentOutOfRangeException.ThrowIfNegative(connectionRetryDelayMs);
 
         Validate(
             server,
@@ -128,7 +146,9 @@ internal sealed record DotRocksConnectionOptions(
             trustServerCertificate,
             sslRevocationMode,
             streamLoadEndpoint,
-            allowInsecureStreamLoad
+            allowInsecureStreamLoad,
+            maxConnectionRetries,
+            connectionRetryDelayMs
         );
 
         return new DotRocksConnectionOptions(
@@ -147,6 +167,8 @@ internal sealed record DotRocksConnectionOptions(
             sslRevocationMode,
             streamLoadEndpoint,
             allowInsecureStreamLoad,
+            maxConnectionRetries,
+            TimeSpan.FromMilliseconds(connectionRetryDelayMs),
             canonical
         );
     }
@@ -167,7 +189,9 @@ internal sealed record DotRocksConnectionOptions(
             TrustServerCertificate,
             SslRevocationMode,
             StreamLoadEndpoint,
-            AllowInsecureStreamLoad
+            AllowInsecureStreamLoad,
+            MaxConnectionRetries,
+            (int)ConnectionRetryDelay.TotalMilliseconds
         );
 
     internal DotRocksConnectionPoolKey CreatePoolKey() =>
@@ -395,6 +419,18 @@ internal sealed record DotRocksConnectionOptions(
                 "Stream Load URL",
                 "Http Endpoint",
             ],
+            "Connection Retries" =>
+            [
+                "Connection Retries",
+                "ConnectionRetries",
+                "Connect Retry Count",
+            ],
+            "Connection Retry Delay" =>
+            [
+                "Connection Retry Delay",
+                "ConnectionRetryDelay",
+                "Retry Delay",
+            ],
             _ => [canonical],
         };
 
@@ -413,7 +449,9 @@ internal sealed record DotRocksConnectionOptions(
         bool trustServerCertificate,
         X509RevocationMode sslRevocationMode,
         Uri streamLoadEndpoint,
-        bool allowInsecureStreamLoad
+        bool allowInsecureStreamLoad,
+        int maxConnectionRetries,
+        int connectionRetryDelayMilliseconds
     )
     {
         var builder = new StringBuilder();
@@ -467,6 +505,18 @@ internal sealed record DotRocksConnectionOptions(
             builder,
             "Allow Insecure Stream Load",
             allowInsecureStreamLoad.ToString(System.Globalization.CultureInfo.InvariantCulture)
+        );
+        Append(
+            builder,
+            "Connection Retries",
+            maxConnectionRetries.ToString(System.Globalization.CultureInfo.InvariantCulture)
+        );
+        Append(
+            builder,
+            "Connection Retry Delay",
+            connectionRetryDelayMilliseconds.ToString(
+                System.Globalization.CultureInfo.InvariantCulture
+            )
         );
         return builder.ToString();
     }

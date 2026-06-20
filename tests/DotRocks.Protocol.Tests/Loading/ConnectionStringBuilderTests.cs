@@ -143,6 +143,20 @@ public sealed class ConnectionStringBuilderTests
     }
 
     [Fact]
+    public void ConnectionRetries_DefaultsAndParses()
+    {
+        var defaults = new DotRocksConnectionStringBuilder();
+        Assert.Equal(0, defaults.ConnectionRetries);
+
+        var builder = new DotRocksConnectionStringBuilder(
+            "Connection Retries=3;Connection Retry Delay=75"
+        );
+        Assert.Equal(3, builder.ConnectionRetries);
+        Assert.Equal(3, builder.BuildOptions().MaxConnectionRetries);
+        Assert.Equal(TimeSpan.FromMilliseconds(75), builder.BuildOptions().ConnectionRetryDelay);
+    }
+
+    [Fact]
     public void TrustServerCertificateWithoutTls_Throws()
     {
         Assert.Throws<ArgumentException>(() =>

@@ -33,6 +33,8 @@ public sealed class DotRocksConnectionStringBuilder
     private const string SslRevocationCheckKeyword = "Ssl Revocation Check";
     private const string StreamLoadEndpointKeyword = "Stream Load Endpoint";
     private const string AllowInsecureStreamLoadKeyword = "Allow Insecure Stream Load";
+    private const string ConnectionRetriesKeyword = "Connection Retries";
+    private const string ConnectionRetryDelayKeyword = "Connection Retry Delay";
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DotRocksConnectionStringBuilder"/> class.
@@ -51,6 +53,8 @@ public sealed class DotRocksConnectionStringBuilder
         TrustServerCertificate = false;
         SslRevocationCheck = DotRocksConnectionOptions.DefaultSslRevocationMode;
         AllowInsecureStreamLoad = false;
+        ConnectionRetries = DotRocksConnectionOptions.DefaultMaxConnectionRetries;
+        ConnectionRetryDelay = DotRocksConnectionOptions.DefaultConnectionRetryDelayMilliseconds;
     }
 
     /// <summary>
@@ -259,6 +263,41 @@ public sealed class DotRocksConnectionStringBuilder
     }
 
     /// <summary>
+    /// Gets or sets how many times opening a connection is retried on a transient failure.
+    /// Defaults to 0 (no retries).
+    /// </summary>
+    public int ConnectionRetries
+    {
+        get =>
+            GetInt32(
+                ConnectionRetriesKeyword,
+                DotRocksConnectionOptions.DefaultMaxConnectionRetries
+            );
+        set
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(value);
+            this[ConnectionRetriesKeyword] = value;
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets the delay between connection-open retries, in milliseconds.
+    /// </summary>
+    public int ConnectionRetryDelay
+    {
+        get =>
+            GetInt32(
+                ConnectionRetryDelayKeyword,
+                DotRocksConnectionOptions.DefaultConnectionRetryDelayMilliseconds
+            );
+        set
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(value);
+            this[ConnectionRetryDelayKeyword] = value;
+        }
+    }
+
+    /// <summary>
     /// Gets a sanitized connection-string representation.
     /// </summary>
     /// <returns>A connection string with the password redacted.</returns>
@@ -368,6 +407,18 @@ public sealed class DotRocksConnectionStringBuilder
                 AllowInsecureStreamLoadKeyword,
                 "AllowInsecureStreamLoad",
                 "Allow Insecure StreamLoad",
+            ],
+            ConnectionRetriesKeyword =>
+            [
+                ConnectionRetriesKeyword,
+                "ConnectionRetries",
+                "Connect Retry Count",
+            ],
+            ConnectionRetryDelayKeyword =>
+            [
+                ConnectionRetryDelayKeyword,
+                "ConnectionRetryDelay",
+                "Retry Delay",
             ],
             StreamLoadEndpointKeyword =>
             [

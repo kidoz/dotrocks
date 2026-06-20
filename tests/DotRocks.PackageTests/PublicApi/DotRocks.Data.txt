@@ -51,6 +51,8 @@ public sealed class DotRocks.Data.DotRocksConnectionStringBuilder System.Data.Co
   public DotRocks.Data.DotRocksConnectionStringBuilder(System.String connectionString)
   public property System.Boolean AllowInsecureStreamLoad { get; set; }
   public property System.Int32 ConnectionIdleTimeout { get; set; }
+  public property System.Int32 ConnectionRetries { get; set; }
+  public property System.Int32 ConnectionRetryDelay { get; set; }
   public property System.Int32 ConnectionTimeout { get; set; }
   public property System.String Database { get; set; }
   public property System.Int32 MaximumPoolSize { get; set; }

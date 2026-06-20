@@ -155,7 +155,7 @@ public sealed class DotRocksConnection : DbConnection
         );
         try
         {
-            _lease = await OpenLeaseAsync(linked.Token).ConfigureAwait(false);
+            _lease = await OpenLeaseWithRetryAsync(linked.Token).ConfigureAwait(false);
             _serverVersion = _lease.PhysicalConnection.ServerVersion;
             _state = ConnectionState.Open;
             DotRocksTelemetry.ConnectionsOpened.Add(1);
@@ -166,6 +166,33 @@ public sealed class DotRocksConnection : DbConnection
             activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
             CloseCore(reusable: false);
             throw;
+        }
+    }
+
+    private async ValueTask<DotRocksConnectionPoolLease> OpenLeaseWithRetryAsync(
+        CancellationToken cancellationToken
+    )
+    {
+        int maxAttempts = _options.MaxConnectionRetries + 1;
+        for (int attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return await OpenLeaseAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (DotRocksException ex)
+                when (ex.IsTransient
+                    && attempt < maxAttempts
+                    && !cancellationToken.IsCancellationRequested
+                )
+            {
+                // Opening a connection is idempotent, so a transient failure is safe to retry.
+                if (_options.ConnectionRetryDelay > TimeSpan.Zero)
+                {
+                    await Task.Delay(_options.ConnectionRetryDelay, cancellationToken)
+                        .ConfigureAwait(false);
+                }
+            }
         }
     }
 
