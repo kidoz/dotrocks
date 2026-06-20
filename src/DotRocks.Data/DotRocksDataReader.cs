@@ -455,6 +455,17 @@ public sealed class DotRocksDataReader
 
     private async Task<bool> ReadStreamingRowAsync(CancellationToken cancellationToken)
     {
+        // Honor cancellation at entry like the buffered path. A cancelled streaming read leaves
+        // the result set partially consumed, so the physical connection is mid-stream and must be
+        // discarded rather than returned to the pool. (Mid-flight cancellation during a network
+        // read is handled by FetchStreamingRowAsync's catch.)
+        if (cancellationToken.IsCancellationRequested)
+        {
+            _isConsumed = true;
+            ReportConnectionCompletion(reusable: false);
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+
         if (_hasPrefetchedRow)
         {
             _currentRow = _prefetchedRow;

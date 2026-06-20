@@ -1233,7 +1233,7 @@ public sealed class ConnectionIntegrationTests
             firstConnectionId = await ReadConnectionIdAsync(first).ConfigureAwait(true);
 
             using DbCommand command = first.CreateCommand();
-            command.CommandText = "SELECT 1 UNION ALL SELECT SLEEP(3)";
+            command.CommandText = "SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3";
             command.CommandTimeout = 0;
             using DbDataReader reader = await command
                 .ExecuteReaderAsync(TestContext.Current.CancellationToken)
@@ -1241,10 +1241,13 @@ public sealed class ConnectionIntegrationTests
             Assert.True(
                 await reader.ReadAsync(TestContext.Current.CancellationToken).ConfigureAwait(true)
             );
+
+            // Cancel mid-stream (deterministically, independent of server timing): a cancelled
+            // reader read must throw and the partially-consumed connection must be discarded.
             using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(
                 TestContext.Current.CancellationToken
             );
-            cancellation.CancelAfter(TimeSpan.FromMilliseconds(100));
+            await cancellation.CancelAsync().ConfigureAwait(true);
 
             await Assert
                 .ThrowsAsync<OperationCanceledException>(async () =>
