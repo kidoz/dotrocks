@@ -14,4 +14,11 @@
   <ItemGroup>
     <ProjectReference Include="../../src/DotRocks.Analyzers/DotRocks.Analyzers.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="Fixtures/**/*.cs" />
+    <EmbeddedResource Remove="Fixtures/**/*" />
+    <None Remove="Fixtures/**/*" />
+    <None Include="Fixtures/**/*" />
+  </ItemGroup>
 </Project>

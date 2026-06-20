@@ -161,6 +161,25 @@ ADO.NET verifies `VARBINARY` / `BLOB` result values as `byte[]`, including
 `GetBytes(...)`; EF Core byte-array mapping remains unsupported until the EF query
 surface is verified end to end.
 
+## Analyzers
+
+`DotRocks.Analyzers` ships Roslyn diagnostics for source-visible DotRocks security and
+provider-compatibility issues. Reference it as a development-time analyzer package; it
+does not add runtime assemblies to application output.
+
+Current diagnostics:
+
+| ID | Severity | Detects | Fix |
+| --- | --- | --- | --- |
+| `DTR0001` | Warning | HTTP Stream Load endpoint used with credentials in a visible DotRocks connection string or `DotRocksConnectionStringBuilder` initializer. | Use an HTTPS Stream Load endpoint when credentials are present. |
+| `DTR0002` | Warning | EF Core key properties without a visible `ValueGeneratedNever()` configuration. | Configure each writable key property with `ValueGeneratedNever()`. |
+| `DTR0003` | Warning | EF Core `binary` / `varbinary` column type mappings. | Avoid EF binary mappings until DotRocks verifies EF read/write binary support. |
+| `DTR0004` | Warning | Source-visible double completion of `DotRocksTransaction` or `DotRocksStreamLoadTransaction`. | Commit or roll back a transaction object once and do not reuse it after completion. |
+
+Analyzer limits: diagnostics currently inspect source-visible constants, initializers,
+and local method bodies. They do not perform interprocedural data-flow analysis, inspect
+runtime-built connection strings, or prove transaction state across method boundaries.
+
 ## Stream Load
 
 Use `DotRocksStreamLoadClient` for StarRocks HTTP Stream Load. The client uses the same

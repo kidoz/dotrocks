@@ -45,7 +45,7 @@ public sealed class DotRocksUsageAnalyzer : DiagnosticAnalyzer
     private static readonly DiagnosticDescriptor MissingValueGeneratedNeverRule = new(
         MissingValueGeneratedNeverDiagnosticId,
         "Configure EF writable keys with ValueGeneratedNever",
-        "Entity model configures a key but no ValueGeneratedNever() call is visible",
+        "Entity key property '{0}' is not configured with ValueGeneratedNever()",
         "Usage",
         DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
@@ -91,42 +91,40 @@ public sealed class DotRocksUsageAnalyzer : DiagnosticAnalyzer
 
         context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
         context.EnableConcurrentExecution();
-        context.RegisterSyntaxNodeAction(AnalyzeStringLiteral, SyntaxKind.StringLiteralExpression);
         context.RegisterSyntaxNodeAction(AnalyzeInvocation, SyntaxKind.InvocationExpression);
+        context.RegisterSyntaxNodeAction(
+            AnalyzeObjectCreation,
+            SyntaxKind.ObjectCreationExpression
+        );
         context.RegisterSyntaxNodeAction(AnalyzeMethodDeclaration, SyntaxKind.MethodDeclaration);
         context.RegisterSyntaxNodeAction(AnalyzeBlock, SyntaxKind.Block);
-    }
-
-    private static void AnalyzeStringLiteral(SyntaxNodeAnalysisContext context)
-    {
-        var literal = (LiteralExpressionSyntax)context.Node;
-        string value = literal.Token.ValueText;
-        if (Contains(value, "stream load endpoint=http://") && Contains(value, "password="))
-        {
-            context.ReportDiagnostic(
-                Diagnostic.Create(InsecureStreamLoadEndpointRule, literal.GetLocation())
-            );
-        }
     }
 
     private static void AnalyzeInvocation(SyntaxNodeAnalysisContext context)
     {
         var invocation = (InvocationExpressionSyntax)context.Node;
+        AnalyzeUnsupportedColumnType(context, invocation);
+        AnalyzeInsecureConnectionStringFactory(context, invocation);
+    }
+
+    private static void AnalyzeUnsupportedColumnType(
+        SyntaxNodeAnalysisContext context,
+        InvocationExpressionSyntax invocation
+    )
+    {
         if (!IsMemberInvocation(invocation, "HasColumnType"))
         {
             return;
         }
 
         if (
-            invocation.ArgumentList.Arguments.FirstOrDefault()?.Expression
-                is not LiteralExpressionSyntax literal
-            || !literal.IsKind(SyntaxKind.StringLiteralExpression)
+            invocation.ArgumentList.Arguments.FirstOrDefault()?.Expression is not { } expression
+            || GetConstantString(context, expression) is not { } storeType
         )
         {
             return;
         }
 
-        string storeType = literal.Token.ValueText;
         if (
             string.Equals(storeType, "binary", StringComparison.OrdinalIgnoreCase)
             || string.Equals(storeType, "varbinary", StringComparison.OrdinalIgnoreCase)
@@ -135,7 +133,114 @@ public sealed class DotRocksUsageAnalyzer : DiagnosticAnalyzer
         )
         {
             context.ReportDiagnostic(
-                Diagnostic.Create(UnsupportedBinaryMappingRule, literal.GetLocation(), storeType)
+                Diagnostic.Create(UnsupportedBinaryMappingRule, expression.GetLocation(), storeType)
+            );
+        }
+    }
+
+    private static void AnalyzeInsecureConnectionStringFactory(
+        SyntaxNodeAnalysisContext context,
+        InvocationExpressionSyntax invocation
+    )
+    {
+        foreach (ArgumentSyntax argument in invocation.ArgumentList.Arguments)
+        {
+            if (
+                GetConstantString(context, argument.Expression) is { } connectionString
+                && IsInsecureStreamLoadConnectionString(connectionString)
+            )
+            {
+                context.ReportDiagnostic(
+                    Diagnostic.Create(
+                        InsecureStreamLoadEndpointRule,
+                        argument.Expression.GetLocation()
+                    )
+                );
+            }
+        }
+    }
+
+    private static void AnalyzeObjectCreation(SyntaxNodeAnalysisContext context)
+    {
+        var objectCreation = (ObjectCreationExpressionSyntax)context.Node;
+        ITypeSymbol? type = context.SemanticModel.GetTypeInfo(objectCreation).Type;
+
+        if (IsDotRocksConnectionStringConsumer(type))
+        {
+            foreach (ArgumentSyntax argument in objectCreation.ArgumentList?.Arguments ?? [])
+            {
+                if (
+                    GetConstantString(context, argument.Expression) is { } connectionString
+                    && IsInsecureStreamLoadConnectionString(connectionString)
+                )
+                {
+                    context.ReportDiagnostic(
+                        Diagnostic.Create(
+                            InsecureStreamLoadEndpointRule,
+                            argument.Expression.GetLocation()
+                        )
+                    );
+                }
+            }
+        }
+
+        if (
+            IsNamedType(type, "DotRocks.Data.DotRocksConnectionStringBuilder")
+            && objectCreation.Initializer is not null
+        )
+        {
+            AnalyzeConnectionStringBuilderInitializer(context, objectCreation.Initializer);
+        }
+    }
+
+    private static void AnalyzeConnectionStringBuilderInitializer(
+        SyntaxNodeAnalysisContext context,
+        InitializerExpressionSyntax initializer
+    )
+    {
+        ExpressionSyntax? httpEndpointExpression = null;
+        bool hasPassword = false;
+
+        foreach (ExpressionSyntax expression in initializer.Expressions)
+        {
+            if (
+                expression is AssignmentExpressionSyntax assignment
+                && assignment.Left is IdentifierNameSyntax identifier
+            )
+            {
+                if (
+                    string.Equals(
+                        identifier.Identifier.ValueText,
+                        "StreamLoadEndpoint",
+                        StringComparison.Ordinal
+                    )
+                    && GetConstantString(context, assignment.Right) is { } endpoint
+                    && endpoint.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+                )
+                {
+                    httpEndpointExpression = assignment.Right;
+                }
+
+                if (
+                    string.Equals(
+                        identifier.Identifier.ValueText,
+                        "Password",
+                        StringComparison.Ordinal
+                    ) && !string.IsNullOrEmpty(GetConstantString(context, assignment.Right))
+                )
+                {
+                    hasPassword = true;
+                }
+            }
+        }
+
+        if (httpEndpointExpression is not null && hasPassword)
+        {
+            context.ReportDiagnostic(
+                Diagnostic.Create(
+                    InsecureStreamLoadEndpointRule,
+                    httpEndpointExpression.GetLocation()
+                )
             );
         }
     }
@@ -151,24 +256,43 @@ public sealed class DotRocksUsageAnalyzer : DiagnosticAnalyzer
             return;
         }
 
-        bool hasKey = method
+        var configuredProperties = method
             .Body.DescendantNodes()
             .OfType<InvocationExpressionSyntax>()
-            .Any(invocation => IsMemberInvocation(invocation, "HasKey"));
-        if (!hasKey)
-        {
-            return;
-        }
+            .Where(invocation => IsMemberInvocation(invocation, "ValueGeneratedNever"))
+            .Select(invocation => GetPropertyInvocationFromChain(invocation))
+            .Where(invocation => invocation is not null)
+            .Select(invocation => CreateEfPropertyReference(context, invocation!))
+            .Where(property => property.PropertyName is not null)
+            .ToArray();
 
-        bool hasValueGeneratedNever = method
-            .Body.DescendantNodes()
-            .OfType<InvocationExpressionSyntax>()
-            .Any(invocation => IsMemberInvocation(invocation, "ValueGeneratedNever"));
-        if (!hasValueGeneratedNever)
+        foreach (
+            InvocationExpressionSyntax hasKeyInvocation in method
+                .Body.DescendantNodes()
+                .OfType<InvocationExpressionSyntax>()
+                .Where(invocation => IsMemberInvocation(invocation, "HasKey"))
+        )
         {
-            context.ReportDiagnostic(
-                Diagnostic.Create(MissingValueGeneratedNeverRule, method.Identifier.GetLocation())
-            );
+            string? entityTypeName = GetEntityTypeName(context, hasKeyInvocation);
+            foreach (EfPropertyReference keyProperty in GetKeyProperties(context, hasKeyInvocation))
+            {
+                if (
+                    configuredProperties.Any(property =>
+                        IsSameProperty(entityTypeName, keyProperty.PropertyName, property)
+                    )
+                )
+                {
+                    continue;
+                }
+
+                context.ReportDiagnostic(
+                    Diagnostic.Create(
+                        MissingValueGeneratedNeverRule,
+                        keyProperty.Location,
+                        keyProperty.PropertyName
+                    )
+                );
+            }
         }
     }
 
@@ -186,6 +310,7 @@ public sealed class DotRocksUsageAnalyzer : DiagnosticAnalyzer
                 invocation.Expression is not MemberAccessExpressionSyntax memberAccess
                 || memberAccess.Expression is not IdentifierNameSyntax receiver
                 || !IsCompletionMethod(memberAccess.Name.Identifier.ValueText)
+                || !IsDotRocksTransactionType(context.SemanticModel.GetTypeInfo(receiver).Type)
             )
             {
                 continue;
@@ -218,6 +343,217 @@ public sealed class DotRocksUsageAnalyzer : DiagnosticAnalyzer
         || string.Equals(methodName, "Rollback", StringComparison.Ordinal)
         || string.Equals(methodName, "RollbackAsync", StringComparison.Ordinal);
 
-    private static bool Contains(string text, string value) =>
-        text.IndexOf(value, StringComparison.OrdinalIgnoreCase) >= 0;
+    private static string? GetConstantString(
+        SyntaxNodeAnalysisContext context,
+        ExpressionSyntax expression
+    )
+    {
+        Optional<object?> value = context.SemanticModel.GetConstantValue(expression);
+        return value.HasValue ? value.Value as string : null;
+    }
+
+    private static bool IsInsecureStreamLoadConnectionString(string value) =>
+        value.IndexOf("stream load endpoint=http://", StringComparison.OrdinalIgnoreCase) >= 0
+        && value.IndexOf("password=", StringComparison.OrdinalIgnoreCase) >= 0;
+
+    private static bool IsDotRocksConnectionStringConsumer(ITypeSymbol? type) =>
+        IsNamedType(type, "DotRocks.Data.DotRocksConnection")
+        || IsNamedType(type, "DotRocks.Data.DotRocksDataSource")
+        || IsNamedType(type, "DotRocks.Data.DotRocksConnectionStringBuilder")
+        || IsNamedType(type, "DotRocks.Data.Loading.DotRocksStreamLoadClient");
+
+    private static bool IsDotRocksTransactionType(ITypeSymbol? type) =>
+        IsNamedType(type, "DotRocks.Data.DotRocksTransaction")
+        || IsNamedType(type, "DotRocks.Data.Loading.DotRocksStreamLoadTransaction");
+
+    private static bool IsNamedType(ITypeSymbol? type, string metadataName) =>
+        string.Equals(
+            type?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+            "global::" + metadataName,
+            StringComparison.Ordinal
+        );
+
+    private static EfPropertyReference CreateEfPropertyReference(
+        SyntaxNodeAnalysisContext context,
+        InvocationExpressionSyntax propertyInvocation
+    )
+    {
+        string? entityTypeName = GetEntityTypeName(context, propertyInvocation);
+        ExpressionSyntax? expression = propertyInvocation
+            .ArgumentList.Arguments.FirstOrDefault()
+            ?.Expression;
+        EfPropertyReference property = ExtractLambdaMemberReference(
+            expression,
+            fallbackLocation: propertyInvocation.GetLocation()
+        );
+        return property.WithEntityTypeName(entityTypeName);
+    }
+
+    private static IEnumerable<EfPropertyReference> GetKeyProperties(
+        SyntaxNodeAnalysisContext context,
+        InvocationExpressionSyntax hasKeyInvocation
+    )
+    {
+        ExpressionSyntax? expression = hasKeyInvocation
+            .ArgumentList.Arguments.FirstOrDefault()
+            ?.Expression;
+        string? entityTypeName = GetEntityTypeName(context, hasKeyInvocation);
+
+        foreach (
+            EfPropertyReference property in ExtractLambdaMemberReferences(
+                expression,
+                hasKeyInvocation.GetLocation()
+            )
+        )
+        {
+            yield return property.WithEntityTypeName(entityTypeName);
+        }
+    }
+
+    private static EfPropertyReference ExtractLambdaMemberReference(
+        ExpressionSyntax? expression,
+        Location fallbackLocation
+    ) => ExtractLambdaMemberReferences(expression, fallbackLocation).FirstOrDefault();
+
+    private static IEnumerable<EfPropertyReference> ExtractLambdaMemberReferences(
+        ExpressionSyntax? expression,
+        Location fallbackLocation
+    )
+    {
+        if (expression is ParenthesizedLambdaExpressionSyntax parenthesizedLambda)
+        {
+            expression = parenthesizedLambda.Body as ExpressionSyntax;
+        }
+        else if (expression is SimpleLambdaExpressionSyntax simpleLambda)
+        {
+            expression = simpleLambda.Body as ExpressionSyntax;
+        }
+
+        if (expression is MemberAccessExpressionSyntax memberAccess)
+        {
+            yield return new EfPropertyReference(
+                null,
+                memberAccess.Name.Identifier.ValueText,
+                memberAccess.Name.GetLocation()
+            );
+            yield break;
+        }
+
+        if (expression is AnonymousObjectCreationExpressionSyntax anonymousObject)
+        {
+            foreach (
+                AnonymousObjectMemberDeclaratorSyntax initializer in anonymousObject.Initializers
+            )
+            {
+                if (initializer.Expression is MemberAccessExpressionSyntax initializerMember)
+                {
+                    yield return new EfPropertyReference(
+                        null,
+                        initializerMember.Name.Identifier.ValueText,
+                        initializerMember.Name.GetLocation()
+                    );
+                }
+            }
+
+            yield break;
+        }
+
+        yield return new EfPropertyReference(null, "unknown", fallbackLocation);
+    }
+
+    private static InvocationExpressionSyntax? GetPropertyInvocationFromChain(
+        InvocationExpressionSyntax invocation
+    )
+    {
+        if (IsMemberInvocation(invocation, "Property"))
+        {
+            return invocation;
+        }
+
+        return invocation
+            .Expression.DescendantNodesAndSelf()
+            .OfType<InvocationExpressionSyntax>()
+            .FirstOrDefault(candidate => IsMemberInvocation(candidate, "Property"));
+    }
+
+    private static string? GetEntityTypeName(
+        SyntaxNodeAnalysisContext context,
+        InvocationExpressionSyntax invocation
+    )
+    {
+        if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess)
+        {
+            return null;
+        }
+
+        ITypeSymbol? receiverType = context.SemanticModel.GetTypeInfo(memberAccess.Expression).Type;
+        if (receiverType is INamedTypeSymbol namedReceiverType)
+        {
+            string receiverMetadataName = namedReceiverType.ConstructedFrom.ToDisplayString(
+                SymbolDisplayFormat.FullyQualifiedFormat
+            );
+            if (
+                string.Equals(
+                    receiverMetadataName,
+                    "global::Microsoft.EntityFrameworkCore.EntityTypeBuilder<TEntity>",
+                    StringComparison.Ordinal
+                )
+                && namedReceiverType.TypeArguments.Length == 1
+            )
+            {
+                return namedReceiverType
+                    .TypeArguments[0]
+                    .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            }
+        }
+
+        InvocationExpressionSyntax? entityInvocation = memberAccess
+            .Expression.DescendantNodesAndSelf()
+            .OfType<InvocationExpressionSyntax>()
+            .FirstOrDefault(candidate => IsMemberInvocation(candidate, "Entity"));
+        if (
+            entityInvocation?.Expression is MemberAccessExpressionSyntax entityMember
+            && entityMember.Name is GenericNameSyntax genericName
+            && genericName.TypeArgumentList.Arguments.Count == 1
+        )
+        {
+            return context
+                .SemanticModel.GetTypeInfo(genericName.TypeArgumentList.Arguments[0])
+                .Type?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        }
+
+        return null;
+    }
+
+    private static bool IsSameProperty(
+        string? entityTypeName,
+        string propertyName,
+        EfPropertyReference configuredProperty
+    ) =>
+        string.Equals(propertyName, configuredProperty.PropertyName, StringComparison.Ordinal)
+        && (
+            entityTypeName is null
+            || configuredProperty.EntityTypeName is null
+            || string.Equals(
+                entityTypeName,
+                configuredProperty.EntityTypeName,
+                StringComparison.Ordinal
+            )
+        );
+
+    private readonly struct EfPropertyReference(
+        string? entityTypeName,
+        string propertyName,
+        Location location
+    )
+    {
+        public string? EntityTypeName { get; } = entityTypeName;
+
+        public string PropertyName { get; } = propertyName;
+
+        public Location Location { get; } = location;
+
+        public EfPropertyReference WithEntityTypeName(string? entityTypeName) =>
+            new(entityTypeName, PropertyName, Location);
+    }
 }
