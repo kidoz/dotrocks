@@ -34,14 +34,27 @@ public sealed class TransactionCompletionAnalyzer : DiagnosticAnalyzer
     {
         var block = (BlockSyntax)context.Node;
         var completions = new Dictionary<string, Location>(StringComparer.Ordinal);
-        foreach (
-            InvocationExpressionSyntax invocation in block
-                .DescendantNodes()
-                .OfType<InvocationExpressionSyntax>()
-        )
+
+        // Only consider completions that are top-level statements of *this* block. Completions
+        // nested in if/else, switch, or try/catch branches each live in their own block, so
+        // mutually-exclusive `Commit()`/`Rollback()` are not falsely paired. This intentionally
+        // trades exhaustive flow analysis for zero false positives on the common idioms.
+        foreach (StatementSyntax statement in block.Statements)
         {
+            if (statement is not ExpressionStatementSyntax expressionStatement)
+            {
+                continue;
+            }
+
+            ExpressionSyntax expression = expressionStatement.Expression;
+            if (expression is AwaitExpressionSyntax awaitExpression)
+            {
+                expression = awaitExpression.Expression;
+            }
+
             if (
-                invocation.Expression is not MemberAccessExpressionSyntax memberAccess
+                expression is not InvocationExpressionSyntax invocation
+                || invocation.Expression is not MemberAccessExpressionSyntax memberAccess
                 || memberAccess.Expression is not IdentifierNameSyntax receiver
                 || !IsCompletionMethod(memberAccess.Name.Identifier.ValueText)
                 || !AnalyzerSyntaxHelpers.IsDotRocksTransactionType(

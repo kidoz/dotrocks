@@ -29,4 +29,29 @@ internal static class AnalyzerSyntaxHelpers
     public static bool IsDotRocksTransactionType(ITypeSymbol? type) =>
         IsNamedType(type, "DotRocks.Data.DotRocksTransaction")
         || IsNamedType(type, "DotRocks.Data.Loading.DotRocksStreamLoadTransaction");
+
+    /// <summary>
+    /// Returns true when the symbol belongs to the DotRocks product namespaces. Used to gate
+    /// analyzers so they do not fire on unrelated user code that merely contains similar strings.
+    /// </summary>
+    public static bool IsDotRocksSymbol(ISymbol? symbol)
+    {
+        for (
+            INamespaceSymbol? ns =
+                symbol?.ContainingType?.ContainingNamespace ?? symbol?.ContainingNamespace;
+            ns is { IsGlobalNamespace: false };
+            ns = ns.ContainingNamespace
+        )
+        {
+            if (
+                string.Equals(ns.Name, "DotRocks", StringComparison.Ordinal)
+                && ns.ContainingNamespace is { IsGlobalNamespace: true }
+            )
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 }

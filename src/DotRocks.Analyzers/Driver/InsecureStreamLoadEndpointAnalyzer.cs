@@ -60,6 +60,16 @@ public sealed class InsecureStreamLoadEndpointAnalyzer : DiagnosticAnalyzer
     private static void AnalyzeInvocation(SyntaxNodeAnalysisContext context)
     {
         var invocation = (InvocationExpressionSyntax)context.Node;
+
+        // Only inspect calls into DotRocks APIs. Without this gate the analyzer would flag any
+        // method anywhere (e.g. a logging call) whose argument happens to contain a connection
+        // string, producing false positives that break consumer builds under warnings-as-errors.
+        ISymbol? target = context.SemanticModel.GetSymbolInfo(invocation).Symbol;
+        if (!AnalyzerSyntaxHelpers.IsDotRocksSymbol(target))
+        {
+            return;
+        }
+
         foreach (ArgumentSyntax argument in invocation.ArgumentList.Arguments)
         {
             ReportIfInsecureConnectionString(context, argument.Expression);

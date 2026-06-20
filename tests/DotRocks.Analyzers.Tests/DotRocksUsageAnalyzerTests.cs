@@ -412,6 +412,104 @@ public sealed class DotRocksUsageAnalyzerTests
     }
 
     [Fact]
+    public async Task NonDotRocksInvocationWithInsecureConnectionString_DoesNotReportDiagnostic()
+    {
+        Diagnostic[] diagnostics = await AnalyzeAsync(
+                """
+                internal static class Sample
+                {
+                    public static void Log(string message) { }
+
+                    public static void Run()
+                    {
+                        Log(
+                            "Server=127.0.0.1;User ID=root;Password=secret;Stream Load Endpoint=http://127.0.0.1:8030"
+                        );
+                    }
+                }
+                """
+            )
+            .ConfigureAwait(true);
+
+        Assert.DoesNotContain(
+            diagnostics,
+            diagnostic =>
+                diagnostic.Id
+                == DotRocksDiagnosticDescriptors.InsecureStreamLoadEndpointDiagnosticId
+        );
+    }
+
+    [Fact]
+    public async Task TransactionCompletionInTryCatchBranches_DoesNotReportDiagnostic()
+    {
+        Diagnostic[] diagnostics = await AnalyzeAsync(
+                DotRocksStubs
+                    + """
+
+                    internal static class Sample
+                    {
+                        public static void Complete(DotRocks.Data.DotRocksTransaction transaction)
+                        {
+                            try
+                            {
+                                transaction.Commit();
+                            }
+                            catch
+                            {
+                                transaction.Rollback();
+                                throw;
+                            }
+                        }
+                    }
+                    """
+            )
+            .ConfigureAwait(true);
+
+        Assert.DoesNotContain(
+            diagnostics,
+            diagnostic =>
+                diagnostic.Id
+                == DotRocksDiagnosticDescriptors.TransactionDoubleCompletionDiagnosticId
+        );
+    }
+
+    [Fact]
+    public async Task TransactionCompletionInIfElseBranches_DoesNotReportDiagnostic()
+    {
+        Diagnostic[] diagnostics = await AnalyzeAsync(
+                DotRocksStubs
+                    + """
+
+                    internal static class Sample
+                    {
+                        public static void Complete(
+                            bool succeeded,
+                            DotRocks.Data.DotRocksTransaction transaction
+                        )
+                        {
+                            if (succeeded)
+                            {
+                                transaction.Commit();
+                            }
+                            else
+                            {
+                                transaction.Rollback();
+                            }
+                        }
+                    }
+                    """
+            )
+            .ConfigureAwait(true);
+
+        Assert.DoesNotContain(
+            diagnostics,
+            diagnostic =>
+                diagnostic.Id
+                == DotRocksDiagnosticDescriptors.TransactionDoubleCompletionDiagnosticId
+        );
+    }
+
+    [Fact]
     public async Task AnalyzerPackage_ContainsOnlyAnalyzerAssets()
     {
         string packagePath = await PackAnalyzerAsync().ConfigureAwait(true);
