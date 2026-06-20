@@ -14,12 +14,26 @@ internal sealed class DotRocksConnectionPool : IDisposable
     private readonly DotRocksConnectionOptions _options;
     private readonly SemaphoreSlim _leaseGate;
     private readonly Queue<PooledPhysicalConnection> _idleConnections = new();
+    private readonly Timer? _evictionTimer;
     private volatile bool _isDisposed;
+    private int _warmedUp;
 
     private DotRocksConnectionPool(DotRocksConnectionOptions options)
     {
         _options = options;
         _leaseGate = new SemaphoreSlim(options.MaximumPoolSize, options.MaximumPoolSize);
+
+        // Periodically prune connections that have been idle past ConnectionIdleTimeout even when
+        // the pool sees no rent/return activity. Without this an idle pool keeps sockets open.
+        if (options.ConnectionIdleTimeout > TimeSpan.Zero)
+        {
+            _evictionTimer = new Timer(
+                static state => ((DotRocksConnectionPool)state!).EvictExpiredIdleConnections(),
+                this,
+                options.ConnectionIdleTimeout,
+                options.ConnectionIdleTimeout
+            );
+        }
     }
 
     public static DotRocksConnectionPool GetPool(DotRocksConnectionOptions options)
@@ -33,6 +47,11 @@ internal sealed class DotRocksConnectionPool : IDisposable
     )
     {
         ObjectDisposedException.ThrowIf(_isDisposed, this);
+        if (Interlocked.Exchange(ref _warmedUp, 1) == 0 && _options.MinimumPoolSize > 0)
+        {
+            _ = Task.Run(WarmUpAsync, CancellationToken.None);
+        }
+
         await _leaseGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -121,6 +140,61 @@ internal sealed class DotRocksConnectionPool : IDisposable
         }
     }
 
+    // Pre-opens connections up to MinimumPoolSize so the first callers find a ready connection.
+    // Best-effort: a pre-open failure (server unreachable) must never crash the application.
+    internal async Task WarmUpAsync()
+    {
+        for (int i = 0; i < _options.MinimumPoolSize; i++)
+        {
+            if (_isDisposed)
+            {
+                return;
+            }
+
+            DotRocksPhysicalConnection connection;
+            try
+            {
+                connection = await DotRocksPhysicalConnection
+                    .OpenAsync(_options, CancellationToken.None)
+                    .ConfigureAwait(false);
+            }
+            catch (DotRocksException)
+            {
+                return;
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+
+            lock (_gate)
+            {
+                if (_isDisposed || _idleConnections.Count >= _options.MinimumPoolSize)
+                {
+                    connection.Dispose();
+                    return;
+                }
+
+                _idleConnections.Enqueue(
+                    new PooledPhysicalConnection(connection, DateTimeOffset.UtcNow)
+                );
+            }
+        }
+    }
+
+    private void EvictExpiredIdleConnections()
+    {
+        lock (_gate)
+        {
+            if (_isDisposed)
+            {
+                return;
+            }
+
+            PruneExpiredIdleConnections();
+        }
+    }
+
     private DotRocksPhysicalConnection? TryTakeIdleConnection()
     {
         lock (_gate)
@@ -187,6 +261,7 @@ internal sealed class DotRocksConnectionPool : IDisposable
             }
         }
 
+        _evictionTimer?.Dispose();
         _leaseGate.Dispose();
     }
 
