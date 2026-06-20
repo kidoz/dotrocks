@@ -33,28 +33,48 @@ internal sealed class DotRocksStringMethodTranslator(ISqlExpressionFactory sqlEx
             return null;
         }
 
+        SqlExpression escapedArgument = EscapeLikePattern(arguments[0]);
         SqlExpression pattern;
         if (method == StartsWithMethod)
         {
-            pattern = Concat(arguments[0], Constant("%"));
+            pattern = Concat(escapedArgument, Constant("%"));
         }
         else if (method == EndsWithMethod)
         {
-            pattern = Concat(Constant("%"), arguments[0]);
+            pattern = Concat(Constant("%"), escapedArgument);
         }
         else if (method == ContainsMethod)
         {
-            pattern = Concat(Constant("%"), arguments[0], Constant("%"));
+            pattern = Concat(Constant("%"), escapedArgument, Constant("%"));
         }
         else
         {
             return null;
         }
 
-        return sqlExpressionFactory.Like(instance, pattern, null!);
+        return sqlExpressionFactory.Like(instance, pattern, Constant("\\"));
     }
 
     private SqlExpression Constant(string value) => sqlExpressionFactory.Constant(value);
+
+    private SqlExpression EscapeLikePattern(SqlExpression value)
+    {
+        if (value is SqlConstantExpression { Value: string text })
+        {
+            return Constant(EscapeLikePattern(text));
+        }
+
+        return Replace(Replace(Replace(value, "\\", "\\\\"), "%", "\\%"), "_", "\\_");
+    }
+
+    private SqlExpression Replace(SqlExpression value, string search, string replacement) =>
+        sqlExpressionFactory.Function(
+            "REPLACE",
+            [value, Constant(search), Constant(replacement)],
+            nullable: true,
+            argumentsPropagateNullability: [true, false, false],
+            typeof(string)
+        );
 
     private SqlExpression Concat(params SqlExpression[] arguments) =>
         sqlExpressionFactory.Function(
@@ -64,4 +84,10 @@ internal sealed class DotRocksStringMethodTranslator(ISqlExpressionFactory sqlEx
             argumentsPropagateNullability: arguments.Select(_ => true),
             typeof(string)
         );
+
+    private static string EscapeLikePattern(string value) =>
+        value
+            .Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("%", "\\%", StringComparison.Ordinal)
+            .Replace("_", "\\_", StringComparison.Ordinal);
 }

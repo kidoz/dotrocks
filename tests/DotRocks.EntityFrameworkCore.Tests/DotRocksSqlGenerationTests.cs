@@ -60,6 +60,36 @@ public sealed class DotRocksSqlGenerationTests
         Assert.Equal("`db`.`table`", helper.DelimitIdentifier("table", "db"));
     }
 
+    [Fact]
+    public void ToQueryString_EscapesConstantStringContainsLikeWildcards()
+    {
+        using var context = CreateContext();
+
+        string sql = context.Widgets.Where(widget => widget.Name.Contains("_%\\")).ToQueryString();
+
+        Assert.Contains("LIKE", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ESCAPE", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("\\_", sql, StringComparison.Ordinal);
+        Assert.Contains("\\%", sql, StringComparison.Ordinal);
+        Assert.Contains("\\\\", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ToQueryString_EscapesParameterizedStringStartsWithLikeWildcards()
+    {
+        using var context = CreateContext();
+        string prefix = "_%\\";
+
+        string sql = context
+            .Widgets.Where(widget => widget.Name.StartsWith(prefix))
+            .ToQueryString();
+
+        Assert.Contains("@prefix", sql, StringComparison.Ordinal);
+        Assert.Contains("REPLACE", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ESCAPE", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("LIKE CONCAT(@prefix", sql, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static UnitContext CreateContext()
     {
         var optionsBuilder = new DbContextOptionsBuilder<UnitContext>();
