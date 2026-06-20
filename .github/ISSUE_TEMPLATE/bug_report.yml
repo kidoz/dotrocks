@@ -1,0 +1,47 @@
+name: Bug report
+description: Report a defect in DotRocks
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: Minimal steps or code (omit credentials) that reproduce the issue.
+    validations:
+      required: true
+  - type: input
+    id: dotrocks-version
+    attributes:
+      label: DotRocks version
+      placeholder: e.g. 0.1.0
+    validations:
+      required: true
+  - type: input
+    id: starrocks-version
+    attributes:
+      label: StarRocks version
+      placeholder: e.g. 4.0.7
+    validations:
+      required: false
+  - type: input
+    id: dotnet-version
+    attributes:
+      label: .NET version
+      placeholder: e.g. .NET 10
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / exceptions
+      description: Relevant exception messages or stack traces (redact secrets).
+      render: text
+    validations:
+      required: false
