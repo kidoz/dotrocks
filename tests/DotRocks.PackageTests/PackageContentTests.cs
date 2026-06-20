@@ -37,6 +37,8 @@ public sealed class PackageContentTests
 
             Assert.Contains("README.md", entries);
             Assert.Contains("lib/net10.0/" + packageId + ".dll", entries);
+            Assert.Contains("lib/net10.0/" + packageId + ".xml", entries);
+            AssertRuntimePackageLayout(packageId, entries);
             Assert.DoesNotContain(
                 entries,
                 entry => entry.StartsWith("analyzers/", StringComparison.Ordinal)
@@ -56,6 +58,10 @@ public sealed class PackageContentTests
                 "lib/net10.0/" + packageId + ".pdb",
                 symbols.Entries.Select(entry => entry.FullName)
             );
+            Assert.DoesNotContain(
+                symbols.Entries.Select(entry => entry.FullName),
+                entry => entry.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)
+            );
             AssertSourceLinkFileExists(packageId);
         }
 
@@ -69,6 +75,7 @@ public sealed class PackageContentTests
 
             Assert.Contains("README.md", entries);
             Assert.Contains("analyzers/dotnet/cs/" + packageId + ".dll", entries);
+            AssertAnalyzerPackageLayout(packageId, entries);
             Assert.DoesNotContain(
                 entries,
                 entry => entry.StartsWith("lib/", StringComparison.Ordinal)
@@ -202,6 +209,77 @@ public sealed class PackageContentTests
         Assert.True(File.Exists(sourceLinkPath), sourceLinkPath);
         string sourceLink = File.ReadAllText(sourceLinkPath);
         Assert.Contains("documents", sourceLink, StringComparison.Ordinal);
+    }
+
+    private static void AssertRuntimePackageLayout(string packageId, string[] entries)
+    {
+        Assert.Equal(
+            ["lib/net10.0/" + packageId + ".dll"],
+            entries
+                .Where(entry =>
+                    entry.StartsWith("lib/", StringComparison.Ordinal)
+                    && entry.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)
+                )
+                .Order(StringComparer.Ordinal)
+                .ToArray()
+        );
+        Assert.DoesNotContain(entries, entry => entry.StartsWith("ref/", StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            entries,
+            entry => entry.StartsWith("build/", StringComparison.Ordinal)
+        );
+        Assert.DoesNotContain(
+            entries,
+            entry => entry.StartsWith("buildTransitive/", StringComparison.Ordinal)
+        );
+        Assert.DoesNotContain(
+            entries,
+            entry => entry.StartsWith("runtimes/", StringComparison.Ordinal)
+        );
+        Assert.DoesNotContain(
+            entries,
+            entry => entry.StartsWith("native/", StringComparison.Ordinal)
+        );
+        Assert.DoesNotContain(
+            entries,
+            entry => entry.StartsWith("contentFiles/", StringComparison.Ordinal)
+        );
+    }
+
+    private static void AssertAnalyzerPackageLayout(string packageId, string[] entries)
+    {
+        Assert.Equal(
+            ["analyzers/dotnet/cs/" + packageId + ".dll"],
+            entries
+                .Where(entry =>
+                    entry.StartsWith("analyzers/", StringComparison.Ordinal)
+                    && entry.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)
+                )
+                .Order(StringComparer.Ordinal)
+                .ToArray()
+        );
+        Assert.DoesNotContain(entries, entry => entry.StartsWith("lib/", StringComparison.Ordinal));
+        Assert.DoesNotContain(entries, entry => entry.StartsWith("ref/", StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            entries,
+            entry => entry.StartsWith("build/", StringComparison.Ordinal)
+        );
+        Assert.DoesNotContain(
+            entries,
+            entry => entry.StartsWith("buildTransitive/", StringComparison.Ordinal)
+        );
+        Assert.DoesNotContain(
+            entries,
+            entry => entry.StartsWith("runtimes/", StringComparison.Ordinal)
+        );
+        Assert.DoesNotContain(
+            entries,
+            entry => entry.StartsWith("native/", StringComparison.Ordinal)
+        );
+        Assert.DoesNotContain(
+            entries,
+            entry => entry.StartsWith("contentFiles/", StringComparison.Ordinal)
+        );
     }
 
     private static bool IsRegularPackage(string path, string packageId)
