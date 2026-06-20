@@ -253,6 +253,7 @@ public sealed class DotRocksCommand : DbCommand
             ActivityKind.Client
         );
         long startTimestamp = Stopwatch.GetTimestamp();
+        bool succeeded = false;
         try
         {
             StreamingQueryResult result = await _connection
@@ -264,6 +265,7 @@ public sealed class DotRocksCommand : DbCommand
                 _connection.SetActiveReader(reader);
             }
 
+            succeeded = true;
             return reader;
         }
         catch (OperationCanceledException ex)
@@ -309,10 +311,16 @@ public sealed class DotRocksCommand : DbCommand
         }
         finally
         {
-            DotRocksTelemetry.CommandDuration.Record(
-                Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
+            var outcome = new KeyValuePair<string, object?>(
+                "outcome",
+                succeeded ? "success" : "error"
             );
-            DotRocksTelemetry.CommandsExecuted.Add(1);
+            activity?.SetStatus(succeeded ? ActivityStatusCode.Ok : ActivityStatusCode.Error);
+            DotRocksTelemetry.CommandDuration.Record(
+                Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds,
+                outcome
+            );
+            DotRocksTelemetry.CommandsExecuted.Add(1, outcome);
             ClearActiveCommandCancellation(commandCancellation);
         }
     }
