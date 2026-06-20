@@ -329,6 +329,15 @@ dotnet test --configuration Release --no-build
 dotnet pack --configuration Release --no-build
 ```
 
+Run the BenchmarkDotNet suite with performance budgets when changing protocol hot paths:
+
+```bash
+dotnet run --project benchmarks/DotRocks.Benchmarks --configuration Release -- --filter '*'
+```
+
+Benchmark results fail the process if a measured benchmark exceeds its configured mean
+time or allocation budget, or if a new benchmark is added without a budget entry.
+
 Integration tests run against a real StarRocks server and are documented separately; the
 commands above cover the server-free unit and protocol tests. CI keeps unit/build checks,
 package validation, StarRocks live integration, and release publishing in separate

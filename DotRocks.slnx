@@ -13,6 +13,7 @@
     <Project Path="benchmarks/DotRocks.Benchmarks/DotRocks.Benchmarks.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/DotRocks.Benchmarks.Tests/DotRocks.Benchmarks.Tests.csproj" />
     <Project Path="tests/DotRocks.Protocol.Tests/DotRocks.Protocol.Tests.csproj" />
     <Project Path="tests/DotRocks.Analyzers.Tests/DotRocks.Analyzers.Tests.csproj" />
     <Project Path="tests/DotRocks.PackageTests/DotRocks.PackageTests.csproj" />

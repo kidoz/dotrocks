@@ -111,6 +111,6 @@ starrocks-down:
 harness host=fe_host port=fe_port:
     dotnet run --project tests/DotRocks.CompatibilityHarness --configuration {{config}} -- {{host}} {{port}}
 
-# Run the BenchmarkDotNet suite (optionally filtered, e.g. `just bench '*Parse*'`).
+# Run the budgeted BenchmarkDotNet suite (optionally filtered, e.g. `just bench '*Parse*'`).
 bench filter='*':
     dotnet run --project benchmarks/DotRocks.Benchmarks --configuration Release -- --filter '{{filter}}'

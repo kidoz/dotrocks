@@ -1,0 +1,129 @@
+using DotRocks.Benchmarks;
+using Xunit;
+
+namespace DotRocks.Benchmarks.Tests;
+
+public sealed class PerformanceBudgetValidatorTests
+{
+    [Fact]
+    public void Validate_WhenMeasurementsAreWithinBudgets_Succeeds()
+    {
+        PerformanceBudgetResult result = PerformanceBudgetValidator.Validate(
+            [
+                new PerformanceBudgetMeasurement(
+                    "WriteLengthEncodedRow",
+                    MeanNanoseconds: 1_000,
+                    AllocatedBytes: 512
+                ),
+            ],
+            PerformanceBudgetCatalog.Budgets
+        );
+
+        Assert.True(result.Succeeded);
+        Assert.Empty(result.Violations);
+    }
+
+    [Fact]
+    public void Validate_WhenMeanExceedsBudget_ReportsViolation()
+    {
+        PerformanceBudgetResult result = PerformanceBudgetValidator.Validate(
+            [
+                new PerformanceBudgetMeasurement(
+                    "ParseIntegerValue",
+                    MeanNanoseconds: 1_001,
+                    AllocatedBytes: 64
+                ),
+            ],
+            PerformanceBudgetCatalog.Budgets
+        );
+
+        PerformanceBudgetViolation violation = Assert.Single(result.Violations);
+        Assert.False(result.Succeeded);
+        Assert.Equal("ParseIntegerValue", violation.BenchmarkName);
+        Assert.Equal(1_001, violation.ActualMeanNanoseconds);
+        Assert.Equal(1_000, violation.MaxMeanNanoseconds);
+        Assert.Contains("mean", violation.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Validate_WhenAllocationExceedsBudget_ReportsViolation()
+    {
+        PerformanceBudgetResult result = PerformanceBudgetValidator.Validate(
+            [
+                new PerformanceBudgetMeasurement(
+                    "ParseStringValue",
+                    MeanNanoseconds: 100,
+                    AllocatedBytes: 1_025
+                ),
+            ],
+            PerformanceBudgetCatalog.Budgets
+        );
+
+        PerformanceBudgetViolation violation = Assert.Single(result.Violations);
+        Assert.False(result.Succeeded);
+        Assert.Equal("ParseStringValue", violation.BenchmarkName);
+        Assert.Equal(1_025, violation.ActualAllocatedBytes);
+        Assert.Equal(1_024, violation.MaxAllocatedBytes);
+        Assert.Contains("allocated", violation.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Validate_WhenBenchmarkHasNoBudget_ReportsViolation()
+    {
+        PerformanceBudgetResult result = PerformanceBudgetValidator.Validate(
+            [
+                new PerformanceBudgetMeasurement(
+                    "NewBenchmarkWithoutBudget",
+                    MeanNanoseconds: 1,
+                    AllocatedBytes: 0
+                ),
+            ],
+            PerformanceBudgetCatalog.Budgets
+        );
+
+        PerformanceBudgetViolation violation = Assert.Single(result.Violations);
+        Assert.False(result.Succeeded);
+        Assert.Equal("NewBenchmarkWithoutBudget", violation.BenchmarkName);
+        Assert.Contains("No performance budget", violation.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validate_WhenAllocationMetricIsMissing_ReportsViolation()
+    {
+        PerformanceBudgetResult result = PerformanceBudgetValidator.Validate(
+            [
+                new PerformanceBudgetMeasurement(
+                    "FormatSqlLiteral",
+                    MeanNanoseconds: 100,
+                    AllocatedBytes: null
+                ),
+            ],
+            PerformanceBudgetCatalog.Budgets
+        );
+
+        PerformanceBudgetViolation violation = Assert.Single(result.Violations);
+        Assert.False(result.Succeeded);
+        Assert.Equal("FormatSqlLiteral", violation.BenchmarkName);
+        Assert.Contains("MemoryDiagnoser", violation.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BudgetCatalog_CoversEveryCurrentSerializationBenchmark()
+    {
+        string[] benchmarkNames = typeof(SerializationBenchmarks)
+            .GetMethods()
+            .Where(method =>
+                method
+                    .GetCustomAttributes(inherit: false)
+                    .Any(attribute => attribute.GetType().Name == "BenchmarkAttribute")
+            )
+            .Select(method => method.Name)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Equal(
+            benchmarkNames,
+            PerformanceBudgetCatalog.Budgets.Keys.Order(StringComparer.Ordinal)
+        );
+    }
+}
