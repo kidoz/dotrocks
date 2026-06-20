@@ -77,7 +77,7 @@ jobs:
         run: dotnet pack DotRocks.slnx --configuration Release --no-build --output artifacts/packages -p:Version=${{ steps.version.outputs.version }}
 
       - name: Attest package provenance
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: |
             artifacts/packages/*.nupkg
