@@ -12,6 +12,7 @@
   <Folder Name="/tests/">
     <Project Path="tests/DotRocks.Protocol.Tests/DotRocks.Protocol.Tests.csproj" />
     <Project Path="tests/DotRocks.Analyzers.Tests/DotRocks.Analyzers.Tests.csproj" />
+    <Project Path="tests/DotRocks.PackageTests/DotRocks.PackageTests.csproj" />
     <Project Path="tests/DotRocks.Data.IntegrationTests/DotRocks.Data.IntegrationTests.csproj" />
     <Project Path="tests/DotRocks.Data.DapperTests/DotRocks.Data.DapperTests.csproj" />
     <Project Path="tests/DotRocks.EntityFrameworkCore.Tests/DotRocks.EntityFrameworkCore.Tests.csproj" />
