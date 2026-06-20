@@ -54,7 +54,7 @@ internal sealed class DotRocksRelationalAnnotationProvider(
                 continue;
             }
 
-            if (result is not null && !Equals(result.Value, annotation.Value))
+            if (result is not null && !AnnotationValueEquals(result.Value, annotation.Value))
             {
                 throw new NotSupportedException(
                     $"DotRocks EF Core migrations do not support conflicting '{annotationName}' table-shape annotations on shared table '{table.SchemaQualifiedName}'."
@@ -65,5 +65,20 @@ internal sealed class DotRocksRelationalAnnotationProvider(
         }
 
         return result;
+    }
+
+    private static bool AnnotationValueEquals(object? left, object? right)
+    {
+        if (left is string[] leftArray && right is string[] rightArray)
+        {
+            return leftArray.SequenceEqual(rightArray, StringComparer.Ordinal);
+        }
+
+        if (left is IReadOnlyList<string> leftList && right is IReadOnlyList<string> rightList)
+        {
+            return leftList.SequenceEqual(rightList, StringComparer.Ordinal);
+        }
+
+        return Equals(left, right);
     }
 }

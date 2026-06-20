@@ -1,5 +1,8 @@
 using System.Diagnostics.CodeAnalysis;
+using DotRocks.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Xunit;
 
 namespace DotRocks.EntityFrameworkCore.Tests;
@@ -7,6 +10,7 @@ namespace DotRocks.EntityFrameworkCore.Tests;
 public sealed class DotRocksModelValidationTests
 {
     private static readonly string[] IdStoreColumn = ["id"];
+    private static readonly string[] EquivalentIdStoreColumn = ["id"];
 
     [Fact]
     public void GeneratedKey_ThrowsNotSupportedException()
@@ -105,6 +109,29 @@ public sealed class DotRocksModelValidationTests
 
         Assert.Contains("conflicting", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("DotRocks:KeyModel", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SharedTableWithEquivalentTableShapeAnnotations_ProvidesTableAnnotations()
+    {
+        using var context = CreateContext<EquivalentSharedTableShapeContext>();
+        var provider = context.GetService<IRelationalAnnotationProvider>();
+        ITable table = Assert.Single(
+            context.GetService<IDesignTimeModel>().Model.GetRelationalModel().Tables
+        );
+
+        IAnnotation[] annotations = provider.For(table, designTime: true).ToArray();
+
+        Assert.Equal(
+            DotRocksTableKeyModel.PrimaryKey,
+            annotations.Single(annotation => annotation.Name == "DotRocks:KeyModel").Value
+        );
+        Assert.Equal(
+            IdStoreColumn,
+            Assert.IsType<string[]>(
+                annotations.Single(annotation => annotation.Name == "DotRocks:KeyColumns").Value
+            )
+        );
     }
 
     private static TContext CreateContext<TContext>()
@@ -318,6 +345,40 @@ public sealed class DotRocksModelValidationTests
                 entity.HasBaseType<SharedTableBase>();
                 entity.Metadata.SetAnnotation("DotRocks:KeyModel", "DUPLICATE KEY");
                 entity.Metadata.SetAnnotation("DotRocks:KeyColumns", IdStoreColumn);
+            });
+        }
+    }
+
+    [SuppressMessage(
+        "Performance",
+        "CA1812:Avoid uninstantiated internal classes",
+        Justification = "The test methods instantiate this nested context through reflection."
+    )]
+    private sealed class EquivalentSharedTableShapeContext(
+        DbContextOptions<EquivalentSharedTableShapeContext> options
+    ) : DbContext(options)
+    {
+        public DbSet<SharedTableBase> Entities => Set<SharedTableBase>();
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<SharedTableBase>(entity =>
+            {
+                entity.ToTable("shared_table_shape_entities", "unit_db");
+                entity.HasKey(value => value.Id);
+                entity.Property(value => value.Id).ValueGeneratedNever().HasColumnName("id");
+                entity.HasDiscriminator<string>("kind");
+                entity.HasStarRocksPrimaryKey("id");
+            });
+
+            modelBuilder.Entity<SharedTableDerived>(entity =>
+            {
+                entity.HasBaseType<SharedTableBase>();
+                entity.Metadata.SetAnnotation(
+                    "DotRocks:KeyModel",
+                    DotRocksTableKeyModel.PrimaryKey
+                );
+                entity.Metadata.SetAnnotation("DotRocks:KeyColumns", EquivalentIdStoreColumn);
             });
         }
     }
