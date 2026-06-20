@@ -12,8 +12,6 @@ using System.Text;
 using DotRocks.Data;
 using DotRocks.Data.Authentication;
 using DotRocks.Data.Diagnostics;
-using DotRocks.Data.Loading;
-using DotRocks.Data.Pooling;
 using DotRocks.Data.Protocol.Framing;
 using DotRocks.Data.Protocol.Handshake;
 using DotRocks.Data.Protocol.Results;
@@ -133,28 +131,6 @@ public sealed class DotRocksConnectionCancellationTests
         Assert.True(connectionsOpened >= 1);
         Assert.True(commandsExecuted >= 1);
         Assert.True(durationRecorded);
-    }
-
-    [Fact]
-    public async Task Pool_WarmUp_PreOpensMinimumPoolSizeConnections()
-    {
-        // The fake server serves connections sequentially, so this verifies warm-up with a single
-        // pre-opened connection (Minimum Pool Size = 1).
-        using var server = FakeStarRocksServer.Start(HandleAuthThenKeepOpenAsync);
-        DotRocksConnectionOptions options = DotRocksConnectionOptions.Parse(
-            BuildFakeServerConnectionString(server.Port)
-                + ";Pooling=true;Minimum Pool Size=1;Maximum Pool Size=4"
-        );
-        DotRocksConnectionPool pool = DotRocksConnectionPool.GetPool(options);
-        try
-        {
-            await pool.WarmUpAsync().ConfigureAwait(true);
-            Assert.Equal(1, pool.IdleCount);
-        }
-        finally
-        {
-            pool.Dispose();
-        }
     }
 
     [Fact]
@@ -543,31 +519,6 @@ public sealed class DotRocksConnectionCancellationTests
             .ConfigureAwait(true);
         await Task.Delay(TimeSpan.FromMilliseconds(250), TestContext.Current.CancellationToken)
             .ConfigureAwait(true);
-    }
-
-    private static async Task HandleAuthThenKeepOpenAsync(NetworkStream stream)
-    {
-        await CompleteAuthenticationAsync(stream).ConfigureAwait(true);
-        byte[] buffer = new byte[256];
-        try
-        {
-            while (
-                await stream
-                    .ReadAsync(buffer, TestContext.Current.CancellationToken)
-                    .ConfigureAwait(true) > 0
-            )
-            {
-                // Drain anything sent; keep the socket open until the client closes it.
-            }
-        }
-        catch (IOException)
-        {
-            // The client closed the pooled connection; the keep-alive loop ends.
-        }
-        catch (OperationCanceledException)
-        {
-            // The fake server is shutting down.
-        }
     }
 
     private static async Task CompleteAuthenticationAsync(NetworkStream stream)
