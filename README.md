@@ -114,16 +114,20 @@ Supported EF Core query surface:
   `DotRocksDecimal`.
 - `OrderBy`, `ThenBy`, `OrderByDescending`, `Skip`, `Take`, `Distinct`.
 - `Contains` over constant/parameter collections for `IN (...)`.
-- `StartsWith`, `EndsWith`, and `Contains` for strings using StarRocks `LIKE`.
+- `StartsWith`, `EndsWith`, and `Contains` for strings using StarRocks `LIKE` (wildcards are
+  backslash-escaped; StarRocks does not accept an `ESCAPE` clause and is not emitted one).
 - `FirstOrDefaultAsync`, `SingleAsync`, `ToListAsync`, `CountAsync`, `AnyAsync`.
 - Aggregate basics: `Min`, `Max`, `Sum`, `Average`.
 - Projection into anonymous objects and simple DTOs.
 - `SaveChangesAsync` for a constrained single-table write model: explicit primary key,
   scalar properties only, single-column keys, `ValueGeneratedNever()`, no navigations, no
   generated values, and no concurrency tokens. Supported DML is parameterized `INSERT`,
-  `UPDATE ... WHERE pk = @p`, and `DELETE ... WHERE pk = @p`. Multiple changed
-  entities are emitted as separate parameterized commands; DotRocks does not currently
-  model OLTP-style affected-row concurrency checks.
+  `UPDATE ... WHERE pk = @p`, and `DELETE ... WHERE pk = @p`. Save **one row per
+  `SaveChanges`**: StarRocks rejects a second DML against a table already written in the same
+  transaction (error 5303), so a multi-row `SaveChanges` to one table fails — use one row per
+  call, or Stream Load for bulk. `SaveChanges` inside a user transaction works; StarRocks has
+  no `SAVEPOINT`, so EF savepoints are disabled. DotRocks does not model OLTP-style
+  affected-row concurrency checks.
 - Minimal migrations can create StarRocks databases from `EnsureSchema` as
   `CREATE DATABASE IF NOT EXISTS`, create and drop StarRocks tables, and create the EF
   migrations history table. `CREATE TABLE` defaults to `DUPLICATE KEY`, hash
@@ -142,7 +146,8 @@ Unsupported EF Core behavior is explicit:
   creation/drop, including `DROP DATABASE`, add/drop/alter/rename column, rename table,
   indexes, add/drop primary key, foreign keys, defaults, and computed columns.
 - idempotent migration scripts.
-- composite-key writes.
+- composite-key writes, and multi-row `SaveChanges` to a single table (StarRocks error 5303).
+- `SAVEPOINT` (unsupported by StarRocks; EF savepoints are disabled).
 - joins, `Include`, navigation materialization, and `GroupBy`.
 - binary/varbinary EF mapping until byte-array query translation and materialization are
   broader than the verified ADO.NET reader path.

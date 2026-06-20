@@ -502,7 +502,7 @@ public sealed class DotRocksEfCoreIntegrationTests
     }
 
     [Fact]
-    public async Task SaveChangesAsync_MultipleRowsSameTable_FailsWithStarRocksMultiDmlLimitation()
+    public async Task SaveChangesAsync_MultipleRowsSameTable_CharacterizesStarRocksMultiDml()
     {
         if (!IntegrationTestEnvironment.IsEnabled)
         {
@@ -517,9 +517,10 @@ public sealed class DotRocksEfCoreIntegrationTests
         try
         {
             // Multiple changed rows for the same table make EF wrap several DML statements in one
-            // transaction. StarRocks rejects a second DML against a table already written in the
-            // same transaction (ERROR 5303), so multi-row SaveChanges to one table is unsupported;
-            // use one row per SaveChanges (separate transactions) or Stream Load for bulk writes.
+            // transaction. This is version-dependent on StarRocks: newer builds (4.0.x) reject a
+            // second DML against a table already written in the same transaction (error 5303),
+            // while older builds (3.3.x) accept it. Characterize both outcomes; for portable bulk
+            // writes use one row per SaveChanges (separate transactions) or Stream Load.
             context.WriteWidgets.AddRange(
                 new EfWriteWidget
                 {
@@ -537,20 +538,29 @@ public sealed class DotRocksEfCoreIntegrationTests
                 }
             );
 
-            DbUpdateException exception = await Assert
-                .ThrowsAsync<DbUpdateException>(async () =>
-                    await context
-                        .SaveChangesAsync(TestContext.Current.CancellationToken)
-                        .ConfigureAwait(true)
-                )
-                .ConfigureAwait(true);
+            try
+            {
+                int affected = await context
+                    .SaveChangesAsync(TestContext.Current.CancellationToken)
+                    .ConfigureAwait(true);
 
-            var inner = Assert.IsType<DotRocksException>(exception.InnerException);
-            Assert.Contains(
-                "subjected to DML operations before",
-                inner.Message,
-                StringComparison.OrdinalIgnoreCase
-            );
+                // Accepted (older StarRocks): both rows are written.
+                Assert.Equal(2, affected);
+                int count = await context
+                    .WriteWidgets.AsNoTracking()
+                    .CountAsync(TestContext.Current.CancellationToken)
+                    .ConfigureAwait(true);
+                Assert.Equal(2, count);
+            }
+            catch (DbUpdateException ex) when (ex.InnerException is DotRocksException inner)
+            {
+                // Rejected (newer StarRocks): the multi-DML-in-one-transaction limitation.
+                Assert.Contains(
+                    "subjected to DML operations before",
+                    inner.Message,
+                    StringComparison.OrdinalIgnoreCase
+                );
+            }
         }
         finally
         {
