@@ -32,6 +32,7 @@ public sealed class DotRocksStreamLoadClient : IDisposable
         _options = options;
         _httpClient = httpClient;
         _disposeHttpClient = disposeHttpClient;
+        ValidateTransportSecurity(options);
     }
 
     /// <summary>
@@ -251,6 +252,13 @@ public sealed class DotRocksStreamLoadClient : IDisposable
             {
                 if (IsRedirect(response))
                 {
+                    if (payload is not null && !payload.CanSeek)
+                    {
+                        throw new DotRocksStreamLoadException(
+                            "StarRocks Stream Load redirected a non-seekable payload stream. Use a seekable stream or send the load directly to the final endpoint."
+                        );
+                    }
+
                     requestUri = GetRedirectUri(response, requestUri);
                     continue;
                 }
@@ -372,6 +380,22 @@ public sealed class DotRocksStreamLoadClient : IDisposable
         }
 
         return location.IsAbsoluteUri ? location : new Uri(requestUri, location);
+    }
+
+    private static void ValidateTransportSecurity(DotRocksConnectionOptions options)
+    {
+        if (
+            string.Equals(
+                options.StreamLoadEndpoint.Scheme,
+                Uri.UriSchemeHttp,
+                StringComparison.OrdinalIgnoreCase
+            ) && !options.AllowInsecureStreamLoad
+        )
+        {
+            throw new InvalidOperationException(
+                "HTTP Stream Load endpoints send Basic authentication without transport encryption. Use HTTPS or set 'Allow Insecure Stream Load=true' for trusted local test environments."
+            );
+        }
     }
 
     private static void ValidateIdentifier(string value, string parameterName)

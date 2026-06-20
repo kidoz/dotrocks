@@ -47,6 +47,48 @@ public sealed class HandshakeResponseBuilderTests
     }
 
     [Fact]
+    public void BuildSslRequest_WritesTlsRequestWithoutCredentials()
+    {
+        DotRocksConnectionOptions options = DotRocksConnectionOptions.Parse(
+            "Server=localhost;User ID=alice;Password=secret;Ssl Mode=Required"
+        );
+        ServerHandshake handshake = BuildHandshake(
+            MySqlNativePassword.PluginName,
+            supportsTls: true
+        );
+
+        byte[] payload = HandshakeResponseBuilder.BuildSslRequest(options, handshake);
+
+        var reader = new ProtocolReader(payload);
+        var capabilities = (CapabilityFlags)reader.ReadFixedInteger(4);
+        Assert.True(capabilities.HasFlag(CapabilityFlags.Ssl));
+        Assert.True(capabilities.HasFlag(CapabilityFlags.Protocol41));
+        Assert.True(capabilities.HasFlag(CapabilityFlags.SecureConnection));
+        Assert.Equal(0UL, reader.ReadFixedInteger(4));
+        Assert.Equal(0x21, reader.ReadByte());
+        reader.ReadBytes(23);
+        Assert.True(reader.IsAtEnd);
+        Assert.False(ContainsSequence(payload, Encoding.UTF8.GetBytes("alice")));
+        Assert.False(ContainsSequence(payload, Encoding.UTF8.GetBytes("secret")));
+    }
+
+    [Fact]
+    public void BuildSslRequest_RejectsServerWithoutTlsSupport()
+    {
+        DotRocksConnectionOptions options = DotRocksConnectionOptions.Parse(
+            "Server=localhost;User ID=alice;Password=secret;Ssl Mode=Required"
+        );
+        ServerHandshake handshake = BuildHandshake(MySqlNativePassword.PluginName);
+
+        DotRocksException exception = Assert.Throws<DotRocksException>(() =>
+            HandshakeResponseBuilder.BuildSslRequest(options, handshake)
+        );
+
+        Assert.Contains("TLS support", exception.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("secret", exception.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Build_RejectsUnsupportedAuthenticationPlugin_WithoutLeakingPassword()
     {
         DotRocksConnectionOptions options = DotRocksConnectionOptions.Parse(
@@ -66,7 +108,7 @@ public sealed class HandshakeResponseBuilderTests
         Assert.DoesNotContain("secret", exception.ToString(), StringComparison.Ordinal);
     }
 
-    private static ServerHandshake BuildHandshake(string authPluginName)
+    private static ServerHandshake BuildHandshake(string authPluginName, bool supportsTls = false)
     {
         CapabilityFlags capabilities =
             CapabilityFlags.LongPassword
@@ -76,6 +118,10 @@ public sealed class HandshakeResponseBuilderTests
             | CapabilityFlags.PluginAuth
             | CapabilityFlags.ConnectWithDb
             | CapabilityFlags.Transactions;
+        if (supportsTls)
+        {
+            capabilities |= CapabilityFlags.Ssl;
+        }
 
         uint caps = (uint)capabilities;
         using var writer = new ProtocolWriter();

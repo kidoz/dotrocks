@@ -26,6 +26,9 @@ public sealed class ConnectionStringBuilderTests
         Assert.Equal(0, builder.MinimumPoolSize);
         Assert.Equal(100, builder.MaximumPoolSize);
         Assert.Equal(300, builder.ConnectionIdleTimeout);
+        Assert.Equal(DotRocksSslMode.Disabled, builder.SslMode);
+        Assert.False(builder.TrustServerCertificate);
+        Assert.False(builder.AllowInsecureStreamLoad);
         Assert.Equal("http://starrocks.local:8030/", builder.StreamLoadEndpoint);
         Assert.Contains(
             "Stream Load Endpoint=http://starrocks.local:8030/",
@@ -103,15 +106,46 @@ public sealed class ConnectionStringBuilderTests
     }
 
     [Fact]
+    public void TlsOptions_ParseAliases()
+    {
+        var builder = new DotRocksConnectionStringBuilder(
+            "SSL Mode=Required;TrustServerCertificate=true"
+        );
+
+        Assert.Equal(DotRocksSslMode.Required, builder.SslMode);
+        Assert.True(builder.TrustServerCertificate);
+        Assert.Contains("Ssl Mode=Required", builder.ToString(), StringComparison.Ordinal);
+        Assert.Contains(
+            "Trust Server Certificate=True",
+            builder.ToString(),
+            StringComparison.Ordinal
+        );
+    }
+
+    [Fact]
+    public void TrustServerCertificateWithoutTls_Throws()
+    {
+        Assert.Throws<ArgumentException>(() =>
+            _ = new DotRocksConnectionStringBuilder("Trust Server Certificate=true").BuildOptions()
+        );
+    }
+
+    [Fact]
     public void StreamLoadEndpoint_ParsesAliases()
     {
         var builder = new DotRocksConnectionStringBuilder(
-            "Host=starrocks.local;Http Endpoint=https://load.starrocks.local:8443"
+            "Host=starrocks.local;Http Endpoint=https://load.starrocks.local:8443;AllowInsecureStreamLoad=true"
         );
 
         Assert.Equal("https://load.starrocks.local:8443/", builder.StreamLoadEndpoint);
+        Assert.True(builder.AllowInsecureStreamLoad);
         Assert.Contains(
             "Stream Load Endpoint=https://load.starrocks.local:8443/",
+            builder.ToString(),
+            StringComparison.Ordinal
+        );
+        Assert.Contains(
+            "Allow Insecure Stream Load=True",
             builder.ToString(),
             StringComparison.Ordinal
         );

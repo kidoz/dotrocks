@@ -45,6 +45,7 @@ public sealed class DotRocks.Data.DotRocksConnection System.Data.Common.DbConnec
 public sealed class DotRocks.Data.DotRocksConnectionStringBuilder System.Data.Common.DbConnectionStringBuilder , System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<System.String, System.Object>>, System.Collections.Generic.IReadOnlyCollection<System.Collections.Generic.KeyValuePair<System.String, System.Object>>
   public DotRocks.Data.DotRocksConnectionStringBuilder()
   public DotRocks.Data.DotRocksConnectionStringBuilder(System.String connectionString)
+  public property System.Boolean AllowInsecureStreamLoad { get; set; }
   public property System.Int32 ConnectionIdleTimeout { get; set; }
   public property System.Int32 ConnectionTimeout { get; set; }
   public property System.String Database { get; set; }
@@ -54,7 +55,9 @@ public sealed class DotRocks.Data.DotRocksConnectionStringBuilder System.Data.Co
   public property System.Boolean Pooling { get; set; }
   public property System.Int32 Port { get; set; }
   public property System.String Server { get; set; }
+  public property DotRocks.Data.DotRocksSslMode SslMode { get; set; }
   public property System.String StreamLoadEndpoint { get; set; }
+  public property System.Boolean TrustServerCertificate { get; set; }
   public property System.String UserId { get; set; }
   public virtual method System.String ToString()
 
@@ -156,6 +159,10 @@ public sealed class DotRocks.Data.DotRocksPrecisionLossException DotRocks.Data.D
   public DotRocks.Data.DotRocksPrecisionLossException()
   public DotRocks.Data.DotRocksPrecisionLossException(System.String message)
   public DotRocks.Data.DotRocksPrecisionLossException(System.String message, System.Exception innerException)
+
+public enum DotRocks.Data.DotRocksSslMode
+  public static field DotRocks.Data.DotRocksSslMode Disabled
+  public static field DotRocks.Data.DotRocksSslMode Required
 
 public sealed class DotRocks.Data.DotRocksTransaction System.Data.Common.DbTransaction
   protected property System.Data.Common.DbConnection DbConnection { get; }

@@ -141,6 +141,48 @@ public sealed class DotRocksStreamLoadClientTests
         Assert.All(handler.Requests, request => Assert.Equal(HttpMethod.Put, request.Method));
     }
 
+    [Fact]
+    public void Constructor_HttpEndpointWithoutExplicitOptIn_Throws()
+    {
+        DotRocksConnectionOptions options = DotRocksConnectionOptions.Parse(
+            "Server=starrocks.local;User ID=alice;Password=secret"
+        );
+        using var handler = new RecordingHandler(static (_, _) => Task.FromResult(JsonResponse()));
+        using var httpClient = new HttpClient(handler);
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            new DotRocksStreamLoadClient(options, httpClient, disposeHttpClient: false)
+        );
+
+        Assert.Contains("HTTP Stream Load", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("Allow Insecure Stream Load", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task LoadCsvAsync_RedirectWithNonSeekablePayload_Throws()
+    {
+        using var handler = new RedirectingHandler();
+        using var httpClient = new HttpClient(handler);
+        using var client = CreateClient(httpClient);
+        using var payload = new NonSeekableStream(Encoding.UTF8.GetBytes("1,one\\n"));
+
+        DotRocksStreamLoadException exception = await Assert
+            .ThrowsAsync<DotRocksStreamLoadException>(async () =>
+                await client
+                    .LoadCsvAsync(
+                        "warehouse",
+                        "events",
+                        payload,
+                        cancellationToken: TestContext.Current.CancellationToken
+                    )
+                    .ConfigureAwait(true)
+            )
+            .ConfigureAwait(true);
+
+        Assert.Contains("non-seekable", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Single(handler.Requests);
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData(" ")]
@@ -643,7 +685,7 @@ public sealed class DotRocksStreamLoadClientTests
     private static DotRocksStreamLoadClient CreateClient(HttpClient httpClient)
     {
         DotRocksConnectionOptions options = DotRocksConnectionOptions.Parse(
-            "Server=starrocks.local;User ID=alice;Password=secret"
+            "Server=starrocks.local;User ID=alice;Password=secret;Allow Insecure Stream Load=true"
         );
         return new DotRocksStreamLoadClient(options, httpClient, disposeHttpClient: false);
     }
@@ -691,6 +733,19 @@ public sealed class DotRocksStreamLoadClientTests
             Request = request;
             return responder(request, cancellationToken);
         }
+    }
+
+    private sealed class NonSeekableStream(byte[] bytes) : MemoryStream(bytes)
+    {
+        public override bool CanSeek => false;
+
+        public override long Position
+        {
+            get => base.Position;
+            set => throw new NotSupportedException();
+        }
+
+        public override long Seek(long offset, SeekOrigin loc) => throw new NotSupportedException();
     }
 
     private sealed class RedirectingHandler : HttpMessageHandler

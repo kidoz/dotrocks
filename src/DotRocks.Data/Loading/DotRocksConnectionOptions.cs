@@ -1,5 +1,6 @@
 using System.Data.Common;
 using System.Text;
+using DotRocks.Data;
 
 namespace DotRocks.Data.Loading;
 
@@ -14,7 +15,10 @@ internal sealed record DotRocksConnectionOptions(
     int MinimumPoolSize,
     int MaximumPoolSize,
     TimeSpan ConnectionIdleTimeout,
+    DotRocksSslMode SslMode,
+    bool TrustServerCertificate,
     Uri StreamLoadEndpoint,
+    bool AllowInsecureStreamLoad,
     string ConnectionString
 )
 {
@@ -40,7 +44,10 @@ internal sealed record DotRocksConnectionOptions(
             DefaultMinimumPoolSize,
             DefaultMaximumPoolSize,
             TimeSpan.FromSeconds(DefaultConnectionIdleTimeoutSeconds),
+            DotRocksSslMode.Disabled,
+            false,
             BuildDefaultStreamLoadEndpoint(DefaultServer),
+            false,
             string.Empty
         );
 
@@ -76,11 +83,14 @@ internal sealed record DotRocksConnectionOptions(
             "Connection Idle Timeout",
             DefaultConnectionIdleTimeoutSeconds
         );
+        DotRocksSslMode sslMode = GetEnum(builder, "Ssl Mode", DotRocksSslMode.Disabled);
+        bool trustServerCertificate = GetBoolean(builder, "Trust Server Certificate", false);
         Uri streamLoadEndpoint = GetUri(
             builder,
             "Stream Load Endpoint",
             BuildDefaultStreamLoadEndpoint(server)
         );
+        bool allowInsecureStreamLoad = GetBoolean(builder, "Allow Insecure Stream Load", false);
 
         Validate(
             server,
@@ -90,6 +100,8 @@ internal sealed record DotRocksConnectionOptions(
             minimumPoolSize,
             maximumPoolSize,
             idleTimeoutSeconds,
+            sslMode,
+            trustServerCertificate,
             streamLoadEndpoint
         );
         string canonical = BuildConnectionString(
@@ -103,7 +115,10 @@ internal sealed record DotRocksConnectionOptions(
             minimumPoolSize,
             maximumPoolSize,
             idleTimeoutSeconds,
-            streamLoadEndpoint
+            sslMode,
+            trustServerCertificate,
+            streamLoadEndpoint,
+            allowInsecureStreamLoad
         );
 
         return new DotRocksConnectionOptions(
@@ -117,7 +132,10 @@ internal sealed record DotRocksConnectionOptions(
             minimumPoolSize,
             maximumPoolSize,
             TimeSpan.FromSeconds(idleTimeoutSeconds),
+            sslMode,
+            trustServerCertificate,
             streamLoadEndpoint,
+            allowInsecureStreamLoad,
             canonical
         );
     }
@@ -134,11 +152,23 @@ internal sealed record DotRocksConnectionOptions(
             MinimumPoolSize,
             MaximumPoolSize,
             (int)ConnectionIdleTimeout.TotalSeconds,
-            StreamLoadEndpoint
+            SslMode,
+            TrustServerCertificate,
+            StreamLoadEndpoint,
+            AllowInsecureStreamLoad
         );
 
     internal DotRocksConnectionPoolKey CreatePoolKey() =>
-        new(Server, Port, UserId, Password, Database, (int)ConnectionTimeout.TotalSeconds);
+        new(
+            Server,
+            Port,
+            UserId,
+            Password,
+            Database,
+            (int)ConnectionTimeout.TotalSeconds,
+            SslMode,
+            TrustServerCertificate
+        );
 
     private static void Validate(
         string server,
@@ -148,6 +178,8 @@ internal sealed record DotRocksConnectionOptions(
         int minimumPoolSize,
         int maximumPoolSize,
         int idleTimeoutSeconds,
+        DotRocksSslMode sslMode,
+        bool trustServerCertificate,
         Uri streamLoadEndpoint
     )
     {
@@ -180,6 +212,14 @@ internal sealed record DotRocksConnectionOptions(
                 nameof(minimumPoolSize),
                 minimumPoolSize,
                 "Minimum Pool Size must be less than or equal to Maximum Pool Size."
+            );
+        }
+
+        if (trustServerCertificate && sslMode == DotRocksSslMode.Disabled)
+        {
+            throw new ArgumentException(
+                "Trust Server Certificate requires Ssl Mode=Required.",
+                nameof(trustServerCertificate)
             );
         }
 
@@ -256,6 +296,40 @@ internal sealed record DotRocksConnectionOptions(
         return fallback;
     }
 
+    private static TEnum GetEnum<TEnum>(
+        DbConnectionStringBuilder builder,
+        string canonical,
+        TEnum fallback
+    )
+        where TEnum : struct, Enum
+    {
+        foreach (string keyword in Aliases(canonical))
+        {
+            if (builder.TryGetValue(keyword, out object? value))
+            {
+                if (value is TEnum typed)
+                {
+                    return typed;
+                }
+
+                string text =
+                    Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture)
+                    ?? string.Empty;
+                if (Enum.TryParse(text, ignoreCase: true, out TEnum parsed))
+                {
+                    return parsed;
+                }
+
+                throw new ArgumentException(
+                    $"{canonical} value '{text}' is not supported.",
+                    nameof(builder)
+                );
+            }
+        }
+
+        return fallback;
+    }
+
     private static Uri GetUri(DbConnectionStringBuilder builder, string canonical, Uri fallback)
     {
         foreach (string keyword in Aliases(canonical))
@@ -286,6 +360,14 @@ internal sealed record DotRocksConnectionOptions(
             "Minimum Pool Size" => ["Minimum Pool Size", "Min Pool Size"],
             "Maximum Pool Size" => ["Maximum Pool Size", "Max Pool Size"],
             "Connection Idle Timeout" => ["Connection Idle Timeout", "Idle Timeout"],
+            "Ssl Mode" => ["Ssl Mode", "SSL Mode", "SslMode"],
+            "Trust Server Certificate" => ["Trust Server Certificate", "TrustServerCertificate"],
+            "Allow Insecure Stream Load" =>
+            [
+                "Allow Insecure Stream Load",
+                "AllowInsecureStreamLoad",
+                "Allow Insecure StreamLoad",
+            ],
             "Stream Load Endpoint" =>
             [
                 "Stream Load Endpoint",
@@ -307,7 +389,10 @@ internal sealed record DotRocksConnectionOptions(
         int minimumPoolSize,
         int maximumPoolSize,
         int idleTimeoutSeconds,
-        Uri streamLoadEndpoint
+        DotRocksSslMode sslMode,
+        bool trustServerCertificate,
+        Uri streamLoadEndpoint,
+        bool allowInsecureStreamLoad
     )
     {
         var builder = new StringBuilder();
@@ -349,7 +434,18 @@ internal sealed record DotRocksConnectionOptions(
             "Connection Idle Timeout",
             idleTimeoutSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture)
         );
+        Append(builder, "Ssl Mode", sslMode.ToString());
+        Append(
+            builder,
+            "Trust Server Certificate",
+            trustServerCertificate.ToString(System.Globalization.CultureInfo.InvariantCulture)
+        );
         Append(builder, "Stream Load Endpoint", streamLoadEndpoint.AbsoluteUri);
+        Append(
+            builder,
+            "Allow Insecure Stream Load",
+            allowInsecureStreamLoad.ToString(System.Globalization.CultureInfo.InvariantCulture)
+        );
         return builder.ToString();
     }
 
@@ -372,5 +468,7 @@ internal sealed record DotRocksConnectionPoolKey(
     string UserId,
     string Password,
     string Database,
-    int ConnectionTimeoutSeconds
+    int ConnectionTimeoutSeconds,
+    DotRocksSslMode SslMode,
+    bool TrustServerCertificate
 );

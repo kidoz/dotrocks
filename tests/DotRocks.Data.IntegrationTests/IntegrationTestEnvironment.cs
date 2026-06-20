@@ -56,6 +56,10 @@ internal static class IntegrationTestEnvironment
             if (!string.IsNullOrWhiteSpace(streamLoadEndpoint))
             {
                 builder.StreamLoadEndpoint = streamLoadEndpoint;
+                if (builder.StreamLoadEndpoint.StartsWith("http://", StringComparison.Ordinal))
+                {
+                    builder.AllowInsecureStreamLoad = true;
+                }
             }
             else
             {
@@ -72,6 +76,7 @@ internal static class IntegrationTestEnvironment
                 )
                 {
                     builder.StreamLoadEndpoint = $"http://{builder.Server}:{parsedHttpPort}";
+                    builder.AllowInsecureStreamLoad = true;
                 }
             }
 

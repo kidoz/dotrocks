@@ -11,6 +11,36 @@ internal static class HandshakeResponseBuilder
     private const byte DefaultCharacterSet = 0x21;
     private const int ReservedLength = 23;
 
+    public static byte[] BuildSslRequest(
+        DotRocksConnectionOptions options,
+        ServerHandshake handshake
+    )
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(handshake);
+
+        if (options.SslMode == DotRocksSslMode.Disabled)
+        {
+            throw new DotRocksException("Ssl Mode is disabled for this connection.");
+        }
+
+        if (!handshake.Capabilities.HasFlag(CapabilityFlags.Ssl))
+        {
+            throw new DotRocksException(
+                "The StarRocks server does not advertise SQL protocol TLS support."
+            );
+        }
+
+        CapabilityFlags capabilities =
+            BuildCapabilityFlags(options, handshake) | CapabilityFlags.Ssl;
+        using var writer = new ProtocolWriter();
+        writer.WriteFixedInteger((uint)capabilities, 4);
+        writer.WriteFixedInteger(0, 4);
+        writer.WriteByte(DefaultCharacterSet);
+        writer.WriteBytes(new byte[ReservedLength]);
+        return writer.ToArray();
+    }
+
     public static byte[] Build(DotRocksConnectionOptions options, ServerHandshake handshake)
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -46,20 +76,7 @@ internal static class HandshakeResponseBuilder
             );
         }
 
-        CapabilityFlags capabilities =
-            CapabilityFlags.LongPassword
-            | CapabilityFlags.LongFlag
-            | CapabilityFlags.Protocol41
-            | CapabilityFlags.SecureConnection
-            | CapabilityFlags.PluginAuth
-            | CapabilityFlags.Transactions;
-
-        if (options.Database.Length > 0)
-        {
-            capabilities |= CapabilityFlags.ConnectWithDb;
-        }
-
-        capabilities &= handshake.Capabilities;
+        CapabilityFlags capabilities = BuildCapabilityFlags(options, handshake);
         byte[] authResponse = MySqlNativePassword.CreateAuthenticationResponse(
             options.Password,
             handshake.AuthPluginData
@@ -80,5 +97,31 @@ internal static class HandshakeResponseBuilder
         writer.WriteNullTerminatedString(MySqlNativePassword.PluginName, Encoding.ASCII);
         Array.Clear(authResponse);
         return writer.ToArray();
+    }
+
+    private static CapabilityFlags BuildCapabilityFlags(
+        DotRocksConnectionOptions options,
+        ServerHandshake handshake
+    )
+    {
+        CapabilityFlags capabilities =
+            CapabilityFlags.LongPassword
+            | CapabilityFlags.LongFlag
+            | CapabilityFlags.Protocol41
+            | CapabilityFlags.SecureConnection
+            | CapabilityFlags.PluginAuth
+            | CapabilityFlags.Transactions;
+
+        if (options.Database.Length > 0)
+        {
+            capabilities |= CapabilityFlags.ConnectWithDb;
+        }
+
+        if (options.SslMode != DotRocksSslMode.Disabled)
+        {
+            capabilities |= CapabilityFlags.Ssl;
+        }
+
+        return capabilities & handshake.Capabilities;
     }
 }

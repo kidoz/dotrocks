@@ -27,7 +27,10 @@ public sealed class DotRocksConnectionStringBuilder
     private const string MinimumPoolSizeKeyword = "Minimum Pool Size";
     private const string MaximumPoolSizeKeyword = "Maximum Pool Size";
     private const string ConnectionIdleTimeoutKeyword = "Connection Idle Timeout";
+    private const string SslModeKeyword = "Ssl Mode";
+    private const string TrustServerCertificateKeyword = "Trust Server Certificate";
     private const string StreamLoadEndpointKeyword = "Stream Load Endpoint";
+    private const string AllowInsecureStreamLoadKeyword = "Allow Insecure Stream Load";
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DotRocksConnectionStringBuilder"/> class.
@@ -42,6 +45,9 @@ public sealed class DotRocksConnectionStringBuilder
         MinimumPoolSize = DotRocksConnectionOptions.DefaultMinimumPoolSize;
         MaximumPoolSize = DotRocksConnectionOptions.DefaultMaximumPoolSize;
         ConnectionIdleTimeout = DotRocksConnectionOptions.DefaultConnectionIdleTimeoutSeconds;
+        SslMode = DotRocksSslMode.Disabled;
+        TrustServerCertificate = false;
+        AllowInsecureStreamLoad = false;
     }
 
     /// <summary>
@@ -175,6 +181,24 @@ public sealed class DotRocksConnectionStringBuilder
     }
 
     /// <summary>
+    /// Gets or sets the SQL protocol TLS mode.
+    /// </summary>
+    public DotRocksSslMode SslMode
+    {
+        get => GetEnum(SslModeKeyword, DotRocksSslMode.Disabled);
+        set => this[SslModeKeyword] = value;
+    }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether TLS certificate validation is bypassed.
+    /// </summary>
+    public bool TrustServerCertificate
+    {
+        get => GetBoolean(TrustServerCertificateKeyword, false);
+        set => this[TrustServerCertificateKeyword] = value;
+    }
+
+    /// <summary>
     /// Gets or sets the StarRocks FE HTTP endpoint used for Stream Load requests.
     /// </summary>
     public string StreamLoadEndpoint
@@ -209,6 +233,15 @@ public sealed class DotRocksConnectionStringBuilder
 
             this[StreamLoadEndpointKeyword] = endpoint.AbsoluteUri;
         }
+    }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether HTTP Stream Load endpoints are allowed.
+    /// </summary>
+    public bool AllowInsecureStreamLoad
+    {
+        get => GetBoolean(AllowInsecureStreamLoadKeyword, false);
+        set => this[AllowInsecureStreamLoadKeyword] = value;
     }
 
     /// <summary>
@@ -248,6 +281,30 @@ public sealed class DotRocksConnectionStringBuilder
             ? Convert.ToBoolean(value, System.Globalization.CultureInfo.InvariantCulture)
             : fallback;
 
+    private TEnum GetEnum<TEnum>(string keyword, TEnum fallback)
+        where TEnum : struct, Enum
+    {
+        if (!TryGetAliasedValue(keyword, out object? value))
+        {
+            return fallback;
+        }
+
+        if (value is TEnum typed)
+        {
+            return typed;
+        }
+
+        string text =
+            Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture)
+            ?? string.Empty;
+        if (Enum.TryParse(text, ignoreCase: true, out TEnum parsed))
+        {
+            return parsed;
+        }
+
+        throw new ArgumentException($"{keyword} value '{text}' is not supported.", nameof(keyword));
+    }
+
     private void SetValue(string keyword, string value)
     {
         ArgumentNullException.ThrowIfNull(value);
@@ -279,6 +336,18 @@ public sealed class DotRocksConnectionStringBuilder
             MinimumPoolSizeKeyword => [MinimumPoolSizeKeyword, "Min Pool Size"],
             MaximumPoolSizeKeyword => [MaximumPoolSizeKeyword, "Max Pool Size"],
             ConnectionIdleTimeoutKeyword => [ConnectionIdleTimeoutKeyword, "Idle Timeout"],
+            SslModeKeyword => [SslModeKeyword, "SSL Mode", "SslMode"],
+            TrustServerCertificateKeyword =>
+            [
+                TrustServerCertificateKeyword,
+                "TrustServerCertificate",
+            ],
+            AllowInsecureStreamLoadKeyword =>
+            [
+                AllowInsecureStreamLoadKeyword,
+                "AllowInsecureStreamLoad",
+                "Allow Insecure StreamLoad",
+            ],
             StreamLoadEndpointKeyword =>
             [
                 StreamLoadEndpointKeyword,

@@ -77,6 +77,10 @@ await using DbDataSource dataSource = factory.CreateDataSource(builder.Connectio
 await using DbConnection connection = await dataSource.OpenConnectionAsync();
 ```
 
+For SQL protocol TLS, set `Ssl Mode=Required`. DotRocks uses platform certificate
+validation by default; `Trust Server Certificate=true` is available only for controlled
+local test environments with self-signed certificates.
+
 ## Entity Framework Core
 
 `DotRocks.EntityFrameworkCore` provides the current EF Core provider surface for
@@ -223,7 +227,7 @@ connection string credentials and reads payloads from the supplied stream.
 using DotRocks.Data.Loading;
 
 using var client = new DotRocksStreamLoadClient(
-    "Server=127.0.0.1;Port=9030;User ID=root;Stream Load Endpoint=http://127.0.0.1:8030"
+    "Server=starrocks.example.com;Port=9030;User ID=loader;Password=secret;Stream Load Endpoint=https://starrocks.example.com:8030"
 );
 
 await using Stream csv = File.OpenRead("events.csv");
@@ -249,7 +253,7 @@ further operations.
 using DotRocks.Data.Loading;
 
 using var client = new DotRocksStreamLoadClient(
-    "Server=127.0.0.1;Port=9030;User ID=root;Stream Load Endpoint=http://127.0.0.1:8030"
+    "Server=starrocks.example.com;Port=9030;User ID=loader;Password=secret;Stream Load Endpoint=https://starrocks.example.com:8030"
 );
 
 DotRocksStreamLoadTransaction transaction = await client.BeginTransactionAsync(
@@ -276,6 +280,10 @@ await transaction.CommitAsync();
 // await transaction.RollbackAsync();
 ```
 
+HTTP Stream Load endpoints send Basic authentication without transport encryption and are
+rejected by default. For trusted local test environments such as the pinned Docker
+container, set `Allow Insecure Stream Load=true` explicitly.
+
 ## Build and test
 
 Common tasks are exposed via [`just`](https://github.com/casey/just) (see `justfile`):
@@ -300,7 +308,9 @@ dotnet pack --configuration Release --no-build
 ```
 
 Integration tests run against a real StarRocks server and are documented separately; the
-commands above cover the server-free unit and protocol tests.
+commands above cover the server-free unit and protocol tests. CI keeps unit/build checks,
+package validation, StarRocks live integration, and release publishing in separate
+workflows so package artifacts and live-server gates are visible independently.
 
 ### Verified robustness
 
@@ -311,6 +321,9 @@ bytes. Secret-hygiene tests cover connection-string redaction, connection/open f
 Stream Load HTTP failures, Stream Load result failures, and debug-display surfaces.
 Cancellation tests verify open cancellation, command timeout, user cancellation,
 `DbCommand.Cancel()`, active-reader cancellation, and broken pooled connection discard.
+SQL protocol TLS is covered by fake-server tests for SSL-request negotiation, certificate
+validation failure handling, and successful TLS upgrade with an explicit local trust
+override.
 
 ### StarRocks compatibility harness (Docker)
 

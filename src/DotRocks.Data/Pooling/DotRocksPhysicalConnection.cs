@@ -1,4 +1,9 @@
+using System.Diagnostics.CodeAnalysis;
+using System.Net.Security;
 using System.Net.Sockets;
+using System.Security.Authentication;
+using System.Security.Cryptography.X509Certificates;
+using DotRocks.Data;
 using DotRocks.Data.Loading;
 using DotRocks.Data.Protocol.Commands;
 using DotRocks.Data.Protocol.Framing;
@@ -11,11 +16,11 @@ namespace DotRocks.Data.Pooling;
 internal sealed class DotRocksPhysicalConnection : IDisposable
 {
     private readonly TcpClient _client;
-    private readonly NetworkStream _stream;
+    private readonly Stream _stream;
     private bool _isDisposed;
     private bool _isBroken;
 
-    private DotRocksPhysicalConnection(TcpClient client, NetworkStream stream, string serverVersion)
+    private DotRocksPhysicalConnection(TcpClient client, Stream stream, string serverVersion)
     {
         _client = client;
         _stream = stream;
@@ -34,7 +39,7 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
         ArgumentNullException.ThrowIfNull(options);
 
         TcpClient? client = null;
-        NetworkStream? stream = null;
+        Stream? stream = null;
         using var timeout = new CancellationTokenSource(options.ConnectionTimeout);
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(
             cancellationToken,
@@ -54,6 +59,24 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
                 .ReadPayloadAsync(linked.Token)
                 .ConfigureAwait(false);
             ServerHandshake handshake = ServerHandshake.Parse(handshakePayload);
+
+            if (options.SslMode == DotRocksSslMode.Required)
+            {
+                var sslRequestWriter = new PacketWriter(stream);
+                sslRequestWriter.ResetSequence(reader.SequenceId);
+                byte[] sslRequestPayload = HandshakeResponseBuilder.BuildSslRequest(
+                    options,
+                    handshake
+                );
+                await sslRequestWriter
+                    .WritePayloadAsync(sslRequestPayload, linked.Token)
+                    .ConfigureAwait(false);
+
+                stream = await UpgradeToTlsAsync(options, stream, linked.Token)
+                    .ConfigureAwait(false);
+                reader = new PacketReader(stream);
+                reader.ResetSequence(sslRequestWriter.SequenceId);
+            }
 
             byte[] responsePayload = HandshakeResponseBuilder.Build(options, handshake);
             var writer = new PacketWriter(stream);
@@ -105,6 +128,17 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
                 innerException: ex
             );
         }
+        catch (AuthenticationException ex)
+        {
+            throw new DotRocksException(
+                "TLS negotiation failed while opening the StarRocks connection.",
+                serverErrorCode: null,
+                sqlState: null,
+                isTransient: true,
+                connectionId: null,
+                innerException: ex
+            );
+        }
         finally
         {
             if (stream is not null)
@@ -115,6 +149,51 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
             client?.Dispose();
         }
     }
+
+    [SuppressMessage(
+        "Security",
+        "CA5359:Do Not Disable Certificate Validation",
+        Justification = "Only disabled when callers explicitly set Trust Server Certificate=true for controlled environments."
+    )]
+    private static async ValueTask<Stream> UpgradeToTlsAsync(
+        DotRocksConnectionOptions options,
+        Stream stream,
+        CancellationToken cancellationToken
+    )
+    {
+        var sslStream = new SslStream(
+            stream,
+            false,
+            options.TrustServerCertificate ? TrustAnyServerCertificate : null
+        );
+        try
+        {
+            await sslStream
+                .AuthenticateAsClientAsync(
+                    new SslClientAuthenticationOptions
+                    {
+                        TargetHost = options.Server,
+                        EnabledSslProtocols = SslProtocols.None,
+                        CertificateRevocationCheckMode = X509RevocationMode.Online,
+                    },
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+            return sslStream;
+        }
+        catch
+        {
+            await sslStream.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    private static bool TrustAnyServerCertificate(
+        object sender,
+        X509Certificate? certificate,
+        X509Chain? chain,
+        SslPolicyErrors sslPolicyErrors
+    ) => true;
 
     public async ValueTask<QueryResult> ExecuteQueryAsync(
         string commandText,

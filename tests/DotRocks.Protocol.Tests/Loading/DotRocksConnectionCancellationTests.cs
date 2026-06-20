@@ -1,7 +1,11 @@
 using System.Data;
 using System.Data.Common;
 using System.Net;
+using System.Net.Security;
 using System.Net.Sockets;
+using System.Security.Authentication;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using DotRocks.Data;
 using DotRocks.Data.Authentication;
@@ -144,6 +148,50 @@ public sealed class DotRocksConnectionCancellationTests
     }
 
     [Fact]
+    public async Task OpenAsync_SslModeRequiredWithoutServerSupport_ThrowsSanitizedDotRocksException()
+    {
+        using var server = FakeStarRocksServer.Start(async stream =>
+        {
+            var writer = new PacketWriter(stream);
+            await writer
+                .WritePayloadAsync(
+                    BuildHandshake(MySqlNativePassword.PluginName),
+                    TestContext.Current.CancellationToken
+                )
+                .ConfigureAwait(true);
+        });
+        string connectionString =
+            BuildFakeServerConnectionString(server.Port) + ";Ssl Mode=Required";
+        using var connection = new DotRocksConnection(connectionString);
+
+        DotRocksException exception = await Assert
+            .ThrowsAsync<DotRocksException>(async () =>
+                await connection
+                    .OpenAsync(TestContext.Current.CancellationToken)
+                    .ConfigureAwait(true)
+            )
+            .ConfigureAwait(true);
+
+        Assert.Equal(ConnectionState.Closed, connection.State);
+        Assert.Contains("TLS support", exception.Message, StringComparison.Ordinal);
+        AssertSanitized(exception, connectionString);
+    }
+
+    [Fact]
+    public async Task OpenAsync_SslModeRequired_UpgradesToTlsAndAuthenticates()
+    {
+        using var server = FakeStarRocksServer.Start(HandleTlsOpenOnlyConnectionAsync);
+        string connectionString =
+            BuildFakeServerConnectionString(server.Port)
+            + ";Ssl Mode=Required;Trust Server Certificate=True";
+        using var connection = new DotRocksConnection(connectionString);
+
+        await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        Assert.Equal(ConnectionState.Open, connection.State);
+    }
+
+    [Fact]
     public async Task ExecuteScalarAsync_MalformedQueryResult_ThrowsSanitizedExceptionAndDiscardsPooledConnection()
     {
         using var server = FakeStarRocksServer.Start(
@@ -217,6 +265,51 @@ public sealed class DotRocksConnectionCancellationTests
             .ConfigureAwait(true);
     }
 
+    private static async Task HandleTlsOpenOnlyConnectionAsync(NetworkStream stream)
+    {
+        var writer = new PacketWriter(stream);
+        await writer
+            .WritePayloadAsync(
+                BuildHandshake(MySqlNativePassword.PluginName, supportsTls: true),
+                TestContext.Current.CancellationToken
+            )
+            .ConfigureAwait(true);
+
+        var reader = new PacketReader(stream);
+        reader.ResetSequence(writer.SequenceId);
+        byte[] sslRequestPayload = await reader
+            .ReadPayloadAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+        AssertSslRequest(sslRequestPayload);
+        byte authSequence = reader.SequenceId;
+
+        using X509Certificate2 certificate = CreateSelfSignedCertificate();
+        using var tls = new SslStream(stream, true);
+        await tls.AuthenticateAsServerAsync(
+                new SslServerAuthenticationOptions
+                {
+                    ServerCertificate = certificate,
+                    EnabledSslProtocols = SslProtocols.None,
+                    ClientCertificateRequired = false,
+                },
+                TestContext.Current.CancellationToken
+            )
+            .ConfigureAwait(true);
+
+        reader = new PacketReader(tls);
+        reader.ResetSequence(authSequence);
+        _ = await reader
+            .ReadPayloadAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+        writer = new PacketWriter(tls);
+        writer.ResetSequence(reader.SequenceId);
+        await writer
+            .WritePayloadAsync(BuildOkPayload(), TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+        await Task.Delay(TimeSpan.FromMilliseconds(250), TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+    }
+
     private static async Task CompleteAuthenticationAsync(NetworkStream stream)
     {
         var writer = new PacketWriter(stream);
@@ -240,7 +333,7 @@ public sealed class DotRocksConnectionCancellationTests
     private static string BuildFakeServerConnectionString(int port) =>
         $"Server=127.0.0.1;Port={port};User ID=alice;Password={Secret};Connection Timeout=5";
 
-    private static byte[] BuildHandshake(string authPluginName)
+    private static byte[] BuildHandshake(string authPluginName, bool supportsTls = false)
     {
         CapabilityFlags capabilities =
             CapabilityFlags.LongPassword
@@ -248,6 +341,10 @@ public sealed class DotRocksConnectionCancellationTests
             | CapabilityFlags.Protocol41
             | CapabilityFlags.SecureConnection
             | CapabilityFlags.PluginAuth;
+        if (supportsTls)
+        {
+            capabilities |= CapabilityFlags.Ssl;
+        }
         uint caps = (uint)capabilities;
         using var writer = new ProtocolWriter();
         writer.WriteByte(10);
@@ -264,6 +361,37 @@ public sealed class DotRocksConnectionCancellationTests
         writer.WriteBytes(AuthPart2);
         writer.WriteNullTerminatedString(authPluginName, Encoding.ASCII);
         return writer.ToArray();
+    }
+
+    private static void AssertSslRequest(ReadOnlySpan<byte> payload)
+    {
+        var reader = new ProtocolReader(payload);
+        var capabilities = (CapabilityFlags)reader.ReadFixedInteger(4);
+        Assert.True(capabilities.HasFlag(CapabilityFlags.Ssl));
+        Assert.True(capabilities.HasFlag(CapabilityFlags.Protocol41));
+        Assert.True(capabilities.HasFlag(CapabilityFlags.SecureConnection));
+        Assert.Equal(0UL, reader.ReadFixedInteger(4));
+        Assert.Equal(0x21, reader.ReadByte());
+        reader.ReadBytes(23);
+        Assert.True(reader.IsAtEnd);
+    }
+
+    private static X509Certificate2 CreateSelfSignedCertificate()
+    {
+        using RSA rsa = RSA.Create(2048);
+        var request = new CertificateRequest(
+            "CN=127.0.0.1",
+            rsa,
+            HashAlgorithmName.SHA256,
+            RSASignaturePadding.Pkcs1
+        );
+        var subjectAlternativeNames = new SubjectAlternativeNameBuilder();
+        subjectAlternativeNames.AddIpAddress(IPAddress.Loopback);
+        request.CertificateExtensions.Add(subjectAlternativeNames.Build());
+        return request.CreateSelfSigned(
+            DateTimeOffset.UtcNow.AddDays(-1),
+            DateTimeOffset.UtcNow.AddDays(1)
+        );
     }
 
     private static byte[] BuildOkPayload()
