@@ -11,6 +11,7 @@ public sealed class PublicApiBaselineTests
     [
         new("DotRocks.Data", "net10.0"),
         new("DotRocks.EntityFrameworkCore", "net10.0"),
+        new("DotRocks.EntityFrameworkCore.Design", "net10.0"),
         new("DotRocks.Analyzers", "netstandard2.0"),
         new("DotRocks.Analyzers.CodeFixes", "netstandard2.0"),
     ];

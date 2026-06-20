@@ -1,0 +1,10 @@
+# DotRocks.EntityFrameworkCore.Design
+
+public sealed class DotRocks.EntityFrameworkCore.Design.DotRocksAnnotationCodeGenerator Microsoft.EntityFrameworkCore.Design.AnnotationCodeGenerator
+  public DotRocks.EntityFrameworkCore.Design.DotRocksAnnotationCodeGenerator(Microsoft.EntityFrameworkCore.Design.AnnotationCodeGeneratorDependencies dependencies)
+  public virtual method System.Collections.Generic.IReadOnlyList<Microsoft.EntityFrameworkCore.Design.MethodCallCodeFragment> GenerateFluentApiCalls(Microsoft.EntityFrameworkCore.Metadata.IEntityType entityType, System.Collections.Generic.IDictionary<System.String, Microsoft.EntityFrameworkCore.Infrastructure.IAnnotation> annotations)
+
+public sealed class DotRocks.EntityFrameworkCore.Design.DotRocksDesignTimeServices Microsoft.EntityFrameworkCore.Design.IDesignTimeServices
+  public DotRocks.EntityFrameworkCore.Design.DotRocksDesignTimeServices()
+  public virtual method System.Void ConfigureDesignTimeServices(Microsoft.Extensions.DependencyInjection.IServiceCollection serviceCollection)
+
