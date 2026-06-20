@@ -271,11 +271,8 @@ public sealed class DotRocksStreamLoadClient : IDisposable
                 DotRocksStreamLoadResult result = DotRocksStreamLoadResult.Parse(responseText);
                 if (!result.IsSuccess)
                 {
-                    string suffix = string.IsNullOrWhiteSpace(result.Message)
-                        ? string.Empty
-                        : ": " + result.Message;
                     throw new DotRocksStreamLoadException(
-                        $"StarRocks Stream Load failed with status '{result.Status}'{suffix}.",
+                        $"StarRocks Stream Load failed with status '{result.Status}'.",
                         response.StatusCode,
                         result
                     );

@@ -29,8 +29,13 @@ internal static class ResultPacket
 
         int errorCode = (int)reader.ReadFixedInteger(2);
         string? sqlState = null;
-        if (reader.Remaining >= 6 && reader.PeekByte() == (byte)'#')
+        if (reader.Remaining > 0 && reader.PeekByte() == (byte)'#')
         {
+            if (reader.Remaining < 6)
+            {
+                throw new MalformedPacketException("ERR packet SQLSTATE marker is truncated.");
+            }
+
             _ = reader.ReadByte();
             sqlState = Encoding.ASCII.GetString(reader.ReadBytes(5));
         }

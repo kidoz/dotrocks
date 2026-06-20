@@ -259,6 +259,54 @@ public sealed class DotRocksStreamLoadClientTests
     }
 
     [Fact]
+    public async Task LoadCsvAsync_StarRocksFailure_DoesNotCopySensitiveResultMessageIntoException()
+    {
+        const string secret = "stream-load-secret-value";
+        using var handler = new RecordingHandler(
+            static (_, _) =>
+                Task.FromResult(
+                    JsonResponse(
+                        """
+                        {
+                          "Status": "Fail",
+                          "Message": "filtered row contained stream-load-secret-value",
+                          "NumberTotalRows": "1",
+                          "NumberLoadedRows": "0",
+                          "NumberFilteredRows": "1"
+                        }
+                        """
+                    )
+                )
+        );
+        using var httpClient = new HttpClient(handler);
+        using var client = CreateClient(httpClient);
+        using var payload = new MemoryStream([1]);
+
+        DotRocksStreamLoadException exception = await Assert
+            .ThrowsAsync<DotRocksStreamLoadException>(async () =>
+                await client
+                    .LoadCsvAsync(
+                        "warehouse",
+                        "events",
+                        payload,
+                        cancellationToken: TestContext.Current.CancellationToken
+                    )
+                    .ConfigureAwait(true)
+            )
+            .ConfigureAwait(true);
+
+        Assert.NotNull(exception.Result);
+        Assert.Contains(secret, exception.Result.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(secret, exception.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            ExpectedBasicToken("alice", "secret"),
+            exception.ToString(),
+            StringComparison.Ordinal
+        );
+        Assert.DoesNotContain("alice:secret", exception.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task LoadCsvAsync_HttpFailure_ThrowsWithoutResponseBodyLeak()
     {
         using var handler = new RecordingHandler(

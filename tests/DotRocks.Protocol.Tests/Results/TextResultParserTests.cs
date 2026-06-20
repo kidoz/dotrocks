@@ -145,6 +145,114 @@ public sealed class TextResultParserTests
         Assert.Contains("syntax error", exception.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ReadColumnCount_WhenCountExceedsInt32_ThrowsMalformedPacketException()
+    {
+        using var writer = new ProtocolWriter();
+        writer.WriteLengthEncodedInteger((ulong)int.MaxValue + 1UL);
+
+        MalformedPacketException exception = Assert.Throws<MalformedPacketException>(() =>
+            TextResultParser.ReadColumnCount(writer.WrittenSpan)
+        );
+
+        Assert.Contains("column count", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ReadTextRow_WhenValueLengthClaimExceedsPayload_ThrowsMalformedPacketException()
+    {
+        ColumnDefinition[] columns = [Column("value")];
+        byte[] payload = [0x05, 0x01, 0x02];
+
+        MalformedPacketException exception = Assert.Throws<MalformedPacketException>(() =>
+            TextResultParser.ReadTextRow(payload, columns)
+        );
+
+        Assert.Contains("claims", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ReadTextRow_WithTrailingBytes_ThrowsMalformedPacketException()
+    {
+        ColumnDefinition[] columns = [Column("value")];
+        byte[] payload = BuildTextRow("ok");
+        byte[] withTrailing = [.. payload, 0xAA];
+
+        MalformedPacketException exception = Assert.Throws<MalformedPacketException>(() =>
+            TextResultParser.ReadTextRow(withTrailing, columns)
+        );
+
+        Assert.Contains("trailing", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ReadOk_WithInvalidHeader_ThrowsMalformedPacketException()
+    {
+        MalformedPacketException exception = Assert.Throws<MalformedPacketException>(() =>
+            ResultPacket.ReadOk([0x01])
+        );
+
+        Assert.Contains("OK packet", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ReadOk_WithTruncatedPayload_ThrowsMalformedPacketException()
+    {
+        MalformedPacketException exception = Assert.Throws<MalformedPacketException>(() =>
+            ResultPacket.ReadOk([ResultPacket.OkHeader])
+        );
+
+        Assert.Contains("packet", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ReadOk_WhenAffectedRowsExceedsInt64_ThrowsMalformedPacketException()
+    {
+        using var writer = new ProtocolWriter();
+        writer.WriteByte(ResultPacket.OkHeader);
+        writer.WriteLengthEncodedInteger((ulong)long.MaxValue + 1UL);
+        writer.WriteLengthEncodedInteger(0);
+
+        MalformedPacketException exception = Assert.Throws<MalformedPacketException>(() =>
+            ResultPacket.ReadOk(writer.WrittenSpan)
+        );
+
+        Assert.Contains("affected-row", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ReadError_WithInvalidHeader_ThrowsMalformedPacketException()
+    {
+        MalformedPacketException exception = Assert.Throws<MalformedPacketException>(() =>
+            ResultPacket.ReadError([0x00], null)
+        );
+
+        Assert.Contains("ERR packet", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ReadError_WithTruncatedPayload_ThrowsMalformedPacketException()
+    {
+        MalformedPacketException exception = Assert.Throws<MalformedPacketException>(() =>
+            ResultPacket.ReadError([ProtocolConstants.ErrorPacketHeader, 0x01], null)
+        );
+
+        Assert.Contains("packet", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ReadError_WithTruncatedSqlStateMarker_ThrowsMalformedPacketException()
+    {
+        MalformedPacketException exception = Assert.Throws<MalformedPacketException>(() =>
+            ResultPacket.ReadError(
+                [ProtocolConstants.ErrorPacketHeader, 0x28, 0x04, (byte)'#', (byte)'4'],
+                null
+            )
+        );
+
+        Assert.Contains("SQLSTATE", exception.Message, StringComparison.Ordinal);
+    }
+
     [Theory]
     [MemberData(nameof(MalformedColumnDefinitionPayloads))]
     public void ReadColumnDefinition_MalformedPayload_ThrowsMalformedPacketException(byte[] payload)
@@ -178,7 +286,11 @@ public sealed class TextResultParserTests
             { [ProtocolConstants.NullValueMarker] },
             { BuildColumnDefinitionWithFixedLength("bad_length", 0x0B) },
             { BuildColumnDefinition("truncated")[..^1] },
+            { [.. BuildColumnDefinition("trailing"), 0xAA] },
         };
+
+    private static ColumnDefinition Column(string name) =>
+        TextResultParser.ReadColumnDefinition(BuildColumnDefinition(name));
 
     private static MemoryStream BuildPayloadStream(params byte[][] payloads)
     {

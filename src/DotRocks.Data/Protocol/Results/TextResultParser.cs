@@ -189,6 +189,10 @@ internal static class TextResultParser
         ushort flags = (ushort)reader.ReadFixedInteger(2);
         byte decimals = reader.ReadByte();
         _ = reader.ReadFixedInteger(2);
+        if (!reader.IsAtEnd)
+        {
+            throw new MalformedPacketException("Column definition contains trailing bytes.");
+        }
 
         return new ColumnDefinition(
             catalog,

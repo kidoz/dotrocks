@@ -299,6 +299,16 @@ dotnet pack --configuration Release --no-build
 Integration tests run against a real StarRocks server and are documented separately; the
 commands above cover the server-free unit and protocol tests.
 
+### Verified robustness
+
+DotRocks has focused regression coverage for malformed protocol packets, including
+length-encoded integer/string edge cases, truncated result metadata, invalid OK/ERR
+packets, oversized result counts, oversized row value claims, and trailing text-row
+bytes. Secret-hygiene tests cover connection-string redaction, connection/open failures,
+Stream Load HTTP failures, Stream Load result failures, and debug-display surfaces.
+Cancellation tests verify open cancellation, command timeout, user cancellation,
+`DbCommand.Cancel()`, active-reader cancellation, and broken pooled connection discard.
+
 ### StarRocks compatibility harness (Docker)
 
 ```bash
