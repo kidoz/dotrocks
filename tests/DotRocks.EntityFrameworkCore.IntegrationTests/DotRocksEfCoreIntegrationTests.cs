@@ -1316,6 +1316,62 @@ public sealed class DotRocksEfCoreIntegrationTests
     }
 
     [Fact]
+    [SuppressMessage(
+        "Security",
+        "CA2100:Review SQL queries for security vulnerabilities",
+        Justification = "The seed INSERT is built only from fixed sanitized identifiers and constants."
+    )]
+    public async Task LinqContains_EscapesLikeWildcardsLiterally()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
+        }
+
+        await using var context = CreateLiveContext();
+        await EnsureWidgetTableAsync(context).ConfigureAwait(true);
+
+        try
+        {
+            string insertSql =
+                "INSERT INTO "
+                + DelimitedWidgetTable()
+                + " VALUES "
+                + "(10, 1, 1, 1, 'a_b', TRUE, '2026-06-19 10:00:00', 1.00, NULL), "
+                + "(11, 1, 1, 1, 'aXb', TRUE, '2026-06-19 10:00:00', 1.00, NULL), "
+                + "(12, 1, 1, 1, 'a%b', TRUE, '2026-06-19 10:00:00', 1.00, NULL), "
+                + "(13, 1, 1, 1, 'aYb', TRUE, '2026-06-19 10:00:00', 1.00, NULL)";
+            await context
+                .Database.ExecuteSqlRawAsync(insertSql, TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+
+            // '_' must match a literal underscore, not any single character.
+            List<string> underscore = await context
+                .Widgets.Where(widget => widget.Name.Contains("a_b"))
+                .OrderBy(widget => widget.Id)
+                .Select(widget => widget.Name)
+                .ToListAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+            Assert.Equal(["a_b"], underscore);
+
+            // '%' must match a literal percent, not any sequence.
+            List<string> percent = await context
+                .Widgets.Where(widget => widget.Name.Contains("a%b"))
+                .OrderBy(widget => widget.Id)
+                .Select(widget => widget.Name)
+                .ToListAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+            Assert.Equal(["a%b"], percent);
+        }
+        finally
+        {
+            await DropWidgetTableAsync(context).ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
     public async Task LinqAndAlsoOrElseAndNullableComparisons_Translate()
     {
         if (!IntegrationTestEnvironment.IsEnabled)
