@@ -88,7 +88,8 @@ public sealed class DotRocksSqlGenerationTests
         string sql = context.Widgets.Where(widget => widget.Name.Contains("_%\\")).ToQueryString();
 
         Assert.Contains("LIKE", sql, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("ESCAPE", sql, StringComparison.OrdinalIgnoreCase);
+        // StarRocks rejects the ESCAPE clause and uses backslash as the default LIKE escape.
+        Assert.DoesNotContain("ESCAPE", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("\\_", sql, StringComparison.Ordinal);
         Assert.Contains("\\%", sql, StringComparison.Ordinal);
         Assert.Contains("\\\\", sql, StringComparison.Ordinal);
@@ -106,7 +107,7 @@ public sealed class DotRocksSqlGenerationTests
 
         Assert.Contains("@prefix", sql, StringComparison.Ordinal);
         Assert.Contains("REPLACE", sql, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("ESCAPE", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("ESCAPE", sql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("LIKE CONCAT(@prefix", sql, StringComparison.OrdinalIgnoreCase);
     }
 

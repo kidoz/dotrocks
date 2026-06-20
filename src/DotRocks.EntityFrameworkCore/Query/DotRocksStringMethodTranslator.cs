@@ -52,7 +52,9 @@ internal sealed class DotRocksStringMethodTranslator(ISqlExpressionFactory sqlEx
             return null;
         }
 
-        return sqlExpressionFactory.Like(instance, pattern, Constant("\\"));
+        // StarRocks rejects the `LIKE ... ESCAPE` clause but treats backslash as the default LIKE
+        // escape, so emit the escaped pattern (\%, \_, \\) without an ESCAPE clause (null).
+        return sqlExpressionFactory.Like(instance, pattern, escapeChar: null);
     }
 
     private SqlExpression Constant(string value) => sqlExpressionFactory.Constant(value);
