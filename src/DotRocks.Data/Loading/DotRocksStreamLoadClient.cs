@@ -303,7 +303,11 @@ public sealed class DotRocksStreamLoadClient : IDisposable
     )
     {
         var request = new HttpRequestMessage(method, requestUri);
-        request.Headers.Authorization = CreateAuthorizationHeader();
+        if (ShouldSendCredentials(requestUri))
+        {
+            request.Headers.Authorization = CreateAuthorizationHeader();
+        }
+
         request.Headers.ExpectContinue = true;
         foreach (KeyValuePair<string, string> header in headers)
         {
@@ -349,6 +353,13 @@ public sealed class DotRocksStreamLoadClient : IDisposable
         );
         return new AuthenticationHeaderValue("Basic", credentials);
     }
+
+    // Basic credentials are only forwarded over an encrypted transport, or when the caller
+    // has explicitly opted into insecure Stream Load for a trusted local environment. This
+    // keeps a redirect from leaking credentials in clear text.
+    private bool ShouldSendCredentials(Uri requestUri) =>
+        string.Equals(requestUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
+        || _options.AllowInsecureStreamLoad;
 
     [SuppressMessage(
         "Reliability",
@@ -399,10 +410,27 @@ public sealed class DotRocksStreamLoadClient : IDisposable
             );
         }
 
-        if (
-            string.Equals(redirectUri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
-            && !_options.AllowInsecureStreamLoad
-        )
+        bool redirectIsHttp = string.Equals(
+            redirectUri.Scheme,
+            Uri.UriSchemeHttp,
+            StringComparison.OrdinalIgnoreCase
+        );
+        bool endpointIsHttps = string.Equals(
+            _options.StreamLoadEndpoint.Scheme,
+            Uri.UriSchemeHttps,
+            StringComparison.OrdinalIgnoreCase
+        );
+
+        // Never downgrade a TLS-configured endpoint to plaintext on redirect, even when
+        // insecure Stream Load is allowed: it would forward Basic credentials in clear text.
+        if (redirectIsHttp && endpointIsHttps)
+        {
+            throw new DotRocksStreamLoadException(
+                "StarRocks Stream Load redirected an HTTPS endpoint to an insecure HTTP endpoint; DotRocks refuses to forward credentials over the downgraded transport."
+            );
+        }
+
+        if (redirectIsHttp && !_options.AllowInsecureStreamLoad)
         {
             throw new DotRocksStreamLoadException(
                 "StarRocks Stream Load redirected to an HTTP endpoint. Use HTTPS or set 'Allow Insecure Stream Load=true' for trusted local test environments."
