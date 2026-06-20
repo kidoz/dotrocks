@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using DotRocks.Data.Protocol.Serialization;
 
 namespace DotRocks.Data.Protocol.Results;
 
@@ -65,72 +66,96 @@ internal static class ColumnTypeMapper
             ColumnType.TinyBlob
             or ColumnType.MediumBlob
             or ColumnType.LongBlob
-            or ColumnType.Blob => typeof(byte[]),
+            or ColumnType.Blob
+            or ColumnType.Bit => typeof(byte[]),
             ColumnType.VarChar
             or ColumnType.Json
             or ColumnType.Enum
             or ColumnType.Set
             or ColumnType.VarString
             or ColumnType.String
-            or ColumnType.Geometry
-            or ColumnType.Bit => typeof(string),
+            or ColumnType.Geometry => typeof(string),
             _ => throw CreateUnsupportedTypeException(type),
         };
 
     public static object ParseTextValue(byte type, ReadOnlySpan<byte> bytes)
     {
-        string text = Encoding.UTF8.GetString(bytes);
-        return ToColumnType(type) switch
+        ColumnType columnType = ToColumnType(type);
+
+        // Binary types (BLOB family and BIT) are raw bytes; decoding them as UTF-8 would corrupt
+        // non-text byte sequences. Return them without touching the text decoder.
+        switch (columnType)
         {
-            ColumnType.Tiny
-            or ColumnType.Short
-            or ColumnType.Long
-            or ColumnType.Int24
-            or ColumnType.Year => int.Parse(
-                text,
-                NumberStyles.Integer,
-                CultureInfo.InvariantCulture
-            ),
-            ColumnType.LongLong => long.Parse(
-                text,
-                NumberStyles.Integer,
-                CultureInfo.InvariantCulture
-            ),
-            ColumnType.Decimal or ColumnType.NewDecimal => DotRocksDecimal.Parse(text),
-            ColumnType.Float => float.Parse(text, NumberStyles.Float, CultureInfo.InvariantCulture),
-            ColumnType.Double => double.Parse(
-                text,
-                NumberStyles.Float,
-                CultureInfo.InvariantCulture
-            ),
-            ColumnType.Date or ColumnType.NewDate => DateTime.ParseExact(
-                text,
-                DateFormat,
-                CultureInfo.InvariantCulture,
-                DateTimeStyles.None
-            ),
-            ColumnType.DateTime or ColumnType.Timestamp => DateTime.ParseExact(
-                text,
-                DateTimeFormats,
-                CultureInfo.InvariantCulture,
-                DateTimeStyles.None
-            ),
-            ColumnType.Time => TimeSpan.Parse(text, CultureInfo.InvariantCulture),
-            ColumnType.TinyBlob
-            or ColumnType.MediumBlob
-            or ColumnType.LongBlob
-            or ColumnType.Blob => bytes.ToArray(),
-            ColumnType.Null
-            or ColumnType.VarChar
-            or ColumnType.Json
-            or ColumnType.Enum
-            or ColumnType.Set
-            or ColumnType.VarString
-            or ColumnType.String
-            or ColumnType.Geometry
-            or ColumnType.Bit => text,
-            _ => throw CreateUnsupportedTypeException(type),
-        };
+            case ColumnType.TinyBlob:
+            case ColumnType.MediumBlob:
+            case ColumnType.LongBlob:
+            case ColumnType.Blob:
+            case ColumnType.Bit:
+                return bytes.ToArray();
+        }
+
+        string text = Encoding.UTF8.GetString(bytes);
+        try
+        {
+            return columnType switch
+            {
+                ColumnType.Tiny
+                or ColumnType.Short
+                or ColumnType.Long
+                or ColumnType.Int24
+                or ColumnType.Year => int.Parse(
+                    text,
+                    NumberStyles.Integer,
+                    CultureInfo.InvariantCulture
+                ),
+                ColumnType.LongLong => long.Parse(
+                    text,
+                    NumberStyles.Integer,
+                    CultureInfo.InvariantCulture
+                ),
+                ColumnType.Decimal or ColumnType.NewDecimal => DotRocksDecimal.Parse(text),
+                ColumnType.Float => float.Parse(
+                    text,
+                    NumberStyles.Float,
+                    CultureInfo.InvariantCulture
+                ),
+                ColumnType.Double => double.Parse(
+                    text,
+                    NumberStyles.Float,
+                    CultureInfo.InvariantCulture
+                ),
+                ColumnType.Date or ColumnType.NewDate => DateTime.ParseExact(
+                    text,
+                    DateFormat,
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.None
+                ),
+                ColumnType.DateTime or ColumnType.Timestamp => DateTime.ParseExact(
+                    text,
+                    DateTimeFormats,
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.None
+                ),
+                ColumnType.Time => TimeSpan.Parse(text, CultureInfo.InvariantCulture),
+                ColumnType.Null
+                or ColumnType.VarChar
+                or ColumnType.Json
+                or ColumnType.Enum
+                or ColumnType.Set
+                or ColumnType.VarString
+                or ColumnType.String
+                or ColumnType.Geometry => text,
+                _ => throw CreateUnsupportedTypeException(type),
+            };
+        }
+        catch (Exception ex) when (ex is FormatException or OverflowException or ArgumentException)
+        {
+            // The server returned a value that does not match the column's declared type.
+            throw new MalformedPacketException(
+                $"StarRocks returned a value that is not valid for column type {columnType} (0x{type:X2}).",
+                ex
+            );
+        }
     }
 
     private static ColumnType ToColumnType(byte type)

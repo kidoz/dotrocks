@@ -121,14 +121,24 @@ internal sealed class ProtocolWriter : IDisposable
 
     private void EnsureCapacity(int additional)
     {
+        ArgumentOutOfRangeException.ThrowIfNegative(additional);
         byte[] current = Storage;
-        int required = _position + additional;
+        // Compute in long so a near-2GB payload cannot overflow int into a negative size.
+        long required = (long)_position + additional;
         if (required <= current.Length)
         {
             return;
         }
 
-        int newSize = Math.Max(required, current.Length * 2);
+        if (required > Array.MaxLength)
+        {
+            throw new InvalidOperationException(
+                "The protocol payload exceeds the maximum supported buffer size."
+            );
+        }
+
+        long doubled = Math.Min((long)current.Length * 2, Array.MaxLength);
+        int newSize = (int)Math.Max(required, doubled);
         byte[] grown = ArrayPool<byte>.Shared.Rent(newSize);
         Array.Copy(current, grown, _position);
         ArrayPool<byte>.Shared.Return(current, clearArray: true);
