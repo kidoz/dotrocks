@@ -15,7 +15,9 @@ public sealed class DapperIntegrationTests
     {
         if (!IntegrationTestEnvironment.IsEnabled)
         {
-            return;
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
         }
 
         using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
@@ -38,7 +40,9 @@ public sealed class DapperIntegrationTests
     {
         if (!IntegrationTestEnvironment.IsEnabled)
         {
-            return;
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
         }
 
         using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
@@ -62,7 +66,9 @@ public sealed class DapperIntegrationTests
     {
         if (!IntegrationTestEnvironment.IsEnabled)
         {
-            return;
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
         }
 
         using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
@@ -88,7 +94,9 @@ public sealed class DapperIntegrationTests
     {
         if (!IntegrationTestEnvironment.IsEnabled)
         {
-            return;
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
         }
 
         using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
@@ -112,7 +120,9 @@ public sealed class DapperIntegrationTests
     {
         if (!IntegrationTestEnvironment.IsEnabled)
         {
-            return;
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
         }
 
         string tableName = await CreateTransactionTableAsync().ConfigureAwait(true);
@@ -150,7 +160,9 @@ public sealed class DapperIntegrationTests
     {
         if (!IntegrationTestEnvironment.IsEnabled)
         {
-            return;
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
         }
 
         DotRocksConnection.ClearAllPools();

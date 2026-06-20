@@ -47,7 +47,9 @@ public sealed class DotRocksEfCoreIntegrationTests
     {
         if (!IntegrationTestEnvironment.IsEnabled)
         {
-            return;
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
         }
 
         var optionsBuilder = new DbContextOptionsBuilder<DotRocksTestContext>();
@@ -71,7 +73,9 @@ public sealed class DotRocksEfCoreIntegrationTests
     {
         if (!IntegrationTestEnvironment.IsEnabled)
         {
-            return;
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
         }
 
         string databaseName = CreateUniqueDatabaseName();
@@ -98,7 +102,9 @@ public sealed class DotRocksEfCoreIntegrationTests
     {
         if (!IntegrationTestEnvironment.IsEnabled)
         {
-            return;
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
         }
 
         await using var context = CreateLiveContext();
@@ -124,7 +130,9 @@ public sealed class DotRocksEfCoreIntegrationTests
     {
         if (!IntegrationTestEnvironment.IsEnabled)
         {
-            return;
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
         }
 
         await using var context = CreateLiveContext();
@@ -182,7 +190,9 @@ public sealed class DotRocksEfCoreIntegrationTests
     {
         if (!IntegrationTestEnvironment.IsEnabled)
         {
-            return;
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
         }
 
         await using var context = CreateLiveContext();
@@ -217,7 +227,9 @@ public sealed class DotRocksEfCoreIntegrationTests
     {
         if (!IntegrationTestEnvironment.IsEnabled)
         {
-            return;
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
         }
 
         await using var context = CreateLiveContext();
@@ -237,7 +249,9 @@ public sealed class DotRocksEfCoreIntegrationTests
     {
         if (!IntegrationTestEnvironment.IsEnabled)
         {
-            return;
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
         }
 
         await using var context = CreateLiveContext();
@@ -256,7 +270,9 @@ public sealed class DotRocksEfCoreIntegrationTests
     {
         if (!IntegrationTestEnvironment.IsEnabled)
         {
-            return;
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
         }
 
         await using var context = CreateLiveContext();
@@ -285,7 +301,9 @@ public sealed class DotRocksEfCoreIntegrationTests
     {
         if (!IntegrationTestEnvironment.IsEnabled)
         {
-            return;
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
         }
 
         await using var context = CreateLiveContext();
@@ -338,7 +356,9 @@ public sealed class DotRocksEfCoreIntegrationTests
     {
         if (!IntegrationTestEnvironment.IsEnabled)
         {
-            return;
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
         }
 
         var interceptor = new CapturingCommandInterceptor();
@@ -439,7 +459,9 @@ public sealed class DotRocksEfCoreIntegrationTests
     {
         if (!IntegrationTestEnvironment.IsEnabled)
         {
-            return;
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
         }
 
         var interceptor = new CapturingCommandInterceptor();
@@ -526,7 +548,9 @@ public sealed class DotRocksEfCoreIntegrationTests
     {
         if (!IntegrationTestEnvironment.IsEnabled)
         {
-            return;
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
         }
 
         await using var context = CreateLiveContext();
@@ -577,7 +601,9 @@ public sealed class DotRocksEfCoreIntegrationTests
     {
         if (!IntegrationTestEnvironment.IsEnabled)
         {
-            return;
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
         }
 
         await using var context = CreateLiveContext();
@@ -639,7 +665,9 @@ public sealed class DotRocksEfCoreIntegrationTests
     {
         if (!IntegrationTestEnvironment.IsEnabled)
         {
-            return;
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
         }
 
         await using DotRocksTestContext setupContext = CreateLiveContext();
@@ -748,7 +776,9 @@ public sealed class DotRocksEfCoreIntegrationTests
     {
         if (!IntegrationTestEnvironment.IsEnabled)
         {
-            return;
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
         }
 
         await using DotRocksTestContext setupContext = CreateLiveContext();
@@ -824,7 +854,9 @@ public sealed class DotRocksEfCoreIntegrationTests
     {
         if (!IntegrationTestEnvironment.IsEnabled)
         {
-            return;
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
         }
 
         await using DotRocksTestContext setupContext = CreateLiveContext();
@@ -883,7 +915,9 @@ public sealed class DotRocksEfCoreIntegrationTests
     {
         if (!IntegrationTestEnvironment.IsEnabled)
         {
-            return;
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
         }
 
         await using DotRocksTestContext setupContext = CreateLiveContext();
@@ -984,7 +1018,9 @@ public sealed class DotRocksEfCoreIntegrationTests
     {
         if (!IntegrationTestEnvironment.IsEnabled)
         {
-            return;
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
         }
 
         await using DotRocksTestContext setupContext = CreateLiveContext();
@@ -1055,7 +1091,9 @@ public sealed class DotRocksEfCoreIntegrationTests
     {
         if (!IntegrationTestEnvironment.IsEnabled)
         {
-            return;
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
         }
 
         await using DotRocksTestContext setupContext = CreateLiveContext();
@@ -1154,7 +1192,9 @@ public sealed class DotRocksEfCoreIntegrationTests
     {
         if (!IntegrationTestEnvironment.IsEnabled)
         {
-            return;
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
         }
 
         await using var context = CreateLiveContext();
@@ -1173,7 +1213,9 @@ public sealed class DotRocksEfCoreIntegrationTests
     {
         if (!IntegrationTestEnvironment.IsEnabled)
         {
-            return;
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
         }
 
         await using var context = CreateLiveContext();
@@ -1200,7 +1242,9 @@ public sealed class DotRocksEfCoreIntegrationTests
     {
         if (!IntegrationTestEnvironment.IsEnabled)
         {
-            return;
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
         }
 
         await using var context = CreateLiveContext();
@@ -1234,7 +1278,9 @@ public sealed class DotRocksEfCoreIntegrationTests
     {
         if (!IntegrationTestEnvironment.IsEnabled)
         {
-            return;
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
         }
 
         await using var context = CreateLiveContext();
@@ -1265,7 +1311,9 @@ public sealed class DotRocksEfCoreIntegrationTests
     {
         if (!IntegrationTestEnvironment.IsEnabled)
         {
-            return;
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
         }
 
         await using var context = CreateLiveContext();
@@ -1295,7 +1343,9 @@ public sealed class DotRocksEfCoreIntegrationTests
     {
         if (!IntegrationTestEnvironment.IsEnabled)
         {
-            return;
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
         }
 
         await using var context = CreateLiveContext();
@@ -1334,7 +1384,9 @@ public sealed class DotRocksEfCoreIntegrationTests
     {
         if (!IntegrationTestEnvironment.IsEnabled)
         {
-            return;
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
         }
 
         await using var context = CreateLiveContext();
@@ -1439,7 +1491,9 @@ public sealed class DotRocksEfCoreIntegrationTests
     {
         if (!IntegrationTestEnvironment.IsEnabled)
         {
-            return;
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
         }
 
         var interceptor = new CapturingCommandInterceptor();
@@ -1503,7 +1557,9 @@ public sealed class DotRocksEfCoreIntegrationTests
     {
         if (!IntegrationTestEnvironment.IsEnabled)
         {
-            return;
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
         }
 
         var interceptor = new CapturingCommandInterceptor();
@@ -1561,7 +1617,9 @@ public sealed class DotRocksEfCoreIntegrationTests
     {
         if (!IntegrationTestEnvironment.IsEnabled)
         {
-            return;
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
         }
 
         var interceptor = new CapturingCommandInterceptor();
@@ -1649,7 +1707,9 @@ public sealed class DotRocksEfCoreIntegrationTests
     {
         if (!IntegrationTestEnvironment.IsEnabled)
         {
-            return;
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
         }
 
         var interceptor = new CapturingCommandInterceptor();
@@ -1701,7 +1761,9 @@ public sealed class DotRocksEfCoreIntegrationTests
     {
         if (!IntegrationTestEnvironment.IsEnabled)
         {
-            return;
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
         }
 
         await using var context = CreateLiveContext();

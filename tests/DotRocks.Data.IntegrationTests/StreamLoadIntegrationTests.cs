@@ -17,7 +17,9 @@ public sealed class StreamLoadIntegrationTests
     {
         if (!IntegrationTestEnvironment.IsEnabled)
         {
-            return;
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
         }
 
         string tableName = await CreateStreamLoadTableAsync().ConfigureAwait(true);
@@ -61,7 +63,9 @@ public sealed class StreamLoadIntegrationTests
     {
         if (!IntegrationTestEnvironment.IsEnabled)
         {
-            return;
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
         }
 
         string tableName = await CreateStreamLoadTableAsync().ConfigureAwait(true);
@@ -120,7 +124,9 @@ public sealed class StreamLoadIntegrationTests
     {
         if (!IntegrationTestEnvironment.IsEnabled)
         {
-            return;
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
         }
 
         string tableName = await CreateStreamLoadTableAsync().ConfigureAwait(true);
@@ -175,7 +181,9 @@ public sealed class StreamLoadIntegrationTests
     {
         if (!IntegrationTestEnvironment.IsEnabled)
         {
-            return;
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
         }
 
         string tableName = await CreateStreamLoadTableAsync().ConfigureAwait(true);

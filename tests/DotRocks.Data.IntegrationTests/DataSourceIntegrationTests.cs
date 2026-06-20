@@ -13,7 +13,9 @@ public sealed class DataSourceIntegrationTests
     {
         if (!IntegrationTestEnvironment.IsEnabled)
         {
-            return;
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
         }
 
         using var dataSource = new DotRocksDataSource(IntegrationTestEnvironment.ConnectionString);
@@ -31,7 +33,9 @@ public sealed class DataSourceIntegrationTests
     {
         if (!IntegrationTestEnvironment.IsEnabled)
         {
-            return;
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
         }
 
         DotRocksConnection.ClearAllPools();

@@ -46,5 +46,12 @@ jobs:
       - name: Build
         run: dotnet build DotRocks.slnx --configuration Release --no-restore
 
+      # Integration suites (Data.IntegrationTests, Data.DapperTests, EntityFrameworkCore.IntegrationTests)
+      # require a live StarRocks server and run in integration.yml. Run only the server-free
+      # unit/protocol/analyzer/packaging suites here.
       - name: Test
-        run: dotnet test DotRocks.slnx --configuration Release --no-build
+        run: |
+          dotnet test tests/DotRocks.Protocol.Tests --configuration Release --no-build
+          dotnet test tests/DotRocks.EntityFrameworkCore.Tests --configuration Release --no-build
+          dotnet test tests/DotRocks.Analyzers.Tests --configuration Release --no-build
+          dotnet test tests/DotRocks.PackageTests --configuration Release --no-build
