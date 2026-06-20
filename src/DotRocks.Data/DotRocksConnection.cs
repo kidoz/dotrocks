@@ -320,6 +320,45 @@ public sealed class DotRocksConnection : DbConnection
         Abort();
     }
 
+    internal void RollbackTransactionForDispose(DotRocksTransaction transaction) =>
+        RollbackTransactionForDisposeAsync(transaction).AsTask().GetAwaiter().GetResult();
+
+    internal async ValueTask RollbackTransactionForDisposeAsync(DotRocksTransaction transaction)
+    {
+        if (!ReferenceEquals(_activeTransaction, transaction))
+        {
+            return;
+        }
+
+        if (_state != ConnectionState.Open || _lease is null)
+        {
+            // The physical connection is already gone; just detach the transaction.
+            _activeTransaction = null;
+            return;
+        }
+
+        try
+        {
+            await ExecuteTransactionCommandAsync(
+                    "ROLLBACK WORK",
+                    transaction,
+                    CancellationToken.None
+                )
+                .ConfigureAwait(false);
+            _activeTransaction = null;
+        }
+        catch (DotRocksException)
+        {
+            // The rollback itself failed (e.g. a broken connection). Discard the physical
+            // connection rather than returning a connection with an undefined transaction state.
+            AbortTransaction(transaction);
+        }
+        catch (ObjectDisposedException)
+        {
+            AbortTransaction(transaction);
+        }
+    }
+
     internal void ValidateCommandTransaction(DotRocksTransaction? transaction)
     {
         if (transaction is not null)

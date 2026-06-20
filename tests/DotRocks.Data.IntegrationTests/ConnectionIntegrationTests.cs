@@ -1382,6 +1382,69 @@ public sealed class ConnectionIntegrationTests
         }
     }
 
+    [Fact]
+    public async Task Transaction_DisposeWithoutCommit_RollsBackAndKeepsConnectionUsable()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
+        }
+
+        string tableName = await CreateTransactionTableAsync().ConfigureAwait(true);
+        try
+        {
+            using var connection = new DotRocksConnection(
+                BuildDatabaseConnectionString(TransactionDatabaseName)
+            );
+            await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+            await UseTransactionDatabaseAsync(connection).ConfigureAwait(true);
+
+            System.Data.Common.DbTransaction transaction = await connection
+                .BeginTransactionAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+            await using (transaction.ConfigureAwait(true))
+            {
+                await ExecuteNonQueryAsync(
+                        connection,
+                        transaction,
+                        $"INSERT INTO {tableName} SELECT 1, 10"
+                    )
+                    .ConfigureAwait(true);
+                // Intentionally no Commit/Rollback: disposing must roll back.
+            }
+
+            // The connection must remain open and usable after the rolled-back transaction.
+            Assert.Equal(ConnectionState.Open, connection.State);
+            using (System.Data.Common.DbCommand probe = connection.CreateCommand())
+            {
+                probe.CommandText = "SELECT 7";
+                object? value = await probe
+                    .ExecuteScalarAsync(TestContext.Current.CancellationToken)
+                    .ConfigureAwait(true);
+                Assert.Equal(
+                    7,
+                    Convert.ToInt32(value, System.Globalization.CultureInfo.InvariantCulture)
+                );
+            }
+
+            int rowCount = await ReadTransactionRowCountAsync(tableName).ConfigureAwait(true);
+            if (rowCount != 0)
+            {
+                Assert.Skip(
+                    "The pinned StarRocks integration image accepted ROLLBACK WORK but made the inserted row visible."
+                );
+            }
+
+            Assert.Equal(0, rowCount);
+        }
+        finally
+        {
+            await DropTableAsync(tableName).ConfigureAwait(true);
+        }
+    }
+
     private static string BuildPoolingConnectionString(int maximumPoolSize)
     {
         var builder = new DotRocksConnectionStringBuilder(

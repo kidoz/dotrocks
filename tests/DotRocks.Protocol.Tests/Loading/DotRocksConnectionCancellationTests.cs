@@ -24,6 +24,38 @@ public sealed class DotRocksConnectionCancellationTests
     private static readonly byte[] AuthPart2 = [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 0];
 
     [Fact]
+    public async Task DisposingUncommittedTransaction_RollsBackAndKeepsConnectionUsable()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        var commands = new List<string>();
+        using var server = FakeStarRocksServer.Start(async stream =>
+        {
+            await CompleteAuthenticationAsync(stream).ConfigureAwait(true);
+            commands.Add(await ReadCommandAndReplyOkAsync(stream).ConfigureAwait(true));
+            commands.Add(await ReadCommandAndReplyOkAsync(stream).ConfigureAwait(true));
+            commands.Add(await ReadCommandAndReplyOkAsync(stream).ConfigureAwait(true));
+        });
+
+        using var connection = new DotRocksConnection(BuildFakeServerConnectionString(server.Port));
+        await connection.OpenAsync(ct).ConfigureAwait(true);
+
+        DbTransaction transaction = await connection.BeginTransactionAsync(ct).ConfigureAwait(true);
+        await using (transaction.ConfigureAwait(true))
+        {
+            // No Commit/Rollback: disposing must issue ROLLBACK WORK, not abort the connection.
+        }
+
+        Assert.Equal(ConnectionState.Open, connection.State);
+
+        // The connection must still be usable after the rolled-back transaction.
+        using DbCommand command = connection.CreateCommand();
+        command.CommandText = "SELECT 1";
+        _ = await command.ExecuteScalarAsync(ct).ConfigureAwait(true);
+
+        Assert.Equal(["START TRANSACTION", "ROLLBACK WORK", "SELECT 1"], commands);
+    }
+
+    [Fact]
     public async Task OpenAsync_CancellationWhileWaitingForHandshake_ClosesConnectionWithoutSecretLeak()
     {
         using var listener = new TcpListener(IPAddress.Loopback, port: 0);
@@ -392,6 +424,23 @@ public sealed class DotRocksConnectionCancellationTests
             DateTimeOffset.UtcNow.AddDays(-1),
             DateTimeOffset.UtcNow.AddDays(1)
         );
+    }
+
+    private static async Task<string> ReadCommandAndReplyOkAsync(NetworkStream stream)
+    {
+        var reader = new PacketReader(stream);
+        reader.ResetSequence(0);
+        byte[] payload = await reader
+            .ReadPayloadAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+        var writer = new PacketWriter(stream);
+        writer.ResetSequence(reader.SequenceId);
+        await writer
+            .WritePayloadAsync(BuildOkPayload(), TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+
+        // COM_QUERY payload is a 0x03 command byte followed by the SQL text.
+        return Encoding.UTF8.GetString(payload.AsSpan(1));
     }
 
     private static byte[] BuildOkPayload()

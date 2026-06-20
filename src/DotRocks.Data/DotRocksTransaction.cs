@@ -83,10 +83,24 @@ public sealed class DotRocksTransaction : DbTransaction
     {
         if (disposing && !_isCompleted)
         {
-            _connection.AbortTransaction(this);
+            // Disposing an uncommitted transaction rolls it back and leaves the connection
+            // usable, matching the DbTransaction contract (only a failed rollback aborts).
+            _connection.RollbackTransactionForDispose(this);
             _isCompleted = true;
         }
 
         base.Dispose(disposing);
+    }
+
+    /// <inheritdoc />
+    public override async ValueTask DisposeAsync()
+    {
+        if (!_isCompleted)
+        {
+            await _connection.RollbackTransactionForDisposeAsync(this).ConfigureAwait(false);
+            _isCompleted = true;
+        }
+
+        await base.DisposeAsync().ConfigureAwait(false);
     }
 }
