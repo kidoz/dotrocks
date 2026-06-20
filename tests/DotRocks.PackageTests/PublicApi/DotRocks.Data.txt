@@ -1,0 +1,240 @@
+# DotRocks.Data
+
+public sealed class DotRocks.Data.DotRocksCommand System.Data.Common.DbCommand
+  public DotRocks.Data.DotRocksCommand()
+  public DotRocks.Data.DotRocksCommand(System.String commandText, DotRocks.Data.DotRocksConnection connection)
+  public property System.String CommandText { get; set; }
+  public property System.Int32 CommandTimeout { get; set; }
+  public property System.Data.CommandType CommandType { get; set; }
+  protected property System.Data.Common.DbConnection DbConnection { get; set; }
+  protected property System.Data.Common.DbParameterCollection DbParameterCollection { get; }
+  protected property System.Data.Common.DbTransaction DbTransaction { get; set; }
+  public property System.Boolean DesignTimeVisible { get; set; }
+  public property System.Data.UpdateRowSource UpdatedRowSource { get; set; }
+  protected virtual method System.Data.Common.DbDataReader ExecuteDbDataReader(System.Data.CommandBehavior behavior)
+  protected virtual method System.Data.Common.DbParameter CreateDbParameter()
+  protected virtual method System.Threading.Tasks.Task<System.Data.Common.DbDataReader> ExecuteDbDataReaderAsync(System.Data.CommandBehavior behavior, System.Threading.CancellationToken cancellationToken)
+  public virtual method System.Int32 ExecuteNonQuery()
+  public virtual method System.Object ExecuteScalar()
+  public virtual method System.Threading.Tasks.Task PrepareAsync(System.Threading.CancellationToken cancellationToken)
+  public virtual method System.Threading.Tasks.Task<System.Int32> ExecuteNonQueryAsync(System.Threading.CancellationToken cancellationToken)
+  public virtual method System.Threading.Tasks.Task<System.Object> ExecuteScalarAsync(System.Threading.CancellationToken cancellationToken)
+  public virtual method System.Void Cancel()
+  public virtual method System.Void Prepare()
+
+public sealed class DotRocks.Data.DotRocksConnection System.Data.Common.DbConnection
+  public DotRocks.Data.DotRocksConnection()
+  public DotRocks.Data.DotRocksConnection(System.String connectionString)
+  public property System.String ConnectionString { get; set; }
+  public property System.String DataSource { get; }
+  public property System.String Database { get; }
+  protected property System.Data.Common.DbProviderFactory DbProviderFactory { get; }
+  public property System.String ServerVersion { get; }
+  public property System.Data.ConnectionState State { get; }
+  protected virtual method System.Data.Common.DbCommand CreateDbCommand()
+  protected virtual method System.Data.Common.DbTransaction BeginDbTransaction(System.Data.IsolationLevel isolationLevel)
+  protected virtual method System.Threading.Tasks.ValueTask<System.Data.Common.DbTransaction> BeginDbTransactionAsync(System.Data.IsolationLevel isolationLevel, System.Threading.CancellationToken cancellationToken)
+  protected virtual method System.Void Dispose(System.Boolean disposing)
+  public static method System.Void ClearAllPools()
+  public virtual method System.Threading.Tasks.Task CloseAsync()
+  public virtual method System.Threading.Tasks.Task OpenAsync(System.Threading.CancellationToken cancellationToken)
+  public virtual method System.Void ChangeDatabase(System.String databaseName)
+  public virtual method System.Void Close()
+  public virtual method System.Void Open()
+
+public sealed class DotRocks.Data.DotRocksConnectionStringBuilder System.Data.Common.DbConnectionStringBuilder , System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<System.String, System.Object>>, System.Collections.Generic.IReadOnlyCollection<System.Collections.Generic.KeyValuePair<System.String, System.Object>>
+  public DotRocks.Data.DotRocksConnectionStringBuilder()
+  public DotRocks.Data.DotRocksConnectionStringBuilder(System.String connectionString)
+  public property System.Int32 ConnectionIdleTimeout { get; set; }
+  public property System.Int32 ConnectionTimeout { get; set; }
+  public property System.String Database { get; set; }
+  public property System.Int32 MaximumPoolSize { get; set; }
+  public property System.Int32 MinimumPoolSize { get; set; }
+  public property System.String Password { get; set; }
+  public property System.Boolean Pooling { get; set; }
+  public property System.Int32 Port { get; set; }
+  public property System.String Server { get; set; }
+  public property System.String StreamLoadEndpoint { get; set; }
+  public property System.String UserId { get; set; }
+  public virtual method System.String ToString()
+
+public sealed class DotRocks.Data.DotRocksDataReader System.Data.Common.DbDataReader , System.Collections.Generic.IEnumerable<System.Data.IDataRecord>, System.Data.Common.IDbColumnSchemaGenerator
+  public property System.Int32 Depth { get; }
+  public property System.Int32 FieldCount { get; }
+  public property System.Boolean HasRows { get; }
+  public property System.Boolean IsClosed { get; }
+  public property System.Object Item { get; }
+  public property System.Object Item { get; }
+  public property System.Int32 RecordsAffected { get; }
+  public virtual method System.Boolean GetBoolean(System.Int32 ordinal)
+  public virtual method System.Boolean IsDBNull(System.Int32 ordinal)
+  public virtual method System.Boolean NextResult()
+  public virtual method System.Boolean Read()
+  public virtual method System.Byte GetByte(System.Int32 ordinal)
+  public virtual method System.Char GetChar(System.Int32 ordinal)
+  public virtual method System.Collections.IEnumerator GetEnumerator()
+  public virtual method System.Collections.ObjectModel.ReadOnlyCollection<System.Data.Common.DbColumn> GetColumnSchema()
+  public virtual method System.DateTime GetDateTime(System.Int32 ordinal)
+  public virtual method System.Decimal GetDecimal(System.Int32 ordinal)
+  public virtual method System.Double GetDouble(System.Int32 ordinal)
+  public virtual method System.Guid GetGuid(System.Int32 ordinal)
+  public virtual method System.Int16 GetInt16(System.Int32 ordinal)
+  public virtual method System.Int32 GetInt32(System.Int32 ordinal)
+  public virtual method System.Int32 GetOrdinal(System.String name)
+  public virtual method System.Int32 GetValues(System.Object[] values)
+  public virtual method System.Int64 GetBytes(System.Int32 ordinal, System.Int64 dataOffset, System.Byte[] buffer, System.Int32 bufferOffset, System.Int32 length)
+  public virtual method System.Int64 GetChars(System.Int32 ordinal, System.Int64 dataOffset, System.Char[] buffer, System.Int32 bufferOffset, System.Int32 length)
+  public virtual method System.Int64 GetInt64(System.Int32 ordinal)
+  public virtual method System.Object GetValue(System.Int32 ordinal)
+  public virtual method System.Single GetFloat(System.Int32 ordinal)
+  public virtual method System.String GetDataTypeName(System.Int32 ordinal)
+  public virtual method System.String GetName(System.Int32 ordinal)
+  public virtual method System.String GetString(System.Int32 ordinal)
+  public virtual method System.Threading.Tasks.Task<System.Boolean> ReadAsync(System.Threading.CancellationToken cancellationToken)
+  public virtual method System.Threading.Tasks.Task<System.Collections.ObjectModel.ReadOnlyCollection<System.Data.Common.DbColumn>> GetColumnSchemaAsync(System.Threading.CancellationToken cancellationToken)
+  public virtual method System.Type GetFieldType(System.Int32 ordinal)
+  public virtual method System.Void Close()
+  public virtual method T GetFieldValue<T>(System.Int32 ordinal)
+  public virtual method Task<T> GetFieldValueAsync<T>(System.Int32 ordinal, System.Threading.CancellationToken cancellationToken)
+
+public sealed class DotRocks.Data.DotRocksDataSource System.Data.Common.DbDataSource
+  public DotRocks.Data.DotRocksDataSource(System.String connectionString)
+  public property System.String ConnectionString { get; }
+  protected virtual method System.Data.Common.DbCommand CreateDbCommand(System.String commandText)
+  protected virtual method System.Data.Common.DbConnection CreateDbConnection()
+  protected virtual method System.Data.Common.DbConnection OpenDbConnection()
+  protected virtual method System.Threading.Tasks.ValueTask DisposeAsyncCore()
+  protected virtual method System.Threading.Tasks.ValueTask<System.Data.Common.DbConnection> OpenDbConnectionAsync(System.Threading.CancellationToken cancellationToken)
+  protected virtual method System.Void Dispose(System.Boolean disposing)
+
+public struct DotRocks.Data.DotRocksDecimal , System.IComparable, System.IComparable<DotRocks.Data.DotRocksDecimal>, System.IEquatable<DotRocks.Data.DotRocksDecimal>
+  public DotRocks.Data.DotRocksDecimal(System.Numerics.BigInteger unscaledValue, System.Int32 scale)
+  public property System.Int32 Scale { get; }
+  public property System.Numerics.BigInteger UnscaledValue { get; }
+  public method System.Decimal ToDecimal()
+  public static method DotRocks.Data.DotRocksDecimal FromDecimal(System.Decimal value)
+  public static method DotRocks.Data.DotRocksDecimal Parse(System.String value)
+  public virtual method System.Boolean Equals(DotRocks.Data.DotRocksDecimal other)
+  public virtual method System.Boolean Equals(System.Object obj)
+  public virtual method System.Int32 CompareTo(DotRocks.Data.DotRocksDecimal other)
+  public virtual method System.Int32 CompareTo(System.Object obj)
+  public virtual method System.Int32 GetHashCode()
+  public virtual method System.String ToString()
+
+public class DotRocks.Data.DotRocksException System.Exception
+  public DotRocks.Data.DotRocksException()
+  public DotRocks.Data.DotRocksException(System.String message)
+  public DotRocks.Data.DotRocksException(System.String message, System.Exception innerException)
+  public property System.UInt32? ConnectionId { get; }
+  public property System.Boolean IsTransient { get; }
+  public property System.Int32? ServerErrorCode { get; }
+  public property System.String SqlState { get; }
+
+public sealed class DotRocks.Data.DotRocksFactory System.Data.Common.DbProviderFactory
+  public DotRocks.Data.DotRocksFactory()
+  public static property DotRocks.Data.DotRocksFactory Instance { get; }
+  public virtual method System.Data.Common.DbCommand CreateCommand()
+  public virtual method System.Data.Common.DbConnection CreateConnection()
+  public virtual method System.Data.Common.DbConnectionStringBuilder CreateConnectionStringBuilder()
+  public virtual method System.Data.Common.DbDataSource CreateDataSource(System.String connectionString)
+  public virtual method System.Data.Common.DbParameter CreateParameter()
+
+public sealed class DotRocks.Data.DotRocksParameter System.Data.Common.DbParameter
+  public DotRocks.Data.DotRocksParameter()
+  public property System.Data.DbType DbType { get; set; }
+  public property System.Data.ParameterDirection Direction { get; set; }
+  public property System.Boolean IsNullable { get; set; }
+  public property System.String ParameterName { get; set; }
+  public property System.Int32 Size { get; set; }
+  public property System.String SourceColumn { get; set; }
+  public property System.Boolean SourceColumnNullMapping { get; set; }
+  public property System.Data.DataRowVersion SourceVersion { get; set; }
+  public property System.Object Value { get; set; }
+  public virtual method System.Void ResetDbType()
+
+public sealed class DotRocks.Data.DotRocksPrecisionLossException DotRocks.Data.DotRocksException
+  public DotRocks.Data.DotRocksPrecisionLossException()
+  public DotRocks.Data.DotRocksPrecisionLossException(System.String message)
+  public DotRocks.Data.DotRocksPrecisionLossException(System.String message, System.Exception innerException)
+
+public sealed class DotRocks.Data.DotRocksTransaction System.Data.Common.DbTransaction
+  protected property System.Data.Common.DbConnection DbConnection { get; }
+  public property System.Data.IsolationLevel IsolationLevel { get; }
+  protected virtual method System.Void Dispose(System.Boolean disposing)
+  public virtual method System.Threading.Tasks.Task CommitAsync(System.Threading.CancellationToken cancellationToken)
+  public virtual method System.Threading.Tasks.Task RollbackAsync(System.Threading.CancellationToken cancellationToken)
+  public virtual method System.Void Commit()
+  public virtual method System.Void Rollback()
+
+public sealed class DotRocks.Data.Loading.DotRocksStreamLoadClient System.IDisposable
+  public DotRocks.Data.Loading.DotRocksStreamLoadClient(System.String connectionString)
+  public property System.Uri StreamLoadEndpoint { get; }
+  public method System.Threading.Tasks.Task<DotRocks.Data.Loading.DotRocksStreamLoadResult> LoadCsvAsync(System.String databaseName, System.String tableName, System.IO.Stream payload, DotRocks.Data.Loading.DotRocksStreamLoadOptions options, System.Threading.CancellationToken cancellationToken)
+  public method System.Threading.Tasks.Task<DotRocks.Data.Loading.DotRocksStreamLoadResult> LoadJsonAsync(System.String databaseName, System.String tableName, System.IO.Stream payload, DotRocks.Data.Loading.DotRocksStreamLoadOptions options, System.Threading.CancellationToken cancellationToken)
+  public method System.Threading.Tasks.Task<DotRocks.Data.Loading.DotRocksStreamLoadTransaction> BeginTransactionAsync(System.String databaseName, System.String tableName, DotRocks.Data.Loading.DotRocksStreamLoadTransactionOptions options, System.Threading.CancellationToken cancellationToken)
+  public virtual method System.Void Dispose()
+
+public sealed class DotRocks.Data.Loading.DotRocksStreamLoadException DotRocks.Data.DotRocksException
+  public DotRocks.Data.Loading.DotRocksStreamLoadException()
+  public DotRocks.Data.Loading.DotRocksStreamLoadException(System.String message)
+  public DotRocks.Data.Loading.DotRocksStreamLoadException(System.String message, System.Exception innerException)
+  public property System.Net.HttpStatusCode? HttpStatusCode { get; }
+  public property DotRocks.Data.Loading.DotRocksStreamLoadResult Result { get; }
+
+public sealed class DotRocks.Data.Loading.DotRocksStreamLoadOptions
+  public DotRocks.Data.Loading.DotRocksStreamLoadOptions()
+  public property System.String ColumnSeparator { get; set; }
+  public property System.String Columns { get; set; }
+  public property System.String JsonPaths { get; set; }
+  public property System.String Label { get; set; }
+  public property System.Double? MaxFilterRatio { get; set; }
+  public property System.String RowDelimiter { get; set; }
+  public property System.Boolean? StrictMode { get; set; }
+  public property System.Boolean? StripOuterArray { get; set; }
+  public property System.TimeSpan? Timeout { get; set; }
+  public property System.String Where { get; set; }
+
+public sealed class DotRocks.Data.Loading.DotRocksStreamLoadResult
+  public property System.Uri ErrorUrl { get; }
+  public property System.Boolean IsSuccess { get; }
+  public property System.String Label { get; }
+  public property System.Int64 LoadBytes { get; }
+  public property System.Int64 LoadTimeMilliseconds { get; }
+  public property System.String Message { get; }
+  public property System.Int64 NumberFilteredRows { get; }
+  public property System.Int64 NumberLoadedRows { get; }
+  public property System.Int64 NumberTotalRows { get; }
+  public property System.Int64 NumberUnselectedRows { get; }
+  public property System.Int32? Sequence { get; }
+  public property System.String Status { get; }
+  public property System.Int64? TransactionId { get; }
+
+public sealed class DotRocks.Data.Loading.DotRocksStreamLoadTransaction
+  public property DotRocks.Data.Loading.DotRocksStreamLoadResult BeginResult { get; }
+  public property System.String DatabaseName { get; }
+  public property System.String DefaultTableName { get; }
+  public property System.String Label { get; }
+  public method System.Threading.Tasks.Task<DotRocks.Data.Loading.DotRocksStreamLoadResult> CommitAsync(System.Threading.CancellationToken cancellationToken)
+  public method System.Threading.Tasks.Task<DotRocks.Data.Loading.DotRocksStreamLoadResult> LoadCsvAsync(System.IO.Stream payload, DotRocks.Data.Loading.DotRocksStreamLoadOptions options, System.Threading.CancellationToken cancellationToken)
+  public method System.Threading.Tasks.Task<DotRocks.Data.Loading.DotRocksStreamLoadResult> LoadCsvAsync(System.String tableName, System.IO.Stream payload, DotRocks.Data.Loading.DotRocksStreamLoadOptions options, System.Threading.CancellationToken cancellationToken)
+  public method System.Threading.Tasks.Task<DotRocks.Data.Loading.DotRocksStreamLoadResult> LoadJsonAsync(System.IO.Stream payload, DotRocks.Data.Loading.DotRocksStreamLoadOptions options, System.Threading.CancellationToken cancellationToken)
+  public method System.Threading.Tasks.Task<DotRocks.Data.Loading.DotRocksStreamLoadResult> LoadJsonAsync(System.String tableName, System.IO.Stream payload, DotRocks.Data.Loading.DotRocksStreamLoadOptions options, System.Threading.CancellationToken cancellationToken)
+  public method System.Threading.Tasks.Task<DotRocks.Data.Loading.DotRocksStreamLoadResult> PrepareAsync(System.Threading.CancellationToken cancellationToken)
+  public method System.Threading.Tasks.Task<DotRocks.Data.Loading.DotRocksStreamLoadResult> RollbackAsync(System.Threading.CancellationToken cancellationToken)
+
+public sealed class DotRocks.Data.Loading.DotRocksStreamLoadTransactionInDoubtException DotRocks.Data.DotRocksException
+  public DotRocks.Data.Loading.DotRocksStreamLoadTransactionInDoubtException()
+  public DotRocks.Data.Loading.DotRocksStreamLoadTransactionInDoubtException(System.String label, System.String operation, System.Exception innerException)
+  public DotRocks.Data.Loading.DotRocksStreamLoadTransactionInDoubtException(System.String message)
+  public DotRocks.Data.Loading.DotRocksStreamLoadTransactionInDoubtException(System.String message, System.Exception innerException)
+  public property System.String Label { get; }
+  public property System.String Operation { get; }
+
+public sealed class DotRocks.Data.Loading.DotRocksStreamLoadTransactionOptions
+  public DotRocks.Data.Loading.DotRocksStreamLoadTransactionOptions()
+  public property System.TimeSpan? IdleTimeout { get; set; }
+  public property System.Boolean IsMultiTable { get; set; }
+  public property System.String Label { get; set; }
+  public property System.TimeSpan? PreparedTimeout { get; set; }
+  public property System.TimeSpan? Timeout { get; set; }
+

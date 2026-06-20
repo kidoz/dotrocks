@@ -1,0 +1,14 @@
+# DotRocks.Analyzers.CodeFixes
+
+public sealed class DotRocks.Analyzers.CodeFixes.EfValueGeneratedNeverCodeFixProvider Microsoft.CodeAnalysis.CodeFixes.CodeFixProvider
+  public DotRocks.Analyzers.CodeFixes.EfValueGeneratedNeverCodeFixProvider()
+  public property System.Collections.Immutable.ImmutableArray<System.String> FixableDiagnosticIds { get; }
+  public virtual method Microsoft.CodeAnalysis.CodeFixes.FixAllProvider GetFixAllProvider()
+  public virtual method System.Threading.Tasks.Task RegisterCodeFixesAsync(Microsoft.CodeAnalysis.CodeFixes.CodeFixContext context)
+
+public sealed class DotRocks.Analyzers.CodeFixes.InsecureStreamLoadEndpointCodeFixProvider Microsoft.CodeAnalysis.CodeFixes.CodeFixProvider
+  public DotRocks.Analyzers.CodeFixes.InsecureStreamLoadEndpointCodeFixProvider()
+  public property System.Collections.Immutable.ImmutableArray<System.String> FixableDiagnosticIds { get; }
+  public virtual method Microsoft.CodeAnalysis.CodeFixes.FixAllProvider GetFixAllProvider()
+  public virtual method System.Threading.Tasks.Task RegisterCodeFixesAsync(Microsoft.CodeAnalysis.CodeFixes.CodeFixContext context)
+
