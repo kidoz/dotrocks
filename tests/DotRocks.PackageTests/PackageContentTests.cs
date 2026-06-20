@@ -38,6 +38,7 @@ public sealed class PackageContentTests
             Assert.Contains("README.md", entries);
             Assert.Contains("lib/net10.0/" + packageId + ".dll", entries);
             Assert.Contains("lib/net10.0/" + packageId + ".xml", entries);
+            await AssertPackageReadmeAsync(archive).ConfigureAwait(true);
             AssertRuntimePackageLayout(packageId, entries);
             Assert.DoesNotContain(
                 entries,
@@ -75,6 +76,7 @@ public sealed class PackageContentTests
 
             Assert.Contains("README.md", entries);
             Assert.Contains("analyzers/dotnet/cs/" + packageId + ".dll", entries);
+            await AssertPackageReadmeAsync(archive).ConfigureAwait(true);
             AssertAnalyzerPackageLayout(packageId, entries);
             Assert.DoesNotContain(
                 entries,
@@ -179,6 +181,25 @@ public sealed class PackageContentTests
                 element => element.Name.LocalName == "dependency"
             );
         }
+    }
+
+    private static async Task AssertPackageReadmeAsync(ZipArchive archive)
+    {
+        ZipArchiveEntry readmeEntry = Assert.Single(
+            archive.Entries,
+            entry => string.Equals(entry.FullName, "README.md", StringComparison.Ordinal)
+        );
+        using Stream stream = await readmeEntry
+            .OpenAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+        using var reader = new StreamReader(stream);
+        string readme = await reader
+            .ReadToEndAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+
+        Assert.Contains("Verified robustness", readme, StringComparison.Ordinal);
+        Assert.Contains("DotRocksDataSource", readme, StringComparison.Ordinal);
+        Assert.Contains("DotRocksFactory", readme, StringComparison.Ordinal);
     }
 
     private static string? NuspecValue(
@@ -516,6 +537,19 @@ public sealed class PackageContentTests
         using DotRocks.Data;
         using DotRocks.Data.Loading;
         using Microsoft.EntityFrameworkCore;
+
+        var builder = new DotRocksConnectionStringBuilder(
+            "Server=127.0.0.1;User ID=root;Password=secret;Stream Load Endpoint=https://127.0.0.1:8030"
+        );
+        if (builder.ToString().Contains("secret", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("Connection string builder leaked a password.");
+        }
+
+        using var dataSource = new DotRocksDataSource(builder.ConnectionString);
+        using var dataSourceConnection = dataSource.CreateConnection();
+        using var factoryConnection = DotRocksFactory.Instance.CreateConnection();
+        factoryConnection!.ConnectionString = builder.ConnectionString;
 
         _ = new DotRocksStreamLoadClient(
             "Server=127.0.0.1;User ID=root;Password=secret;Stream Load Endpoint=http://127.0.0.1:8030"

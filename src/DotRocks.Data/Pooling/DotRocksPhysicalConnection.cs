@@ -147,6 +147,11 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
             MarkBroken();
             throw;
         }
+        catch (MalformedPacketException ex)
+        {
+            MarkBroken();
+            throw new DotRocksException("StarRocks returned malformed protocol bytes.", ex);
+        }
         catch (IOException ex)
         {
             MarkBroken();
@@ -203,6 +208,11 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
         {
             MarkBroken();
             throw;
+        }
+        catch (MalformedPacketException ex)
+        {
+            MarkBroken();
+            throw new DotRocksException("StarRocks returned malformed protocol bytes.", ex);
         }
         catch (IOException ex)
         {
