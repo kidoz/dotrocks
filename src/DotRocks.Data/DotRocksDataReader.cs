@@ -25,10 +25,12 @@ public sealed class DotRocksDataReader
     private readonly CommandBehavior _behavior;
     private ReadOnlyCollection<DbColumn>? _columnSchema;
     private object?[]? _currentRow;
+    private object?[]? _prefetchedRow;
     private int _rowIndex = -1;
     private bool _isClosed;
     private bool _isConsumed;
     private bool _connectionCompletionReported;
+    private bool _hasPrefetchedRow;
 
     internal DotRocksDataReader(
         QueryResult result,
@@ -70,7 +72,7 @@ public sealed class DotRocksDataReader
 
     /// <inheritdoc />
     public override bool HasRows =>
-        _bufferedResult is not null ? _bufferedResult.Rows.Count > 0 : FieldCount > 0;
+        _bufferedResult is not null ? _bufferedResult.Rows.Count > 0 : HasStreamingRows();
 
     /// <inheritdoc />
     public override bool IsClosed => _isClosed;
@@ -319,16 +321,38 @@ public sealed class DotRocksDataReader
 
     private async Task<bool> ReadStreamingRowAsync(CancellationToken cancellationToken)
     {
-        if (_isConsumed)
+        if (_hasPrefetchedRow)
+        {
+            _currentRow = _prefetchedRow;
+            _prefetchedRow = null;
+            _hasPrefetchedRow = false;
+            _rowIndex++;
+            return true;
+        }
+
+        object?[]? row = await FetchStreamingRowAsync(cancellationToken).ConfigureAwait(false);
+        if (row is null)
         {
             return false;
+        }
+
+        _rowIndex++;
+        _currentRow = row;
+        return true;
+    }
+
+    private async Task<object?[]?> FetchStreamingRowAsync(CancellationToken cancellationToken)
+    {
+        if (_isConsumed)
+        {
+            return null;
         }
 
         if (_rowReader is null)
         {
             _isConsumed = true;
             ReportConnectionCompletion(reusable: true);
-            return false;
+            return null;
         }
 
         try
@@ -339,12 +363,10 @@ public sealed class DotRocksDataReader
                 _isConsumed = true;
                 _currentRow = null;
                 ReportConnectionCompletion(reusable: true);
-                return false;
+                return null;
             }
 
-            _rowIndex++;
-            _currentRow = row;
-            return true;
+            return row;
         }
         catch
         {
@@ -352,6 +374,23 @@ public sealed class DotRocksDataReader
             ReportConnectionCompletion(reusable: false);
             throw;
         }
+    }
+
+    private bool HasStreamingRows()
+    {
+        if (_streamingResult?.HasResultSet != true || _isConsumed)
+        {
+            return false;
+        }
+
+        if (_currentRow is not null || _hasPrefetchedRow)
+        {
+            return true;
+        }
+
+        _prefetchedRow = FetchStreamingRowAsync(CancellationToken.None).GetAwaiter().GetResult();
+        _hasPrefetchedRow = _prefetchedRow is not null;
+        return _hasPrefetchedRow;
     }
 
     /// <inheritdoc />

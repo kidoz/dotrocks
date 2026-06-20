@@ -1,9 +1,11 @@
 using System.Collections.ObjectModel;
 using System.Data.Common;
 using System.Globalization;
+using System.Text;
 using DotRocks.Data;
 using DotRocks.Data.Protocol.Framing;
 using DotRocks.Data.Protocol.Results;
+using DotRocks.Data.Protocol.Serialization;
 using Xunit;
 
 namespace DotRocks.Protocol.Tests.DataReader;
@@ -337,6 +339,42 @@ public sealed class DotRocksDataReaderTests
     }
 
     [Fact]
+    public void HasRows_StreamingEmptyResult_ReturnsFalse()
+    {
+        using var stream = BuildStreamingRows(EofPayload());
+        var rowReader = new TextResultRowReader(
+            new PacketReader(stream),
+            [Column("value", (byte)ColumnType.Long)],
+            connectionId: null
+        );
+        using var reader = new DotRocksDataReader(
+            StreamingQueryResult.FromRows(rowReader.Columns, rowReader)
+        );
+
+        Assert.False(reader.HasRows);
+        Assert.False(reader.Read());
+    }
+
+    [Fact]
+    public void HasRows_StreamingResultWithRow_PreservesPrefetchedRowForRead()
+    {
+        using var stream = BuildStreamingRows(BuildTextRow("42"), EofPayload());
+        var rowReader = new TextResultRowReader(
+            new PacketReader(stream),
+            [Column("value", (byte)ColumnType.Long)],
+            connectionId: null
+        );
+        using var reader = new DotRocksDataReader(
+            StreamingQueryResult.FromRows(rowReader.Columns, rowReader)
+        );
+
+        Assert.True(reader.HasRows);
+        Assert.True(reader.Read());
+        Assert.Equal(42, reader.GetInt32(0));
+        Assert.False(reader.Read());
+    }
+
+    [Fact]
     public void Read_BeforeRow_Throws()
     {
         using var reader = new DotRocksDataReader(
@@ -370,4 +408,30 @@ public sealed class DotRocksDataReaderTests
             flags,
             0
         );
+
+    private static MemoryStream BuildStreamingRows(params byte[][] payloads)
+    {
+        var stream = new MemoryStream();
+        var writer = new PacketWriter(stream);
+        foreach (byte[] payload in payloads)
+        {
+            writer
+                .WritePayloadAsync(payload, CancellationToken.None)
+                .AsTask()
+                .GetAwaiter()
+                .GetResult();
+        }
+
+        stream.Position = 0;
+        return stream;
+    }
+
+    private static byte[] BuildTextRow(string value)
+    {
+        using var writer = new ProtocolWriter();
+        writer.WriteLengthEncodedBytes(Encoding.UTF8.GetBytes(value));
+        return writer.ToArray();
+    }
+
+    private static byte[] EofPayload() => [0xFE, 0x00, 0x00, 0x02, 0x00];
 }
