@@ -58,7 +58,7 @@ public class SerializationBenchmarks
         Justification = "BenchmarkDotNet requires public instance benchmark methods."
     )]
     public object ParseIntegerValue() =>
-        ColumnTypeMapper.ParseTextValue((byte)ColumnType.Long, IntegerText);
+        ColumnTypeMapper.ParseTextValue((byte)ColumnType.Long, columnLength: 11, IntegerText);
 
     [Benchmark]
     [SuppressMessage(
@@ -67,7 +67,7 @@ public class SerializationBenchmarks
         Justification = "BenchmarkDotNet requires public instance benchmark methods."
     )]
     public object ParseStringValue() =>
-        ColumnTypeMapper.ParseTextValue((byte)ColumnType.VarString, StringText);
+        ColumnTypeMapper.ParseTextValue((byte)ColumnType.VarString, columnLength: 0, StringText);
 
     [Benchmark]
     [SuppressMessage(

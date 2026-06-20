@@ -47,14 +47,16 @@ internal static class ColumnTypeMapper
             _ => throw CreateUnsupportedTypeException(type),
         };
 
-    public static Type GetFieldType(byte type) =>
+    // StarRocks sends BOOLEAN as TINYINT with a display length of 1 (the MySQL `tinyint(1)`
+    // convention); a wider TINYINT uses length 4. This is how BOOLEAN is distinguished on the wire.
+    private const uint BooleanColumnLength = 1;
+
+    public static Type GetFieldType(byte type, uint columnLength) =>
         ToColumnType(type) switch
         {
-            ColumnType.Tiny
-            or ColumnType.Short
-            or ColumnType.Long
-            or ColumnType.Int24
-            or ColumnType.Year => typeof(int),
+            ColumnType.Tiny => columnLength == BooleanColumnLength ? typeof(bool) : typeof(sbyte),
+            ColumnType.Short => typeof(short),
+            ColumnType.Long or ColumnType.Int24 or ColumnType.Year => typeof(int),
             ColumnType.LongLong => typeof(long),
             ColumnType.Decimal or ColumnType.NewDecimal => typeof(DotRocksDecimal),
             ColumnType.Float => typeof(float),
@@ -78,7 +80,7 @@ internal static class ColumnTypeMapper
             _ => throw CreateUnsupportedTypeException(type),
         };
 
-    public static object ParseTextValue(byte type, ReadOnlySpan<byte> bytes)
+    public static object ParseTextValue(byte type, uint columnLength, ReadOnlySpan<byte> bytes)
     {
         ColumnType columnType = ToColumnType(type);
 
@@ -99,11 +101,18 @@ internal static class ColumnTypeMapper
         {
             return columnType switch
             {
-                ColumnType.Tiny
-                or ColumnType.Short
-                or ColumnType.Long
-                or ColumnType.Int24
-                or ColumnType.Year => int.Parse(
+                ColumnType.Tiny when columnLength == BooleanColumnLength => ParseBoolean(text),
+                ColumnType.Tiny => sbyte.Parse(
+                    text,
+                    NumberStyles.Integer,
+                    CultureInfo.InvariantCulture
+                ),
+                ColumnType.Short => short.Parse(
+                    text,
+                    NumberStyles.Integer,
+                    CultureInfo.InvariantCulture
+                ),
+                ColumnType.Long or ColumnType.Int24 or ColumnType.Year => int.Parse(
                     text,
                     NumberStyles.Integer,
                     CultureInfo.InvariantCulture
@@ -157,6 +166,14 @@ internal static class ColumnTypeMapper
             );
         }
     }
+
+    private static bool ParseBoolean(string text) =>
+        text switch
+        {
+            "1" => true,
+            "0" => false,
+            _ => bool.Parse(text),
+        };
 
     private static ColumnType ToColumnType(byte type)
     {

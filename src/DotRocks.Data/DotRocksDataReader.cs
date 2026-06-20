@@ -210,7 +210,8 @@ public sealed class DotRocksDataReader
     public override Type GetFieldType(int ordinal)
     {
         ValidateOrdinal(ordinal);
-        return ColumnTypeMapper.GetFieldType(_columns[ordinal].ColumnType);
+        ColumnDefinition column = _columns[ordinal];
+        return ColumnTypeMapper.GetFieldType(column.ColumnType, column.ColumnLength);
     }
 
     /// <inheritdoc />
@@ -590,7 +591,7 @@ public sealed class DotRocksDataReader
             columns[i] = new DotRocksDbColumn(
                 definition.Name,
                 i,
-                ColumnTypeMapper.GetFieldType(definition.ColumnType),
+                ColumnTypeMapper.GetFieldType(definition.ColumnType, definition.ColumnLength),
                 ColumnTypeMapper.GetDataTypeName(definition.ColumnType),
                 (definition.Flags & NotNullColumnFlag) == 0,
                 definition.Catalog.Length == 0 ? null : definition.Catalog,
@@ -654,6 +655,16 @@ public sealed class DotRocksDataReader
         if (targetType.IsInstanceOfType(value))
         {
             return value;
+        }
+
+        if (targetType == typeof(sbyte))
+        {
+            return Convert.ToSByte(value, CultureInfo.InvariantCulture);
+        }
+
+        if (targetType == typeof(short))
+        {
+            return GetInt16(ordinal);
         }
 
         if (targetType == typeof(int))

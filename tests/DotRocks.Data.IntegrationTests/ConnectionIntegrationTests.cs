@@ -50,7 +50,8 @@ public sealed class ConnectionIntegrationTests
             .ExecuteScalarAsync(TestContext.Current.CancellationToken)
             .ConfigureAwait(true);
 
-        Assert.Equal(1, value);
+        // StarRocks types the integer literal as TINYINT, which maps to sbyte.
+        Assert.Equal(1, Convert.ToInt32(value, System.Globalization.CultureInfo.InvariantCulture));
     }
 
     [Fact]
@@ -170,7 +171,10 @@ public sealed class ConnectionIntegrationTests
                 CAST(12.34 AS DECIMAL(10, 2)) AS amount,
                 CAST(1.5 AS DOUBLE) AS ratio,
                 CAST('2026-06-19' AS DATE) AS created_on,
-                CAST('2026-06-19 13:14:15' AS DATETIME) AS created_at
+                CAST('2026-06-19 13:14:15' AS DATETIME) AS created_at,
+                CAST(1 AS BOOLEAN) AS flag,
+                CAST(7 AS TINYINT) AS tiny,
+                CAST(1234 AS SMALLINT) AS smol
             """;
 
         using System.Data.Common.DbDataReader reader = await command
@@ -186,12 +190,28 @@ public sealed class ConnectionIntegrationTests
         Assert.Equal(1.5d, reader.GetDouble(3));
         Assert.Equal(new DateTime(2026, 6, 19), reader.GetDateTime(4));
         Assert.Equal(new DateTime(2026, 6, 19, 13, 14, 15), reader.GetDateTime(5));
+        Assert.True(reader.GetBoolean(6));
+        Assert.Equal(
+            (sbyte)7,
+            await reader
+                .GetFieldValueAsync<sbyte>(7, TestContext.Current.CancellationToken)
+                .ConfigureAwait(true)
+        );
+        Assert.Equal(
+            (short)1234,
+            await reader
+                .GetFieldValueAsync<short>(8, TestContext.Current.CancellationToken)
+                .ConfigureAwait(true)
+        );
         Assert.Equal(typeof(int), reader.GetFieldType(0));
         Assert.Equal(typeof(long), reader.GetFieldType(1));
         Assert.Equal(typeof(DotRocksDecimal), reader.GetFieldType(2));
         Assert.Equal(typeof(double), reader.GetFieldType(3));
         Assert.Equal(typeof(DateTime), reader.GetFieldType(4));
         Assert.Equal(typeof(DateTime), reader.GetFieldType(5));
+        Assert.Equal(typeof(bool), reader.GetFieldType(6));
+        Assert.Equal(typeof(sbyte), reader.GetFieldType(7));
+        Assert.Equal(typeof(short), reader.GetFieldType(8));
         Assert.False(
             await reader.ReadAsync(TestContext.Current.CancellationToken).ConfigureAwait(true)
         );
@@ -634,8 +654,12 @@ public sealed class ConnectionIntegrationTests
             .ExecuteScalarAsync(TestContext.Current.CancellationToken)
             .ConfigureAwait(true);
 
-        Assert.Equal(42, first);
-        Assert.Equal(43, second);
+        // StarRocks types the integer literal as TINYINT, which maps to sbyte.
+        Assert.Equal(42, Convert.ToInt32(first, System.Globalization.CultureInfo.InvariantCulture));
+        Assert.Equal(
+            43,
+            Convert.ToInt32(second, System.Globalization.CultureInfo.InvariantCulture)
+        );
     }
 
     [Fact]
@@ -1165,7 +1189,8 @@ public sealed class ConnectionIntegrationTests
         object? value = await secondCommand
             .ExecuteScalarAsync(TestContext.Current.CancellationToken)
             .ConfigureAwait(true);
-        Assert.Equal(1, value);
+        // StarRocks types the integer literal as TINYINT, which maps to sbyte.
+        Assert.Equal(1, Convert.ToInt32(value, System.Globalization.CultureInfo.InvariantCulture));
     }
 
     [Fact]

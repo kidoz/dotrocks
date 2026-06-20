@@ -226,7 +226,11 @@ internal static class TextResultParser
             ReadOnlySpan<byte> bytes = reader.ReadLengthEncodedBytes(out bool isNull);
             values[i] = isNull
                 ? null
-                : ColumnTypeMapper.ParseTextValue(columns[i].ColumnType, bytes);
+                : ColumnTypeMapper.ParseTextValue(
+                    columns[i].ColumnType,
+                    columns[i].ColumnLength,
+                    bytes
+                );
         }
 
         if (!reader.IsAtEnd)
