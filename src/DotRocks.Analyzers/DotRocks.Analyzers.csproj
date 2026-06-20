@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+    <IsPackable>true</IsPackable>
+    <PackageId>DotRocks.Analyzers</PackageId>
+    <Title>DotRocks.Analyzers</Title>
+    <Description>Roslyn analyzers for secure and supported DotRocks for StarRocks usage.</Description>
+    <PackageTags>starrocks;dotrocks;roslyn;analyzers;entity-framework-core</PackageTags>
+    <IsRoslynComponent>true</IsRoslynComponent>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+    <IncludeSymbols>false</IncludeSymbols>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None
+      Include="$(MSBuildThisFileDirectory)../../README.md"
+      Pack="true"
+      PackagePath="\"
+      Visible="false"
+    />
+    <None
+      Include="$(OutputPath)$(AssemblyName).dll"
+      Pack="true"
+      PackagePath="analyzers/dotnet/cs"
+      Visible="false"
+    />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AdditionalFiles Include="ReleaseTracking/AnalyzerReleases.Shipped.md" />
+    <AdditionalFiles Include="ReleaseTracking/AnalyzerReleases.Unshipped.md" />
+  </ItemGroup>
+</Project>
