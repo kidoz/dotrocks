@@ -37,17 +37,43 @@ jobs:
         with:
           global-json-file: global.json
 
+      - name: Restore tools
+        run: dotnet tool restore
+
       - name: Restore packages
         run: dotnet restore DotRocks.slnx --locked-mode
 
-      - name: Build
-        run: dotnet build DotRocks.slnx --configuration Release --no-restore
+      - name: Resolve package version from release tag
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_EVENT_NAME}" = "release" ]; then
+            version="${GITHUB_REF_NAME#v}"
+            if [ -z "${version}" ]; then
+              echo "Release tag '${GITHUB_REF_NAME}' did not yield a version." >&2
+              exit 1
+            fi
+          else
+            version="0.0.0-manual"
+          fi
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
 
-      - name: Test package validation
-        run: dotnet test tests/DotRocks.PackageTests/DotRocks.PackageTests.csproj --configuration Release --no-build
+      - name: Check formatting
+        run: dotnet csharpier check .
+
+      - name: Build
+        run: dotnet build DotRocks.slnx --configuration Release --no-restore -p:Version=${{ steps.version.outputs.version }}
+
+      - name: Test
+        run: |
+          dotnet test tests/DotRocks.Protocol.Tests --configuration Release --no-build
+          dotnet test tests/DotRocks.EntityFrameworkCore.Tests --configuration Release --no-build
+          dotnet test tests/DotRocks.Analyzers.Tests --configuration Release --no-build
+          dotnet test tests/DotRocks.PackageTests --configuration Release --no-build
 
       - name: Pack
-        run: dotnet pack DotRocks.slnx --configuration Release --no-build --output artifacts/packages
+        run: dotnet pack DotRocks.slnx --configuration Release --no-build --output artifacts/packages -p:Version=${{ steps.version.outputs.version }}
 
       - name: Attest package provenance
         uses: actions/attest-build-provenance@v2
@@ -70,11 +96,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # No --skip-duplicate: re-publishing an existing version must fail loudly rather
+          # than silently shipping nothing.
           for package in artifacts/packages/*.nupkg artifacts/packages/*.snupkg; do
             dotnet nuget push "${package}" \
               --api-key "${NUGET_API_KEY}" \
-              --source https://api.nuget.org/v3/index.json \
-              --skip-duplicate
+              --source https://api.nuget.org/v3/index.json
           done
         env:
           NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
