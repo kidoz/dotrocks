@@ -28,7 +28,15 @@ internal sealed class DotRocksTypeMappingSource(
         [typeof(Int128)] = new DotRocksInt128TypeMapping(),
         [typeof(float)] = new FloatTypeMapping("float", DbType.Single),
         [typeof(double)] = new DoubleTypeMapping("double", DbType.Double),
-        [typeof(decimal)] = new DecimalTypeMapping("decimal", DbType.Decimal, null, null),
+        // A bare `decimal` property defaults to a precision/scale that preserves fractional
+        // digits and stays within System.Decimal's range. Without this, StarRocks would create
+        // DECIMAL(10,0) and silently truncate the scale. Override per-property with HasPrecision.
+        [typeof(decimal)] = new DecimalTypeMapping(
+            "decimal(28,9)",
+            DbType.Decimal,
+            precision: 28,
+            scale: 9
+        ),
         [typeof(DotRocksDecimal)] = new DotRocksDecimalTypeMapping(),
         [typeof(string)] = new StringTypeMapping(
             "varchar",

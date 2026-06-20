@@ -46,6 +46,23 @@ public sealed class DotRocksTypeMappingTests
     }
 
     [Fact]
+    public void FindMapping_BareDecimalUsesNonZeroScaleDefault()
+    {
+        IRelationalTypeMappingSource source = CreateMappingSource();
+
+        RelationalTypeMapping? mapping = source.FindMapping(typeof(decimal));
+
+        // A bare decimal must not default to DECIMAL(10,0) (which would truncate the scale).
+        Assert.NotNull(mapping);
+        Assert.Equal(typeof(decimal), mapping.ClrType);
+        Assert.NotNull(mapping.Scale);
+        Assert.True(mapping.Scale > 0);
+        Assert.NotNull(mapping.Precision);
+        // Stays within System.Decimal's representable range.
+        Assert.True(mapping.Precision <= 29);
+    }
+
+    [Fact]
     public void FindMapping_MapsHighPrecisionDecimalToDotRocksDecimal()
     {
         IRelationalTypeMappingSource source = CreateMappingSource();
