@@ -389,6 +389,68 @@ public sealed class DotRocksDataReaderTests
         Assert.Throws<InvalidOperationException>(() => reader.GetValue(0));
     }
 
+    [Fact]
+    public void GetSchemaTable_ExposesStandardSchemaColumns()
+    {
+        using var reader = new DotRocksDataReader(
+            QueryResult.FromRows(
+                [Column("id", (byte)ColumnType.Long, flags: 1, columnLength: 11), Column("name")],
+                [
+                    [7, "seven"],
+                ]
+            )
+        );
+
+        System.Data.DataTable schema = reader.GetSchemaTable();
+
+        Assert.Equal(2, schema.Rows.Count);
+        Assert.Equal("id", schema.Rows[0]["ColumnName"]);
+        Assert.Equal(0, schema.Rows[0]["ColumnOrdinal"]);
+        Assert.Equal(typeof(int), schema.Rows[0]["DataType"]);
+        Assert.False((bool)schema.Rows[0]["AllowDBNull"]);
+        Assert.Equal("name", schema.Rows[1]["ColumnName"]);
+        Assert.True((bool)schema.Rows[1]["AllowDBNull"]);
+    }
+
+    [Fact]
+    public void GetChars_CopiesCharacterWindow()
+    {
+        using var reader = new DotRocksDataReader(
+            QueryResult.FromRows(
+                [Column("name")],
+                [
+                    ["seven"],
+                ]
+            )
+        );
+        Assert.True(reader.Read());
+
+        Assert.Equal(5, reader.GetChars(0, 0, buffer: null, bufferOffset: 0, length: 0));
+        char[] buffer = new char[3];
+        long copied = reader.GetChars(0, dataOffset: 1, buffer, bufferOffset: 0, length: 3);
+        Assert.Equal(3, copied);
+        Assert.Equal("eve", new string(buffer));
+    }
+
+    [Fact]
+    public void GetGuid_ReadsGuidAndBinaryAndStringValues()
+    {
+        var guid = Guid.Parse("9f4f591e-3db2-4879-856c-1c54b4241b76");
+        using var reader = new DotRocksDataReader(
+            QueryResult.FromRows(
+                [Column("g_native"), Column("g_bytes", (byte)ColumnType.Blob), Column("g_text")],
+                [
+                    [guid, guid.ToByteArray(), guid.ToString()],
+                ]
+            )
+        );
+        Assert.True(reader.Read());
+
+        Assert.Equal(guid, reader.GetGuid(0));
+        Assert.Equal(guid, reader.GetGuid(1));
+        Assert.Equal(guid, reader.GetGuid(2));
+    }
+
     private static ColumnDefinition Column(
         string name,
         byte columnType = (byte)ColumnType.VarString,

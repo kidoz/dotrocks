@@ -7,6 +7,11 @@ namespace DotRocks.Data;
 /// <summary>
 /// Represents a DotRocks command parameter.
 /// </summary>
+/// <remarks>
+/// DotRocks formats parameter values into StarRocks text SQL based on the runtime CLR type of
+/// <see cref="Value"/>. <see cref="DbType"/> and <see cref="Size"/> are accepted for ADO.NET
+/// compatibility but do not influence how a value is rendered.
+/// </remarks>
 public sealed class DotRocksParameter : DbParameter
 {
     /// <inheritdoc />

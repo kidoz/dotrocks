@@ -77,6 +77,7 @@ public sealed class DotRocks.Data.DotRocksDataReader System.Data.Common.DbDataRe
   public virtual method System.Char GetChar(System.Int32 ordinal)
   public virtual method System.Collections.IEnumerator GetEnumerator()
   public virtual method System.Collections.ObjectModel.ReadOnlyCollection<System.Data.Common.DbColumn> GetColumnSchema()
+  public virtual method System.Data.DataTable GetSchemaTable()
   public virtual method System.DateTime GetDateTime(System.Int32 ordinal)
   public virtual method System.Decimal GetDecimal(System.Int32 ordinal)
   public virtual method System.Double GetDouble(System.Int32 ordinal)
@@ -93,6 +94,7 @@ public sealed class DotRocks.Data.DotRocksDataReader System.Data.Common.DbDataRe
   public virtual method System.String GetDataTypeName(System.Int32 ordinal)
   public virtual method System.String GetName(System.Int32 ordinal)
   public virtual method System.String GetString(System.Int32 ordinal)
+  public virtual method System.Threading.Tasks.Task<System.Boolean> NextResultAsync(System.Threading.CancellationToken cancellationToken)
   public virtual method System.Threading.Tasks.Task<System.Boolean> ReadAsync(System.Threading.CancellationToken cancellationToken)
   public virtual method System.Threading.Tasks.Task<System.Collections.ObjectModel.ReadOnlyCollection<System.Data.Common.DbColumn>> GetColumnSchemaAsync(System.Threading.CancellationToken cancellationToken)
   public virtual method System.Type GetFieldType(System.Int32 ordinal)
@@ -170,6 +172,7 @@ public sealed class DotRocks.Data.DotRocksTransaction System.Data.Common.DbTrans
   protected virtual method System.Void Dispose(System.Boolean disposing)
   public virtual method System.Threading.Tasks.Task CommitAsync(System.Threading.CancellationToken cancellationToken)
   public virtual method System.Threading.Tasks.Task RollbackAsync(System.Threading.CancellationToken cancellationToken)
+  public virtual method System.Threading.Tasks.ValueTask DisposeAsync()
   public virtual method System.Void Commit()
   public virtual method System.Void Rollback()
 

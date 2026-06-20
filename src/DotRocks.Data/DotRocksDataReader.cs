@@ -135,7 +135,33 @@ public sealed class DotRocksDataReader
         char[]? buffer,
         int bufferOffset,
         int length
-    ) => throw new NotSupportedException("Character streaming is not implemented yet.");
+    )
+    {
+        string text = GetString(ordinal);
+        if (buffer is null)
+        {
+            return text.Length;
+        }
+
+        ArgumentOutOfRangeException.ThrowIfNegative(dataOffset);
+        ArgumentOutOfRangeException.ThrowIfNegative(bufferOffset);
+        ArgumentOutOfRangeException.ThrowIfNegative(length);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(bufferOffset, buffer.Length);
+
+        if (dataOffset >= text.Length || length == 0 || bufferOffset == buffer.Length)
+        {
+            return 0;
+        }
+
+        int sourceOffset =
+            dataOffset > int.MaxValue
+                ? throw new ArgumentOutOfRangeException(nameof(dataOffset))
+                : (int)dataOffset;
+        int count = Math.Min(length, text.Length - sourceOffset);
+        count = Math.Min(count, buffer.Length - bufferOffset);
+        text.CopyTo(sourceOffset, buffer, bufferOffset, count);
+        return count;
+    }
 
     /// <inheritdoc />
     public override string GetDataTypeName(int ordinal)
@@ -183,7 +209,20 @@ public sealed class DotRocksDataReader
         Convert.ToSingle(GetNonNullValue(ordinal), CultureInfo.InvariantCulture);
 
     /// <inheritdoc />
-    public override Guid GetGuid(int ordinal) => Guid.Parse(GetString(ordinal));
+    public override Guid GetGuid(int ordinal)
+    {
+        object value = GetNonNullValue(ordinal);
+        return value switch
+        {
+            Guid guid => guid,
+            byte[] { Length: 16 } bytes => new Guid(bytes),
+            string text => Guid.Parse(text),
+            _ => Guid.Parse(
+                Convert.ToString(value, CultureInfo.InvariantCulture)
+                    ?? throw new InvalidCastException("Column value cannot be converted to Guid.")
+            ),
+        };
+    }
 
     /// <inheritdoc />
     public override short GetInt16(int ordinal) =>
@@ -276,6 +315,60 @@ public sealed class DotRocksDataReader
 
     /// <inheritdoc />
     public override bool NextResult() => false;
+
+    /// <inheritdoc />
+    public override Task<bool> NextResultAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(false);
+    }
+
+    /// <inheritdoc />
+    public override DataTable GetSchemaTable()
+    {
+        if (_isClosed)
+        {
+            throw new InvalidOperationException("The reader is closed.");
+        }
+
+        var schemaTable = new DataTable("SchemaTable") { Locale = CultureInfo.InvariantCulture };
+        schemaTable.Columns.Add(SchemaTableColumn.ColumnName, typeof(string));
+        schemaTable.Columns.Add(SchemaTableColumn.ColumnOrdinal, typeof(int));
+        schemaTable.Columns.Add(SchemaTableColumn.ColumnSize, typeof(int));
+        schemaTable.Columns.Add(SchemaTableColumn.DataType, typeof(Type));
+        schemaTable.Columns.Add("DataTypeName", typeof(string));
+        schemaTable.Columns.Add(SchemaTableColumn.AllowDBNull, typeof(bool));
+        schemaTable.Columns.Add(SchemaTableColumn.BaseColumnName, typeof(string));
+        schemaTable.Columns.Add(SchemaTableColumn.BaseTableName, typeof(string));
+        schemaTable.Columns.Add(SchemaTableColumn.BaseSchemaName, typeof(string));
+        schemaTable.Columns.Add(SchemaTableColumn.IsAliased, typeof(bool));
+        schemaTable.Columns.Add(SchemaTableColumn.IsExpression, typeof(bool));
+        schemaTable.Columns.Add(SchemaTableColumn.IsKey, typeof(bool));
+        schemaTable.Columns.Add(SchemaTableColumn.IsLong, typeof(bool));
+        schemaTable.Columns.Add(SchemaTableColumn.IsUnique, typeof(bool));
+
+        foreach (DbColumn column in GetColumnSchema())
+        {
+            DataRow row = schemaTable.NewRow();
+            row[SchemaTableColumn.ColumnName] = column.ColumnName;
+            row[SchemaTableColumn.ColumnOrdinal] = column.ColumnOrdinal ?? 0;
+            row[SchemaTableColumn.ColumnSize] = column.ColumnSize ?? -1;
+            row[SchemaTableColumn.DataType] = column.DataType ?? typeof(object);
+            row["DataTypeName"] = column.DataTypeName ?? string.Empty;
+            row[SchemaTableColumn.AllowDBNull] = column.AllowDBNull ?? true;
+            row[SchemaTableColumn.BaseColumnName] = (object?)column.BaseColumnName ?? DBNull.Value;
+            row[SchemaTableColumn.BaseTableName] = (object?)column.BaseTableName ?? DBNull.Value;
+            row[SchemaTableColumn.BaseSchemaName] = (object?)column.BaseSchemaName ?? DBNull.Value;
+            row[SchemaTableColumn.IsAliased] = column.IsAliased ?? false;
+            row[SchemaTableColumn.IsExpression] = column.IsExpression ?? false;
+            row[SchemaTableColumn.IsKey] = column.IsKey ?? false;
+            row[SchemaTableColumn.IsLong] = column.IsLong ?? false;
+            row[SchemaTableColumn.IsUnique] = column.IsUnique ?? false;
+            schemaTable.Rows.Add(row);
+        }
+
+        return schemaTable;
+    }
 
     /// <inheritdoc />
     public override bool Read()
