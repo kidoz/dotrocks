@@ -58,6 +58,7 @@ internal sealed class DotRocksMigrationsSqlGenerator(
 
         ValidateColumnsExist(operation, keyColumns, "table key");
         ValidateColumnsExist(operation, distributionColumns, "hash distribution");
+        ValidateKeyColumnTypes(operation, keyColumns);
 
         builder.Append("CREATE TABLE ");
         builder.Append(
@@ -407,5 +408,33 @@ internal sealed class DotRocksMigrationsSqlGenerator(
                 );
             }
         }
+    }
+
+    private static void ValidateKeyColumnTypes(CreateTableOperation operation, string[] keyColumns)
+    {
+        var keyColumnSet = keyColumns.ToHashSet(StringComparer.Ordinal);
+        foreach (AddColumnOperation column in operation.Columns)
+        {
+            if (keyColumnSet.Contains(column.Name) && IsFloatingPointStoreType(column.ColumnType))
+            {
+                // StarRocks forbids FLOAT/DOUBLE as key columns; reject before emitting DDL.
+                throw new NotSupportedException(
+                    $"DotRocks EF Core migrations cannot use floating-point column '{column.Name}' "
+                        + "in a StarRocks table key; FLOAT and DOUBLE are not allowed as key columns."
+                );
+            }
+        }
+    }
+
+    private static bool IsFloatingPointStoreType(string? columnType)
+    {
+        if (string.IsNullOrEmpty(columnType))
+        {
+            return false;
+        }
+
+        string baseType = columnType.Split('(')[0].Trim();
+        return baseType.Equals("float", StringComparison.OrdinalIgnoreCase)
+            || baseType.Equals("double", StringComparison.OrdinalIgnoreCase);
     }
 }

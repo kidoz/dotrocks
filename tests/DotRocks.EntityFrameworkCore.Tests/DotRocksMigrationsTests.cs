@@ -51,6 +51,37 @@ public sealed class DotRocksMigrationsTests
     }
 
     [Fact]
+    public void Generate_CreateTableWithFloatingPointKeyColumn_Throws()
+    {
+        using var context = CreateContext();
+        var generator = context.GetService<IMigrationsSqlGenerator>();
+        var operation = new CreateTableOperation { Name = "metrics", Schema = "unit_db" };
+        operation.Columns.Add(
+            new AddColumnOperation
+            {
+                Name = "ratio",
+                Table = operation.Name,
+                Schema = operation.Schema,
+                ClrType = typeof(double),
+                ColumnType = "double",
+                IsNullable = false,
+            }
+        );
+        operation.PrimaryKey = new AddPrimaryKeyOperation
+        {
+            Name = "PK_metrics",
+            Table = operation.Name,
+            Schema = operation.Schema,
+            Columns = ["ratio"],
+        };
+
+        NotSupportedException exception = Assert.Throws<NotSupportedException>(() =>
+            GenerateSql(generator, operation)
+        );
+        Assert.Contains("FLOAT and DOUBLE", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Generate_CreateTableWithDistributionAndReplicationShape_UsesConfiguredValues()
     {
         using var context = CreateContext();
