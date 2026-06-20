@@ -224,6 +224,27 @@ public sealed class DotRocksConnectionCancellationTests
     }
 
     [Fact]
+    public async Task OpenAsync_SslModeRequiredWithUntrustedCertificate_RejectsConnection()
+    {
+        using var server = FakeStarRocksServer.Start(HandleTlsRejectingConnectionAsync);
+        string connectionString =
+            BuildFakeServerConnectionString(server.Port) + ";Ssl Mode=Required";
+        using var connection = new DotRocksConnection(connectionString);
+
+        // Without Trust Server Certificate, the self-signed certificate must be rejected.
+        DotRocksException exception = await Assert
+            .ThrowsAsync<DotRocksException>(async () =>
+                await connection
+                    .OpenAsync(TestContext.Current.CancellationToken)
+                    .ConfigureAwait(true)
+            )
+            .ConfigureAwait(true);
+
+        AssertSanitized(exception, connectionString);
+        Assert.Equal(ConnectionState.Closed, connection.State);
+    }
+
+    [Fact]
     public async Task ExecuteScalarAsync_MalformedQueryResult_ThrowsSanitizedExceptionAndDiscardsPooledConnection()
     {
         using var server = FakeStarRocksServer.Start(
@@ -295,6 +316,46 @@ public sealed class DotRocksConnectionCancellationTests
         await CompleteAuthenticationAsync(stream).ConfigureAwait(true);
         await Task.Delay(TimeSpan.FromMilliseconds(250), TestContext.Current.CancellationToken)
             .ConfigureAwait(true);
+    }
+
+    private static async Task HandleTlsRejectingConnectionAsync(NetworkStream stream)
+    {
+        var writer = new PacketWriter(stream);
+        await writer
+            .WritePayloadAsync(
+                BuildHandshake(MySqlNativePassword.PluginName, supportsTls: true),
+                TestContext.Current.CancellationToken
+            )
+            .ConfigureAwait(true);
+        var reader = new PacketReader(stream);
+        reader.ResetSequence(writer.SequenceId);
+        _ = await reader
+            .ReadPayloadAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+
+        using X509Certificate2 certificate = CreateSelfSignedCertificate();
+        using var tls = new SslStream(stream, leaveInnerStreamOpen: true);
+        try
+        {
+            await tls.AuthenticateAsServerAsync(
+                    new SslServerAuthenticationOptions
+                    {
+                        ServerCertificate = certificate,
+                        EnabledSslProtocols = SslProtocols.None,
+                        ClientCertificateRequired = false,
+                    },
+                    TestContext.Current.CancellationToken
+                )
+                .ConfigureAwait(true);
+        }
+        catch (AuthenticationException)
+        {
+            // Expected: the client rejects the untrusted certificate and aborts the handshake.
+        }
+        catch (IOException)
+        {
+            // Expected: the client closes the socket once it rejects the certificate.
+        }
     }
 
     private static async Task HandleTlsOpenOnlyConnectionAsync(NetworkStream stream)

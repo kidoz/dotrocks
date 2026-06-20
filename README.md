@@ -77,8 +77,11 @@ await using DbDataSource dataSource = factory.CreateDataSource(builder.Connectio
 await using DbConnection connection = await dataSource.OpenConnectionAsync();
 ```
 
-For SQL protocol TLS, set `Ssl Mode=Required`. DotRocks uses platform certificate
-validation by default; `Trust Server Certificate=true` is available only for controlled
+For SQL protocol TLS, set `Ssl Mode=Required`. `Ssl Mode` defaults to `Disabled`, which
+sends credentials without transport encryption — set `Required` for any non-local server.
+DotRocks uses platform certificate validation (chain and host name) by default and checks
+revocation in offline mode to avoid a blocking OCSP/CRL fetch during the handshake;
+`Trust Server Certificate=true` disables validation and is intended only for controlled
 local test environments with self-signed certificates.
 
 ## Entity Framework Core
