@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
+using System.Security.Cryptography.X509Certificates;
 using DotRocks.Data.Loading;
 
 namespace DotRocks.Data;
@@ -29,6 +30,7 @@ public sealed class DotRocksConnectionStringBuilder
     private const string ConnectionIdleTimeoutKeyword = "Connection Idle Timeout";
     private const string SslModeKeyword = "Ssl Mode";
     private const string TrustServerCertificateKeyword = "Trust Server Certificate";
+    private const string SslRevocationCheckKeyword = "Ssl Revocation Check";
     private const string StreamLoadEndpointKeyword = "Stream Load Endpoint";
     private const string AllowInsecureStreamLoadKeyword = "Allow Insecure Stream Load";
 
@@ -47,6 +49,7 @@ public sealed class DotRocksConnectionStringBuilder
         ConnectionIdleTimeout = DotRocksConnectionOptions.DefaultConnectionIdleTimeoutSeconds;
         SslMode = DotRocksSslMode.Disabled;
         TrustServerCertificate = false;
+        SslRevocationCheck = DotRocksConnectionOptions.DefaultSslRevocationMode;
         AllowInsecureStreamLoad = false;
     }
 
@@ -199,6 +202,17 @@ public sealed class DotRocksConnectionStringBuilder
     }
 
     /// <summary>
+    /// Gets or sets the TLS certificate revocation check mode. Defaults to
+    /// <see cref="X509RevocationMode.Offline"/> to avoid a blocking revocation fetch.
+    /// </summary>
+    public X509RevocationMode SslRevocationCheck
+    {
+        get =>
+            GetEnum(SslRevocationCheckKeyword, DotRocksConnectionOptions.DefaultSslRevocationMode);
+        set => this[SslRevocationCheckKeyword] = value;
+    }
+
+    /// <summary>
     /// Gets or sets the StarRocks FE HTTP endpoint used for Stream Load requests.
     /// </summary>
     public string StreamLoadEndpoint
@@ -341,6 +355,13 @@ public sealed class DotRocksConnectionStringBuilder
             [
                 TrustServerCertificateKeyword,
                 "TrustServerCertificate",
+            ],
+            SslRevocationCheckKeyword =>
+            [
+                SslRevocationCheckKeyword,
+                "SSL Revocation Check",
+                "SslRevocationCheck",
+                "Revocation",
             ],
             AllowInsecureStreamLoadKeyword =>
             [

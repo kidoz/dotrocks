@@ -194,11 +194,11 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
                     {
                         TargetHost = options.Server,
                         EnabledSslProtocols = SslProtocols.None,
-                        // Offline uses cached CRLs only: it avoids a blocking OCSP/CRL network
-                        // fetch during the handshake (which can hang or silently fail-open) while
-                        // still honoring known revocations. Certificate chain and name validation
-                        // remain enforced unless Trust Server Certificate is set.
-                        CertificateRevocationCheckMode = X509RevocationMode.Offline,
+                        // Defaults to Offline (cached CRLs only) to avoid a blocking OCSP/CRL
+                        // network fetch during the handshake; configurable via Ssl Revocation
+                        // Check. Certificate chain and name validation remain enforced unless
+                        // Trust Server Certificate is set.
+                        CertificateRevocationCheckMode = options.SslRevocationMode,
                     },
                     cancellationToken
                 )

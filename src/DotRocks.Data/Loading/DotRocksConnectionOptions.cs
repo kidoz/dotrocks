@@ -1,4 +1,5 @@
 using System.Data.Common;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using DotRocks.Data;
 
@@ -17,6 +18,7 @@ internal sealed record DotRocksConnectionOptions(
     TimeSpan ConnectionIdleTimeout,
     DotRocksSslMode SslMode,
     bool TrustServerCertificate,
+    X509RevocationMode SslRevocationMode,
     Uri StreamLoadEndpoint,
     bool AllowInsecureStreamLoad,
     string ConnectionString
@@ -31,6 +33,7 @@ internal sealed record DotRocksConnectionOptions(
     public const int DefaultMaximumPoolSize = 100;
     public const int DefaultConnectionIdleTimeoutSeconds = 300;
     public const int DefaultStreamLoadPort = 8030;
+    public const X509RevocationMode DefaultSslRevocationMode = X509RevocationMode.Offline;
 
     public static DotRocksConnectionOptions Default { get; } =
         new(
@@ -46,6 +49,7 @@ internal sealed record DotRocksConnectionOptions(
             TimeSpan.FromSeconds(DefaultConnectionIdleTimeoutSeconds),
             DotRocksSslMode.Disabled,
             false,
+            DefaultSslRevocationMode,
             BuildDefaultStreamLoadEndpoint(DefaultServer),
             false,
             string.Empty
@@ -85,6 +89,11 @@ internal sealed record DotRocksConnectionOptions(
         );
         DotRocksSslMode sslMode = GetEnum(builder, "Ssl Mode", DotRocksSslMode.Disabled);
         bool trustServerCertificate = GetBoolean(builder, "Trust Server Certificate", false);
+        X509RevocationMode sslRevocationMode = GetEnum(
+            builder,
+            "Ssl Revocation Check",
+            DefaultSslRevocationMode
+        );
         Uri streamLoadEndpoint = GetUri(
             builder,
             "Stream Load Endpoint",
@@ -117,6 +126,7 @@ internal sealed record DotRocksConnectionOptions(
             idleTimeoutSeconds,
             sslMode,
             trustServerCertificate,
+            sslRevocationMode,
             streamLoadEndpoint,
             allowInsecureStreamLoad
         );
@@ -134,6 +144,7 @@ internal sealed record DotRocksConnectionOptions(
             TimeSpan.FromSeconds(idleTimeoutSeconds),
             sslMode,
             trustServerCertificate,
+            sslRevocationMode,
             streamLoadEndpoint,
             allowInsecureStreamLoad,
             canonical
@@ -154,6 +165,7 @@ internal sealed record DotRocksConnectionOptions(
             (int)ConnectionIdleTimeout.TotalSeconds,
             SslMode,
             TrustServerCertificate,
+            SslRevocationMode,
             StreamLoadEndpoint,
             AllowInsecureStreamLoad
         );
@@ -167,7 +179,8 @@ internal sealed record DotRocksConnectionOptions(
             Database,
             (int)ConnectionTimeout.TotalSeconds,
             SslMode,
-            TrustServerCertificate
+            TrustServerCertificate,
+            SslRevocationMode
         );
 
     private static void Validate(
@@ -362,6 +375,13 @@ internal sealed record DotRocksConnectionOptions(
             "Connection Idle Timeout" => ["Connection Idle Timeout", "Idle Timeout"],
             "Ssl Mode" => ["Ssl Mode", "SSL Mode", "SslMode"],
             "Trust Server Certificate" => ["Trust Server Certificate", "TrustServerCertificate"],
+            "Ssl Revocation Check" =>
+            [
+                "Ssl Revocation Check",
+                "SSL Revocation Check",
+                "SslRevocationCheck",
+                "Revocation",
+            ],
             "Allow Insecure Stream Load" =>
             [
                 "Allow Insecure Stream Load",
@@ -391,6 +411,7 @@ internal sealed record DotRocksConnectionOptions(
         int idleTimeoutSeconds,
         DotRocksSslMode sslMode,
         bool trustServerCertificate,
+        X509RevocationMode sslRevocationMode,
         Uri streamLoadEndpoint,
         bool allowInsecureStreamLoad
     )
@@ -440,6 +461,7 @@ internal sealed record DotRocksConnectionOptions(
             "Trust Server Certificate",
             trustServerCertificate.ToString(System.Globalization.CultureInfo.InvariantCulture)
         );
+        Append(builder, "Ssl Revocation Check", sslRevocationMode.ToString());
         Append(builder, "Stream Load Endpoint", streamLoadEndpoint.AbsoluteUri);
         Append(
             builder,
@@ -470,5 +492,6 @@ internal sealed record DotRocksConnectionPoolKey(
     string Database,
     int ConnectionTimeoutSeconds,
     DotRocksSslMode SslMode,
-    bool TrustServerCertificate
+    bool TrustServerCertificate,
+    X509RevocationMode SslRevocationMode
 );

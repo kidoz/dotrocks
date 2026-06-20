@@ -60,6 +60,7 @@ public sealed class DotRocks.Data.DotRocksConnectionStringBuilder System.Data.Co
   public property System.Int32 Port { get; set; }
   public property System.String Server { get; set; }
   public property DotRocks.Data.DotRocksSslMode SslMode { get; set; }
+  public property System.Security.Cryptography.X509Certificates.X509RevocationMode SslRevocationCheck { get; set; }
   public property System.String StreamLoadEndpoint { get; set; }
   public property System.Boolean TrustServerCertificate { get; set; }
   public property System.String UserId { get; set; }

@@ -123,6 +123,26 @@ public sealed class ConnectionStringBuilderTests
     }
 
     [Fact]
+    public void SslRevocationCheck_DefaultsToOfflineAndParsesAliases()
+    {
+        var defaults = new DotRocksConnectionStringBuilder();
+        Assert.Equal(
+            System.Security.Cryptography.X509Certificates.X509RevocationMode.Offline,
+            defaults.SslRevocationCheck
+        );
+
+        var builder = new DotRocksConnectionStringBuilder("SSL Revocation Check=Online");
+        Assert.Equal(
+            System.Security.Cryptography.X509Certificates.X509RevocationMode.Online,
+            builder.SslRevocationCheck
+        );
+        Assert.Equal(
+            System.Security.Cryptography.X509Certificates.X509RevocationMode.Online,
+            builder.BuildOptions().SslRevocationMode
+        );
+    }
+
+    [Fact]
     public void TrustServerCertificateWithoutTls_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
