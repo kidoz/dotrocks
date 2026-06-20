@@ -123,7 +123,9 @@ Supported EF Core query surface:
   distribution by the key columns, one bucket, and `replication_num = 1`. Configure
   table shape with `HasStarRocksDuplicateKey(...)`, `HasStarRocksPrimaryKey(...)`,
   `HasStarRocksHashDistribution(...)`, and `HasStarRocksReplicationNum(...)`. The
-  design-time package is `DotRocks.EntityFrameworkCore.Design`.
+  design-time package is `DotRocks.EntityFrameworkCore.Design`. Down migrations are
+  limited to the same conservative DDL boundary; table rollback through `DropTable` is
+  supported, while `DROP DATABASE` and schema mutations remain explicit failures.
 
 Unsupported EF Core behavior is explicit:
 

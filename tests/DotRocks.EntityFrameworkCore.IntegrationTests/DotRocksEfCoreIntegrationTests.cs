@@ -21,6 +21,14 @@ public sealed class DotRocksEfCoreIntegrationTests
     private const string MigrationId = "202606190001_CreateEfMigrationWidget";
     private const string TableShapeMigrationWidgetTableName = "ef_table_shape_migration_widgets";
     private const string TableShapeMigrationId = "202606200001_CreateEfTableShapeMigrationWidget";
+    private const string EnsureSchemaMigrationDatabaseName =
+        "dotrocks_ef_core_migrate_ensure_schema";
+    private const string EnsureSchemaMigrationWidgetTableName = "ef_ensure_schema_widgets";
+    private const string EnsureSchemaMigrationId = "202606200002_CreateEnsureSchemaWidget";
+    private const string UnsupportedMigrationWidgetTableName = "ef_unsupported_migration_widgets";
+    private const string UnsupportedMigrationId = "202606200003_UnsupportedSchemaMutation";
+    private const string UnsupportedDownMigrationWidgetTableName = "ef_unsupported_down_widgets";
+    private const string UnsupportedDownMigrationId = "202606200004_UnsupportedDownMigration";
     private static readonly string[] IdStoreColumn = ["id"];
 
     [Fact]
@@ -655,13 +663,23 @@ public sealed class DotRocksEfCoreIntegrationTests
             )
             .ConfigureAwait(true);
 
+        var interceptor = new CapturingCommandInterceptor();
         using var context = new MigrationTestContext(
-            CreateMigrationContextOptions(BuildDatabaseConnectionString(LinqDatabaseName))
+            CreateMigrationContextOptions(
+                BuildDatabaseConnectionString(LinqDatabaseName),
+                interceptor
+            )
         );
 
         await context
             .Database.MigrateAsync(TestContext.Current.CancellationToken)
             .ConfigureAwait(true);
+        Assert.True(
+            await TableExistsAsync(context, LinqDatabaseName, MigrationWidgetTableName)
+                .ConfigureAwait(true)
+        );
+
+        interceptor.Clear();
         Assert.Equal(
             1,
             await context
@@ -678,6 +696,14 @@ public sealed class DotRocksEfCoreIntegrationTests
                 )
                 .ConfigureAwait(true)
         );
+        CapturedCommand insertCommand = Assert.Single(
+            interceptor.NonQueryCommands("INSERT"),
+            command =>
+                command.CommandText.Contains(MigrationWidgetTableName, StringComparison.Ordinal)
+        );
+        Assert.Contains("@p", insertCommand.CommandText, StringComparison.Ordinal);
+        Assert.DoesNotContain("created", insertCommand.CommandText, StringComparison.Ordinal);
+        Assert.Contains("created", insertCommand.ParameterValues());
 
         EfMigrationWidget row = await context
             .MigrationWidgets.AsNoTracking()
@@ -685,18 +711,31 @@ public sealed class DotRocksEfCoreIntegrationTests
             .ConfigureAwait(true);
         Assert.Equal("created", row.Name);
 
-        int historyRows = await context
-            .Database.SqlQueryRaw<int>(
-                "SELECT COUNT(*) AS Value FROM "
-                    + DelimitIdentifier("__EFMigrationsHistory")
-                    + " WHERE "
-                    + DelimitIdentifier("MigrationId")
-                    + " = {0}",
-                MigrationId
-            )
-            .SingleAsync(TestContext.Current.CancellationToken)
+        Assert.Equal(1, await HistoryRowCountAsync(context, MigrationId).ConfigureAwait(true));
+
+        interceptor.Clear();
+        await context
+            .Database.MigrateAsync(TestContext.Current.CancellationToken)
             .ConfigureAwait(true);
-        Assert.Equal(1, historyRows);
+        Assert.DoesNotContain(
+            interceptor.Commands,
+            command =>
+                command.CommandText.Contains(MigrationWidgetTableName, StringComparison.Ordinal)
+                    && command.CommandText.StartsWith(
+                        "CREATE TABLE",
+                        StringComparison.OrdinalIgnoreCase
+                    )
+                || command.CommandText.Contains(MigrationId, StringComparison.Ordinal)
+                    && command.CommandText.StartsWith("INSERT", StringComparison.OrdinalIgnoreCase)
+        );
+        Assert.Equal(1, await HistoryRowCountAsync(context, MigrationId).ConfigureAwait(true));
+        Assert.Equal(
+            1,
+            await context
+                .MigrationWidgets.AsNoTracking()
+                .CountAsync(widget => widget.Id == 1, TestContext.Current.CancellationToken)
+                .ConfigureAwait(true)
+        );
     }
 
     [Fact]
@@ -773,6 +812,329 @@ public sealed class DotRocksEfCoreIntegrationTests
         Assert.Contains("BUCKETS 3", createTableSql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("replication_num", createTableSql, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("1", createTableSql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    [SuppressMessage(
+        "Security",
+        "EF1003:Method inserts concatenated strings directly into the SQL",
+        Justification = "The migration cleanup and verification SQL is assembled only from fixed sanitized identifiers and constants."
+    )]
+    public async Task MigrateAsync_DownMigrationDropsTableAndHistoryRow()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        await using DotRocksTestContext setupContext = CreateLiveContext();
+        await EnsureLinqDatabaseAsync(setupContext).ConfigureAwait(true);
+        await setupContext
+            .Database.ExecuteSqlRawAsync(
+                "DROP TABLE IF EXISTS "
+                    + DelimitIdentifier(LinqDatabaseName)
+                    + "."
+                    + DelimitIdentifier(MigrationWidgetTableName),
+                TestContext.Current.CancellationToken
+            )
+            .ConfigureAwait(true);
+        await setupContext
+            .Database.ExecuteSqlRawAsync(
+                "DROP TABLE IF EXISTS "
+                    + DelimitIdentifier(LinqDatabaseName)
+                    + "."
+                    + DelimitIdentifier("__EFMigrationsHistory"),
+                TestContext.Current.CancellationToken
+            )
+            .ConfigureAwait(true);
+
+        using var context = new MigrationTestContext(
+            CreateMigrationContextOptions(BuildDatabaseConnectionString(LinqDatabaseName))
+        );
+
+        await context
+            .Database.MigrateAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+        Assert.True(
+            await TableExistsAsync(context, LinqDatabaseName, MigrationWidgetTableName)
+                .ConfigureAwait(true)
+        );
+        Assert.Equal(1, await HistoryRowCountAsync(context, MigrationId).ConfigureAwait(true));
+
+        await context
+            .GetService<IMigrator>()
+            .MigrateAsync("0", TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+
+        Assert.False(
+            await TableExistsAsync(context, LinqDatabaseName, MigrationWidgetTableName)
+                .ConfigureAwait(true)
+        );
+        Assert.Equal(0, await HistoryRowCountAsync(context, MigrationId).ConfigureAwait(true));
+    }
+
+    [Fact]
+    [SuppressMessage(
+        "Security",
+        "EF1003:Method inserts concatenated strings directly into the SQL",
+        Justification = "The migration cleanup, verification, and write SQL is assembled only from fixed sanitized identifiers and parameter placeholders."
+    )]
+    public async Task MigrateAsync_EnsureSchemaCreatesDatabaseTableHistoryAndQueryableRows()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        await using DotRocksTestContext setupContext = CreateLiveContext();
+        await EnsureLinqDatabaseAsync(setupContext).ConfigureAwait(true);
+        await setupContext
+            .Database.ExecuteSqlRawAsync(
+                "DROP DATABASE IF EXISTS " + DelimitIdentifier(EnsureSchemaMigrationDatabaseName),
+                TestContext.Current.CancellationToken
+            )
+            .ConfigureAwait(true);
+        await setupContext
+            .Database.ExecuteSqlRawAsync(
+                "DROP TABLE IF EXISTS "
+                    + DelimitIdentifier(LinqDatabaseName)
+                    + "."
+                    + DelimitIdentifier("__EFMigrationsHistory"),
+                TestContext.Current.CancellationToken
+            )
+            .ConfigureAwait(true);
+
+        try
+        {
+            using var context = new EnsureSchemaMigrationTestContext(
+                CreateDbContextOptions<EnsureSchemaMigrationTestContext>(
+                    BuildDatabaseConnectionString(LinqDatabaseName)
+                )
+            );
+
+            await context
+                .Database.MigrateAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+
+            Assert.True(
+                await DatabaseExistsAsync(context, EnsureSchemaMigrationDatabaseName)
+                    .ConfigureAwait(true)
+            );
+            Assert.True(
+                await TableExistsAsync(
+                        context,
+                        EnsureSchemaMigrationDatabaseName,
+                        EnsureSchemaMigrationWidgetTableName
+                    )
+                    .ConfigureAwait(true)
+            );
+            Assert.True(
+                await TableExistsAsync(context, LinqDatabaseName, "__EFMigrationsHistory")
+                    .ConfigureAwait(true)
+            );
+            Assert.Equal(
+                1,
+                await HistoryRowCountAsync(context, EnsureSchemaMigrationId).ConfigureAwait(true)
+            );
+
+            Assert.Equal(
+                1,
+                await context
+                    .Database.ExecuteSqlRawAsync(
+                        "INSERT INTO "
+                            + DelimitIdentifier(EnsureSchemaMigrationDatabaseName)
+                            + "."
+                            + DelimitIdentifier(EnsureSchemaMigrationWidgetTableName)
+                            + " ("
+                            + DelimitIdentifier("id")
+                            + ", "
+                            + DelimitIdentifier("name")
+                            + ") VALUES ({0}, {1})",
+                        [1, "ensure-schema"],
+                        TestContext.Current.CancellationToken
+                    )
+                    .ConfigureAwait(true)
+            );
+
+            EfMigrationWidget row = await context
+                .MigrationWidgets.AsNoTracking()
+                .SingleAsync(widget => widget.Id == 1, TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+            Assert.Equal("ensure-schema", row.Name);
+        }
+        finally
+        {
+            await setupContext
+                .Database.ExecuteSqlRawAsync(
+                    "DROP DATABASE IF EXISTS "
+                        + DelimitIdentifier(EnsureSchemaMigrationDatabaseName),
+                    TestContext.Current.CancellationToken
+                )
+                .ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
+    [SuppressMessage(
+        "Security",
+        "EF1003:Method inserts concatenated strings directly into the SQL",
+        Justification = "The migration cleanup and verification SQL is assembled only from fixed sanitized identifiers and constants."
+    )]
+    public async Task MigrateAsync_UnsupportedSchemaMutationFailsBeforePartialMigrationSql()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        await using DotRocksTestContext setupContext = CreateLiveContext();
+        await EnsureLinqDatabaseAsync(setupContext).ConfigureAwait(true);
+        await setupContext
+            .Database.ExecuteSqlRawAsync(
+                "DROP TABLE IF EXISTS "
+                    + DelimitIdentifier(LinqDatabaseName)
+                    + "."
+                    + DelimitIdentifier(UnsupportedMigrationWidgetTableName),
+                TestContext.Current.CancellationToken
+            )
+            .ConfigureAwait(true);
+        await setupContext
+            .Database.ExecuteSqlRawAsync(
+                "DROP TABLE IF EXISTS "
+                    + DelimitIdentifier(LinqDatabaseName)
+                    + "."
+                    + DelimitIdentifier("__EFMigrationsHistory"),
+                TestContext.Current.CancellationToken
+            )
+            .ConfigureAwait(true);
+
+        var interceptor = new CapturingCommandInterceptor();
+        using var context = new UnsupportedMigrationTestContext(
+            CreateDbContextOptions<UnsupportedMigrationTestContext>(
+                BuildDatabaseConnectionString(LinqDatabaseName),
+                interceptor
+            )
+        );
+
+        NotSupportedException exception = await Assert.ThrowsAsync<NotSupportedException>(() =>
+            context
+                .GetService<IMigrator>()
+                .MigrateAsync(cancellationToken: TestContext.Current.CancellationToken)
+        );
+
+        Assert.Contains("ADD COLUMN", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(
+            interceptor.Commands,
+            command =>
+                command.CommandText.Contains(
+                    UnsupportedMigrationWidgetTableName,
+                    StringComparison.Ordinal
+                )
+                && command.CommandText.StartsWith(
+                    "CREATE TABLE",
+                    StringComparison.OrdinalIgnoreCase
+                )
+        );
+        Assert.False(
+            await TableExistsAsync(context, LinqDatabaseName, UnsupportedMigrationWidgetTableName)
+                .ConfigureAwait(true)
+        );
+        Assert.Equal(
+            0,
+            await HistoryRowCountAsync(context, UnsupportedMigrationId).ConfigureAwait(true)
+        );
+    }
+
+    [Fact]
+    [SuppressMessage(
+        "Security",
+        "EF1003:Method inserts concatenated strings directly into the SQL",
+        Justification = "The migration cleanup and verification SQL is assembled only from fixed sanitized identifiers and constants."
+    )]
+    public async Task MigrateAsync_DownMigrationSupportsDropTableOnlyAndRejectsDropDatabase()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        await using DotRocksTestContext setupContext = CreateLiveContext();
+        await EnsureLinqDatabaseAsync(setupContext).ConfigureAwait(true);
+        await setupContext
+            .Database.ExecuteSqlRawAsync(
+                "DROP TABLE IF EXISTS "
+                    + DelimitIdentifier(LinqDatabaseName)
+                    + "."
+                    + DelimitIdentifier(UnsupportedDownMigrationWidgetTableName),
+                TestContext.Current.CancellationToken
+            )
+            .ConfigureAwait(true);
+        await setupContext
+            .Database.ExecuteSqlRawAsync(
+                "DROP TABLE IF EXISTS "
+                    + DelimitIdentifier(LinqDatabaseName)
+                    + "."
+                    + DelimitIdentifier("__EFMigrationsHistory"),
+                TestContext.Current.CancellationToken
+            )
+            .ConfigureAwait(true);
+
+        var interceptor = new CapturingCommandInterceptor();
+        using var context = new UnsupportedDownMigrationTestContext(
+            CreateDbContextOptions<UnsupportedDownMigrationTestContext>(
+                BuildDatabaseConnectionString(LinqDatabaseName),
+                interceptor
+            )
+        );
+
+        await context
+            .Database.MigrateAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+        Assert.True(
+            await TableExistsAsync(
+                    context,
+                    LinqDatabaseName,
+                    UnsupportedDownMigrationWidgetTableName
+                )
+                .ConfigureAwait(true)
+        );
+
+        interceptor.Clear();
+        NotSupportedException exception = await Assert.ThrowsAsync<NotSupportedException>(() =>
+            context.GetService<IMigrator>().MigrateAsync("0", TestContext.Current.CancellationToken)
+        );
+
+        Assert.Contains("DROP DATABASE", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(
+            interceptor.Commands,
+            command =>
+                command.CommandText.Contains(
+                    UnsupportedDownMigrationWidgetTableName,
+                    StringComparison.Ordinal
+                )
+                && command.CommandText.StartsWith("DROP TABLE", StringComparison.OrdinalIgnoreCase)
+        );
+        Assert.True(
+            await TableExistsAsync(
+                    context,
+                    LinqDatabaseName,
+                    UnsupportedDownMigrationWidgetTableName
+                )
+                .ConfigureAwait(true)
+        );
+        Assert.Equal(
+            1,
+            await HistoryRowCountAsync(context, UnsupportedDownMigrationId).ConfigureAwait(true)
+        );
+        await setupContext
+            .Database.ExecuteSqlRawAsync(
+                "DROP TABLE IF EXISTS "
+                    + DelimitIdentifier(LinqDatabaseName)
+                    + "."
+                    + DelimitIdentifier(UnsupportedDownMigrationWidgetTableName),
+                TestContext.Current.CancellationToken
+            )
+            .ConfigureAwait(true);
     }
 
     [Fact]
@@ -1417,20 +1779,28 @@ public sealed class DotRocksEfCoreIntegrationTests
     }
 
     private static DbContextOptions<MigrationTestContext> CreateMigrationContextOptions(
-        string connectionString
-    )
-    {
-        var optionsBuilder = new DbContextOptionsBuilder<MigrationTestContext>();
-        optionsBuilder.UseStarRocks(connectionString);
-        return optionsBuilder.Options;
-    }
+        string connectionString,
+        params IInterceptor[] interceptors
+    ) => CreateDbContextOptions<MigrationTestContext>(connectionString, interceptors);
 
     private static DbContextOptions<TableShapeMigrationTestContext> CreateTableShapeMigrationContextOptions(
-        string connectionString
+        string connectionString,
+        params IInterceptor[] interceptors
+    ) => CreateDbContextOptions<TableShapeMigrationTestContext>(connectionString, interceptors);
+
+    private static DbContextOptions<TContext> CreateDbContextOptions<TContext>(
+        string connectionString,
+        params IInterceptor[] interceptors
     )
+        where TContext : DbContext
     {
-        var optionsBuilder = new DbContextOptionsBuilder<TableShapeMigrationTestContext>();
+        var optionsBuilder = new DbContextOptionsBuilder<TContext>();
         optionsBuilder.UseStarRocks(connectionString);
+        if (interceptors.Length > 0)
+        {
+            optionsBuilder.AddInterceptors(interceptors);
+        }
+
         return optionsBuilder.Options;
     }
 
@@ -1596,6 +1966,52 @@ public sealed class DotRocksEfCoreIntegrationTests
         );
         return reader.GetString(1);
     }
+
+    private static async Task<bool> DatabaseExistsAsync(DbContext context, string databaseName)
+    {
+        int count = await context
+            .Database.SqlQueryRaw<int>(
+                "SELECT COUNT(*) AS Value FROM information_schema.schemata WHERE schema_name = {0}",
+                databaseName
+            )
+            .SingleAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+        return count != 0;
+    }
+
+    private static async Task<bool> TableExistsAsync(
+        DbContext context,
+        string databaseName,
+        string tableName
+    )
+    {
+        int count = await context
+            .Database.SqlQueryRaw<int>(
+                "SELECT COUNT(*) AS Value FROM information_schema.tables WHERE table_schema = {0} AND table_name = {1}",
+                databaseName,
+                tableName
+            )
+            .SingleAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+        return count != 0;
+    }
+
+    [SuppressMessage(
+        "Security",
+        "EF1003:Method inserts concatenated strings directly into the SQL",
+        Justification = "The migration history query is assembled only from fixed sanitized identifiers and parameter placeholders."
+    )]
+    private static Task<int> HistoryRowCountAsync(DbContext context, string migrationId) =>
+        context
+            .Database.SqlQueryRaw<int>(
+                "SELECT COUNT(*) AS Value FROM "
+                    + DelimitIdentifier("__EFMigrationsHistory")
+                    + " WHERE "
+                    + DelimitIdentifier("MigrationId")
+                    + " = {0}",
+                migrationId
+            )
+            .SingleAsync(TestContext.Current.CancellationToken);
 
     private static string StripParameterPreamble(string sql)
     {
@@ -1815,6 +2231,96 @@ public sealed class DotRocksEfCoreIntegrationTests
         }
     }
 
+    [SuppressMessage(
+        "Performance",
+        "CA1812:Avoid uninstantiated internal classes",
+        Justification = "The test methods instantiate this nested context through its primary constructor."
+    )]
+    private sealed class EnsureSchemaMigrationTestContext(
+        DbContextOptions<EnsureSchemaMigrationTestContext> options
+    ) : DbContext(options)
+    {
+        public DbSet<EfMigrationWidget> MigrationWidgets => Set<EfMigrationWidget>();
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            modelBuilder
+                .Entity<EfMigrationWidget>()
+                .ToTable(EnsureSchemaMigrationWidgetTableName, EnsureSchemaMigrationDatabaseName)
+                .HasKey(widget => widget.Id);
+            modelBuilder
+                .Entity<EfMigrationWidget>()
+                .Property(widget => widget.Id)
+                .ValueGeneratedNever()
+                .HasColumnName("id");
+            modelBuilder
+                .Entity<EfMigrationWidget>()
+                .Property(widget => widget.Name)
+                .HasColumnName("name")
+                .HasMaxLength(64);
+        }
+    }
+
+    [SuppressMessage(
+        "Performance",
+        "CA1812:Avoid uninstantiated internal classes",
+        Justification = "The test methods instantiate this nested context through its primary constructor."
+    )]
+    private sealed class UnsupportedMigrationTestContext(
+        DbContextOptions<UnsupportedMigrationTestContext> options
+    ) : DbContext(options)
+    {
+        public DbSet<EfMigrationWidget> MigrationWidgets => Set<EfMigrationWidget>();
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            modelBuilder
+                .Entity<EfMigrationWidget>()
+                .ToTable(UnsupportedMigrationWidgetTableName, LinqDatabaseName)
+                .HasKey(widget => widget.Id);
+            modelBuilder
+                .Entity<EfMigrationWidget>()
+                .Property(widget => widget.Id)
+                .ValueGeneratedNever()
+                .HasColumnName("id");
+            modelBuilder
+                .Entity<EfMigrationWidget>()
+                .Property(widget => widget.Name)
+                .HasColumnName("name")
+                .HasMaxLength(64);
+        }
+    }
+
+    [SuppressMessage(
+        "Performance",
+        "CA1812:Avoid uninstantiated internal classes",
+        Justification = "The test methods instantiate this nested context through its primary constructor."
+    )]
+    private sealed class UnsupportedDownMigrationTestContext(
+        DbContextOptions<UnsupportedDownMigrationTestContext> options
+    ) : DbContext(options)
+    {
+        public DbSet<EfMigrationWidget> MigrationWidgets => Set<EfMigrationWidget>();
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            modelBuilder
+                .Entity<EfMigrationWidget>()
+                .ToTable(UnsupportedDownMigrationWidgetTableName, LinqDatabaseName)
+                .HasKey(widget => widget.Id);
+            modelBuilder
+                .Entity<EfMigrationWidget>()
+                .Property(widget => widget.Id)
+                .ValueGeneratedNever()
+                .HasColumnName("id");
+            modelBuilder
+                .Entity<EfMigrationWidget>()
+                .Property(widget => widget.Name)
+                .HasColumnName("name")
+                .HasMaxLength(64);
+        }
+    }
+
     [DbContext(typeof(MigrationTestContext))]
     [Migration(MigrationId)]
     [SuppressMessage(
@@ -1889,6 +2395,120 @@ public sealed class DotRocksEfCoreIntegrationTests
                 name: TableShapeMigrationWidgetTableName,
                 schema: LinqDatabaseName
             );
+        }
+    }
+
+    [DbContext(typeof(EnsureSchemaMigrationTestContext))]
+    [Migration(EnsureSchemaMigrationId)]
+    [SuppressMessage(
+        "Performance",
+        "CA1812:Avoid uninstantiated internal classes",
+        Justification = "EF Core discovers this migration through assembly metadata."
+    )]
+    private sealed class CreateEnsureSchemaMigrationWidget : Migration
+    {
+        protected override void Up(MigrationBuilder migrationBuilder)
+        {
+            migrationBuilder.EnsureSchema(EnsureSchemaMigrationDatabaseName);
+            migrationBuilder.CreateTable(
+                name: EnsureSchemaMigrationWidgetTableName,
+                schema: EnsureSchemaMigrationDatabaseName,
+                columns: table => new
+                {
+                    Id = table.Column<int>(name: "id", nullable: false),
+                    Name = table.Column<string>(name: "name", type: "varchar(64)", nullable: false),
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_ef_ensure_schema_widgets", row => row.Id);
+                }
+            );
+        }
+
+        protected override void Down(MigrationBuilder migrationBuilder)
+        {
+            migrationBuilder.DropTable(
+                name: EnsureSchemaMigrationWidgetTableName,
+                schema: EnsureSchemaMigrationDatabaseName
+            );
+        }
+    }
+
+    [DbContext(typeof(UnsupportedMigrationTestContext))]
+    [Migration(UnsupportedMigrationId)]
+    [SuppressMessage(
+        "Performance",
+        "CA1812:Avoid uninstantiated internal classes",
+        Justification = "EF Core discovers this migration through assembly metadata."
+    )]
+    private sealed class UnsupportedSchemaMutationMigration : Migration
+    {
+        protected override void Up(MigrationBuilder migrationBuilder)
+        {
+            migrationBuilder.CreateTable(
+                name: UnsupportedMigrationWidgetTableName,
+                schema: LinqDatabaseName,
+                columns: table => new
+                {
+                    Id = table.Column<int>(name: "id", nullable: false),
+                    Name = table.Column<string>(name: "name", type: "varchar(64)", nullable: false),
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_ef_unsupported_migration_widgets", row => row.Id);
+                }
+            );
+            migrationBuilder.AddColumn<int>(
+                name: "unsupported_value",
+                schema: LinqDatabaseName,
+                table: UnsupportedMigrationWidgetTableName,
+                nullable: false,
+                defaultValue: 0
+            );
+        }
+
+        protected override void Down(MigrationBuilder migrationBuilder)
+        {
+            migrationBuilder.DropTable(
+                name: UnsupportedMigrationWidgetTableName,
+                schema: LinqDatabaseName
+            );
+        }
+    }
+
+    [DbContext(typeof(UnsupportedDownMigrationTestContext))]
+    [Migration(UnsupportedDownMigrationId)]
+    [SuppressMessage(
+        "Performance",
+        "CA1812:Avoid uninstantiated internal classes",
+        Justification = "EF Core discovers this migration through assembly metadata."
+    )]
+    private sealed class UnsupportedDownMigration : Migration
+    {
+        protected override void Up(MigrationBuilder migrationBuilder)
+        {
+            migrationBuilder.CreateTable(
+                name: UnsupportedDownMigrationWidgetTableName,
+                schema: LinqDatabaseName,
+                columns: table => new
+                {
+                    Id = table.Column<int>(name: "id", nullable: false),
+                    Name = table.Column<string>(name: "name", type: "varchar(64)", nullable: false),
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_ef_unsupported_down_widgets", row => row.Id);
+                }
+            );
+        }
+
+        protected override void Down(MigrationBuilder migrationBuilder)
+        {
+            migrationBuilder.DropTable(
+                name: UnsupportedDownMigrationWidgetTableName,
+                schema: LinqDatabaseName
+            );
+            migrationBuilder.DropSchema(LinqDatabaseName);
         }
     }
 
@@ -2021,6 +2641,8 @@ public sealed class DotRocksEfCoreIntegrationTests
     private sealed class CapturingCommandInterceptor : DbCommandInterceptor
     {
         private readonly List<CapturedCommand> _commands = [];
+
+        public IReadOnlyList<CapturedCommand> Commands => _commands;
 
         public void Clear() => _commands.Clear();
 
