@@ -99,7 +99,7 @@ jobs:
 
       - name: Upload StarRocks logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: starrocks-logs-${{ matrix.starrocks-version }}
           path: artifacts/integration/starrocks.log
