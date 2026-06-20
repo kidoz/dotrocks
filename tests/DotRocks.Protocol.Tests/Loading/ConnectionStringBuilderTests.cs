@@ -1,11 +1,32 @@
 using System.Diagnostics;
 using DotRocks.Data;
+using DotRocks.Data.Loading;
 using Xunit;
 
 namespace DotRocks.Protocol.Tests.Loading;
 
 public sealed class ConnectionStringBuilderTests
 {
+    [Fact]
+    public void PoolKey_ToString_RedactsPassword()
+    {
+        DotRocksConnectionPoolKey key = DotRocksConnectionOptions
+            .Parse("Server=h;User ID=alice;Password=topsecret;Database=db")
+            .CreatePoolKey();
+
+        string text = key.ToString();
+
+        Assert.DoesNotContain("topsecret", text, StringComparison.Ordinal);
+        Assert.Contains("Password = ***", text, StringComparison.Ordinal);
+        // Equality must still use the real password (pool identity is unaffected by redaction).
+        Assert.Equal(
+            key,
+            DotRocksConnectionOptions
+                .Parse("Server=h;User ID=alice;Password=topsecret;Database=db")
+                .CreatePoolKey()
+        );
+    }
+
     [Fact]
     public void ToString_RedactsPassword()
     {

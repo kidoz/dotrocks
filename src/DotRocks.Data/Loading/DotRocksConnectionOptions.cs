@@ -544,4 +544,13 @@ internal sealed record DotRocksConnectionPoolKey(
     DotRocksSslMode SslMode,
     bool TrustServerCertificate,
     X509RevocationMode SslRevocationMode
-);
+)
+{
+    // Equality/hash still use the real Password (pool identity), but the default record ToString
+    // would print it; redact so the key cannot leak the password through logs or diagnostics.
+    public override string ToString() =>
+        $"DotRocksConnectionPoolKey {{ Server = {Server}, Port = {Port}, UserId = {UserId}, "
+        + $"Password = ***, Database = {Database}, ConnectionTimeoutSeconds = {ConnectionTimeoutSeconds}, "
+        + $"SslMode = {SslMode}, TrustServerCertificate = {TrustServerCertificate}, "
+        + $"SslRevocationMode = {SslRevocationMode} }}";
+}
