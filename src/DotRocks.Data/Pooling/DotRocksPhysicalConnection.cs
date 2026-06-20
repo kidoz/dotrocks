@@ -29,7 +29,27 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
 
     public string ServerVersion { get; }
 
-    public bool IsReusable => !_isDisposed && !_isBroken && _client.Connected;
+    public bool IsReusable => !_isDisposed && !_isBroken && _client.Connected && IsSocketAlive();
+
+    // TcpClient.Connected only reflects the last I/O. Poll detects a peer that closed the
+    // connection while it was idle in the pool (server restart, idle kill): a readable socket
+    // with no available bytes means a FIN was received, so the connection must not be reused.
+    private bool IsSocketAlive()
+    {
+        try
+        {
+            Socket socket = _client.Client;
+            return !(socket.Poll(0, SelectMode.SelectRead) && socket.Available == 0);
+        }
+        catch (SocketException)
+        {
+            return false;
+        }
+        catch (ObjectDisposedException)
+        {
+            return false;
+        }
+    }
 
     public static async ValueTask<DotRocksPhysicalConnection> OpenAsync(
         DotRocksConnectionOptions options,
