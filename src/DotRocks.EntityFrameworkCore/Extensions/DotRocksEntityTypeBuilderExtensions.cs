@@ -31,6 +31,17 @@ public static class DotRocksEntityTypeBuilderExtensions
     ) => SetKeyModel(entityTypeBuilder, DotRocksTableKeyModel.PrimaryKey, columns);
 
     /// <summary>
+    /// Configures the entity's migration table as a StarRocks <c>UNIQUE KEY</c> table.
+    /// </summary>
+    /// <param name="entityTypeBuilder">The entity type builder.</param>
+    /// <param name="columns">The key columns to emit in the StarRocks table key clause.</param>
+    /// <returns>The same builder so calls can be chained.</returns>
+    public static EntityTypeBuilder HasStarRocksUniqueKey(
+        this EntityTypeBuilder entityTypeBuilder,
+        params string[] columns
+    ) => SetKeyModel(entityTypeBuilder, DotRocksTableKeyModel.UniqueKey, columns);
+
+    /// <summary>
     /// Configures StarRocks hash distribution for migrations generated for this entity.
     /// </summary>
     /// <param name="entityTypeBuilder">The entity type builder.</param>

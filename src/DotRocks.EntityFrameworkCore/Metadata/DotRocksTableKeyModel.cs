@@ -14,4 +14,9 @@ public enum DotRocksTableKeyModel
     /// Generates a StarRocks <c>PRIMARY KEY</c> table.
     /// </summary>
     PrimaryKey,
+
+    /// <summary>
+    /// Generates a StarRocks <c>UNIQUE KEY</c> table.
+    /// </summary>
+    UniqueKey,
 }

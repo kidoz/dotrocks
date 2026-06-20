@@ -74,12 +74,16 @@ public sealed class DotRocksAnnotationCodeGenerator(
         {
             DotRocksTableKeyModel.DuplicateKey => "HasStarRocksDuplicateKey",
             DotRocksTableKeyModel.PrimaryKey => "HasStarRocksPrimaryKey",
+            DotRocksTableKeyModel.UniqueKey => "HasStarRocksUniqueKey",
             string text
                 when string.Equals(text, "DUPLICATE KEY", StringComparison.OrdinalIgnoreCase) =>
                 "HasStarRocksDuplicateKey",
             string text
                 when string.Equals(text, "PRIMARY KEY", StringComparison.OrdinalIgnoreCase) =>
                 "HasStarRocksPrimaryKey",
+            string text
+                when string.Equals(text, "UNIQUE KEY", StringComparison.OrdinalIgnoreCase) =>
+                "HasStarRocksUniqueKey",
             _ => throw new NotSupportedException(
                 $"DotRocks EF Core design-time services do not support StarRocks table key model '{keyModel}'."
             ),

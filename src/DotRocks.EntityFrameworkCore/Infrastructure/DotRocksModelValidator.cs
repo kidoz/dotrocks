@@ -214,10 +214,12 @@ internal sealed class DotRocksModelValidator(
         if (
             value is DotRocksTableKeyModel.DuplicateKey
             || value is DotRocksTableKeyModel.PrimaryKey
+            || value is DotRocksTableKeyModel.UniqueKey
             || value is string text
                 && (
                     string.Equals(text, "DUPLICATE KEY", StringComparison.OrdinalIgnoreCase)
                     || string.Equals(text, "PRIMARY KEY", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(text, "UNIQUE KEY", StringComparison.OrdinalIgnoreCase)
                 )
         )
         {

@@ -9,6 +9,7 @@ public static class DotRocks.EntityFrameworkCore.Infrastructure.DotRocksServiceC
 public enum DotRocks.EntityFrameworkCore.Metadata.DotRocksTableKeyModel
   public static field DotRocks.EntityFrameworkCore.Metadata.DotRocksTableKeyModel DuplicateKey
   public static field DotRocks.EntityFrameworkCore.Metadata.DotRocksTableKeyModel PrimaryKey
+  public static field DotRocks.EntityFrameworkCore.Metadata.DotRocksTableKeyModel UniqueKey
 
 public static class Microsoft.EntityFrameworkCore.DotRocksDbContextOptionsBuilderExtensions
   public static method Microsoft.EntityFrameworkCore.DbContextOptionsBuilder UseStarRocks(Microsoft.EntityFrameworkCore.DbContextOptionsBuilder optionsBuilder, System.Data.Common.DbConnection connection, System.Boolean contextOwnsConnection, System.Action<DotRocks.EntityFrameworkCore.Infrastructure.DotRocksDbContextOptionsBuilder> dotRocksOptionsAction)
@@ -19,4 +20,5 @@ public static class Microsoft.EntityFrameworkCore.DotRocksEntityTypeBuilderExten
   public static method Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder HasStarRocksHashDistribution(Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder entityTypeBuilder, System.Int32 buckets, System.String[] columns)
   public static method Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder HasStarRocksPrimaryKey(Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder entityTypeBuilder, System.String[] columns)
   public static method Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder HasStarRocksReplicationNum(Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder entityTypeBuilder, System.Int32 replicationNum)
+  public static method Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder HasStarRocksUniqueKey(Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder entityTypeBuilder, System.String[] columns)
 

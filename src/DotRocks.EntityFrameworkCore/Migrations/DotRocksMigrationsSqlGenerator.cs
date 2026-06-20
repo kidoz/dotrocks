@@ -323,12 +323,16 @@ internal sealed class DotRocksMigrationsSqlGenerator(
             null => "DUPLICATE KEY",
             DotRocksTableKeyModel.DuplicateKey => "DUPLICATE KEY",
             DotRocksTableKeyModel.PrimaryKey => "PRIMARY KEY",
+            DotRocksTableKeyModel.UniqueKey => "UNIQUE KEY",
             string text
                 when string.Equals(text, "DUPLICATE KEY", StringComparison.OrdinalIgnoreCase) =>
                 "DUPLICATE KEY",
             string text
                 when string.Equals(text, "PRIMARY KEY", StringComparison.OrdinalIgnoreCase) =>
                 "PRIMARY KEY",
+            string text
+                when string.Equals(text, "UNIQUE KEY", StringComparison.OrdinalIgnoreCase) =>
+                "UNIQUE KEY",
             _ => throw new NotSupportedException(
                 $"DotRocks EF Core migrations do not support StarRocks table key model '{value}'."
             ),

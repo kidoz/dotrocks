@@ -51,6 +51,22 @@ public sealed class DotRocksMigrationsTests
     }
 
     [Fact]
+    public void Generate_CreateTableWithUniqueKeyShape_ProducesUniqueKeyTableSql()
+    {
+        using var context = CreateContext();
+        var generator = context.GetService<IMigrationsSqlGenerator>();
+        CreateTableOperation operation = CreateWidgetsTable();
+        operation.AddAnnotation("DotRocks:KeyModel", DotRocksTableKeyModel.UniqueKey);
+        operation.AddAnnotation("DotRocks:KeyColumns", IdColumn);
+
+        string sql = GenerateSql(generator, operation);
+
+        Assert.Contains("UNIQUE KEY(`id`)", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("DUPLICATE KEY", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("PRIMARY KEY(", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Generate_CreateTableWithFloatingPointKeyColumn_Throws()
     {
         using var context = CreateContext();
