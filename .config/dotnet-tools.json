@@ -4,7 +4,16 @@
   "tools": {
     "csharpier": {
       "version": "1.2.6",
-      "commands": ["csharpier"],
+      "commands": [
+        "csharpier"
+      ],
+      "rollForward": false
+    },
+    "docfx": {
+      "version": "2.78.3",
+      "commands": [
+        "docfx"
+      ],
       "rollForward": false
     }
   }

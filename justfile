@@ -114,3 +114,13 @@ harness host=fe_host port=fe_port:
 # Run the budgeted BenchmarkDotNet suite (optionally filtered, e.g. `just bench '*Parse*'`).
 bench filter='*':
     dotnet run --project benchmarks/DotRocks.Benchmarks --configuration Release -- --filter '{{filter}}'
+
+# Build the DocFX documentation site into artifacts/docfx/_site.
+docs:
+    dotnet tool restore
+    dotnet docfx docs/docfx.json
+
+# Build and serve the DocFX documentation site locally.
+docs-serve:
+    dotnet tool restore
+    dotnet docfx docs/docfx.json --serve

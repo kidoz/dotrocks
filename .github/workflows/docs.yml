@@ -1,0 +1,53 @@
+name: Docs
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+      DOTNET_CLI_DO_NOT_USE_MSBUILD_SERVER: 1
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore tools
+        run: dotnet tool restore
+
+      - name: Restore packages
+        run: dotnet restore DotRocks.slnx --locked-mode
+
+      - name: Build documentation
+        run: dotnet docfx docs/docfx.json
+
+      - name: Upload site artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dotrocks-docs
+          path: artifacts/docfx/_site
+          if-no-files-found: error
+
+  # Deployment to GitHub Pages is intentionally a separate, manual gate: enable Pages on the
+  # repository and add a deploy job (actions/deploy-pages) when you are ready to publish.

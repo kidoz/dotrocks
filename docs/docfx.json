@@ -1,0 +1,48 @@
+{
+  "metadata": [
+    {
+      "src": [
+        {
+          "src": "../src",
+          "files": [
+            "DotRocks.Data/DotRocks.Data.csproj",
+            "DotRocks.EntityFrameworkCore/DotRocks.EntityFrameworkCore.csproj",
+            "DotRocks.EntityFrameworkCore.Design/DotRocks.EntityFrameworkCore.Design.csproj"
+          ]
+        }
+      ],
+      "dest": "../artifacts/docfx/api",
+      "outputFormat": "mref",
+      "memberLayout": "separatePages",
+      "properties": {
+        "TargetFramework": "net10.0"
+      }
+    }
+  ],
+  "build": {
+    "content": [
+      {
+        "files": ["**/*.{md,yml}"],
+        "exclude": ["_site/**", "../artifacts/**"]
+      },
+      {
+        "src": "../artifacts/docfx/api",
+        "files": ["**/*.{md,yml}"],
+        "dest": "api"
+      }
+    ],
+    "resource": [
+      {
+        "files": ["images/**"]
+      }
+    ],
+    "output": "../artifacts/docfx/_site",
+    "template": ["default", "modern"],
+    "globalMetadata": {
+      "_appName": "DotRocks",
+      "_appTitle": "DotRocks for StarRocks",
+      "_enableSearch": true,
+      "_disableContribution": true
+    }
+  }
+}
