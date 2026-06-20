@@ -69,7 +69,7 @@ public sealed class DotRocksEfCoreIntegrationTests
     }
 
     [Fact]
-    public async Task DatabaseCreator_Exists_ReflectsDatabasePresenceNotJustConnectivity()
+    public async Task DatabaseCreator_Exists_ReflectsDatabasePresence()
     {
         if (!IntegrationTestEnvironment.IsEnabled)
         {
@@ -93,16 +93,12 @@ public sealed class DotRocksEfCoreIntegrationTests
                 .ConfigureAwait(true)
         );
 
+        // StarRocks refuses login when the default database does not exist, so a connection
+        // scoped to a missing database neither connects nor "exists".
         using DotRocksTestContext missing = CreateContext(
             BuildDatabaseConnectionString("dotrocks_definitely_absent_db")
         );
         var missingCreator = missing.GetService<IRelationalDatabaseCreator>();
-        // The server is reachable, but the target database does not exist.
-        Assert.True(
-            await missingCreator
-                .CanConnectAsync(TestContext.Current.CancellationToken)
-                .ConfigureAwait(true)
-        );
         Assert.False(
             await missingCreator
                 .ExistsAsync(TestContext.Current.CancellationToken)
@@ -451,7 +447,12 @@ public sealed class DotRocksEfCoreIntegrationTests
             CapturedCommand updateCommand = interceptor.SingleNonQueryCommand("UPDATE");
             Assert.Contains(" WHERE ", updateCommand.CommandText, StringComparison.Ordinal);
             Assert.Contains("@p", updateCommand.CommandText, StringComparison.Ordinal);
-            Assert.Contains("`id` = @p", updateCommand.CommandText, StringComparison.Ordinal);
+            // The key column name matches case-insensitively (`Id` model property → `id` column).
+            Assert.Contains(
+                "`id` = @p",
+                updateCommand.CommandText,
+                StringComparison.OrdinalIgnoreCase
+            );
             Assert.DoesNotContain("updated", updateCommand.CommandText, StringComparison.Ordinal);
             Assert.DoesNotContain("56.78", updateCommand.CommandText, StringComparison.Ordinal);
             Assert.Contains("updated", updateCommand.ParameterValues());
@@ -476,7 +477,11 @@ public sealed class DotRocksEfCoreIntegrationTests
             CapturedCommand deleteCommand = interceptor.SingleNonQueryCommand("DELETE");
             Assert.Contains(" WHERE ", deleteCommand.CommandText, StringComparison.Ordinal);
             Assert.Contains("@p", deleteCommand.CommandText, StringComparison.Ordinal);
-            Assert.Contains("`id` = @p", deleteCommand.CommandText, StringComparison.Ordinal);
+            Assert.Contains(
+                "`id` = @p",
+                deleteCommand.CommandText,
+                StringComparison.OrdinalIgnoreCase
+            );
             Assert.DoesNotContain("10", deleteCommand.CommandText, StringComparison.Ordinal);
             Assert.Contains(10, deleteCommand.ParameterValues());
 
@@ -497,7 +502,64 @@ public sealed class DotRocksEfCoreIntegrationTests
     }
 
     [Fact]
-    public async Task SaveChangesAsync_MultipleEntitiesUseSeparateParameterizedCommands()
+    public async Task SaveChangesAsync_MultipleRowsSameTable_FailsWithStarRocksMultiDmlLimitation()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
+        }
+
+        await using var context = CreateLiveContext();
+        await EnsureWriteWidgetTableAsync(context).ConfigureAwait(true);
+
+        try
+        {
+            // Multiple changed rows for the same table make EF wrap several DML statements in one
+            // transaction. StarRocks rejects a second DML against a table already written in the
+            // same transaction (ERROR 5303), so multi-row SaveChanges to one table is unsupported;
+            // use one row per SaveChanges (separate transactions) or Stream Load for bulk writes.
+            context.WriteWidgets.AddRange(
+                new EfWriteWidget
+                {
+                    Id = 20,
+                    Name = "first",
+                    Active = true,
+                    Amount = 20.01m,
+                },
+                new EfWriteWidget
+                {
+                    Id = 21,
+                    Name = "second",
+                    Active = false,
+                    Amount = 21.02m,
+                }
+            );
+
+            DbUpdateException exception = await Assert
+                .ThrowsAsync<DbUpdateException>(async () =>
+                    await context
+                        .SaveChangesAsync(TestContext.Current.CancellationToken)
+                        .ConfigureAwait(true)
+                )
+                .ConfigureAwait(true);
+
+            var inner = Assert.IsType<DotRocksException>(exception.InnerException);
+            Assert.Contains(
+                "subjected to DML operations before",
+                inner.Message,
+                StringComparison.OrdinalIgnoreCase
+            );
+        }
+        finally
+        {
+            await DropWriteWidgetTableAsync(context).ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
+    public async Task SaveChangesAsync_OneRowPerSaveChanges_WritesSequentially()
     {
         if (!IntegrationTestEnvironment.IsEnabled)
         {
@@ -512,72 +574,46 @@ public sealed class DotRocksEfCoreIntegrationTests
 
         try
         {
-            var first = new EfWriteWidget
+            // One row per SaveChanges keeps each DML in its own implicit transaction, which is the
+            // supported StarRocks write pattern.
+            foreach (
+                EfWriteWidget widget in new[]
+                {
+                    new EfWriteWidget
+                    {
+                        Id = 20,
+                        Name = "first",
+                        Active = true,
+                        Amount = 20.01m,
+                    },
+                    new EfWriteWidget
+                    {
+                        Id = 21,
+                        Name = "second",
+                        Active = false,
+                        Amount = 21.02m,
+                    },
+                }
+            )
             {
-                Id = 20,
-                Name = "first",
-                Active = true,
-                Amount = 20.01m,
-            };
-            var second = new EfWriteWidget
-            {
-                Id = 21,
-                Name = "second",
-                Active = false,
-                Amount = 21.02m,
-            };
-            var third = new EfWriteWidget
-            {
-                Id = 22,
-                Name = "third",
-                Active = true,
-                Amount = 22.03m,
-            };
-            context.WriteWidgets.AddRange(first, second, third);
+                context.WriteWidgets.Add(widget);
+                interceptor.Clear();
+                Assert.Equal(
+                    1,
+                    await context
+                        .SaveChangesAsync(TestContext.Current.CancellationToken)
+                        .ConfigureAwait(true)
+                );
+                Assert.All(interceptor.NonQueryCommands("INSERT"), AssertParameterizedDml);
+            }
 
-            interceptor.Clear();
-            Assert.Equal(
-                3,
-                await context
-                    .SaveChangesAsync(TestContext.Current.CancellationToken)
-                    .ConfigureAwait(true)
-            );
-            CapturedCommand[] insertCommands = interceptor.NonQueryCommands("INSERT");
-            Assert.Equal(3, insertCommands.Length);
-            Assert.All(insertCommands, AssertParameterizedDml);
-
-            first.Name = "first-updated";
-            second.Amount = 210.20m;
-            interceptor.Clear();
-            Assert.Equal(
-                2,
-                await context
-                    .SaveChangesAsync(TestContext.Current.CancellationToken)
-                    .ConfigureAwait(true)
-            );
-            CapturedCommand[] updateCommands = interceptor.NonQueryCommands("UPDATE");
-            Assert.Equal(2, updateCommands.Length);
-            Assert.All(updateCommands, AssertPrimaryKeyParameterizedDml);
-
-            context.WriteWidgets.RemoveRange(first, third);
-            interceptor.Clear();
-            Assert.Equal(
-                2,
-                await context
-                    .SaveChangesAsync(TestContext.Current.CancellationToken)
-                    .ConfigureAwait(true)
-            );
-            CapturedCommand[] deleteCommands = interceptor.NonQueryCommands("DELETE");
-            Assert.Equal(2, deleteCommands.Length);
-            Assert.All(deleteCommands, AssertPrimaryKeyParameterizedDml);
-
-            List<int> remainingIds = await context
+            List<int> ids = await context
                 .WriteWidgets.AsNoTracking()
                 .OrderBy(widget => widget.Id)
                 .Select(widget => widget.Id)
                 .ToListAsync(TestContext.Current.CancellationToken)
                 .ConfigureAwait(true);
-            Assert.Equal([21], remainingIds);
+            Assert.Equal([20, 21], ids);
         }
         finally
         {
@@ -2207,13 +2243,6 @@ public sealed class DotRocksEfCoreIntegrationTests
         Assert.DoesNotContain("second", command.CommandText, StringComparison.Ordinal);
         Assert.DoesNotContain("third", command.CommandText, StringComparison.Ordinal);
         Assert.NotEmpty(command.Parameters);
-    }
-
-    private static void AssertPrimaryKeyParameterizedDml(CapturedCommand command)
-    {
-        AssertParameterizedDml(command);
-        Assert.Contains(" WHERE ", command.CommandText, StringComparison.Ordinal);
-        Assert.Contains("`id` = @p", command.CommandText, StringComparison.Ordinal);
     }
 
     private static bool IsInteresting(string value) =>
