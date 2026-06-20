@@ -66,6 +66,17 @@ public sealed class DotRocksMigrationsTests
         Assert.Contains("PROPERTIES ('replication_num' = '3')", sql, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Generate_EnsureSchema_ProducesCreateDatabaseIfNotExistsSql()
+    {
+        using var context = CreateContext();
+        var generator = context.GetService<IMigrationsSqlGenerator>();
+
+        string sql = GenerateSql(generator, new EnsureSchemaOperation { Name = "unit_db" });
+
+        Assert.Contains("CREATE DATABASE IF NOT EXISTS `unit_db`", sql, StringComparison.Ordinal);
+    }
+
     [Theory]
     [MemberData(nameof(UnsupportedTableShapeAnnotations))]
     public void Generate_CreateTableWithUnsupportedTableShapeAnnotation_ThrowsNotSupportedException(
@@ -323,6 +334,10 @@ public sealed class DotRocksMigrationsTests
             { CreateAddPrimaryKeyOperation(), "ADD PRIMARY KEY" },
             { CreateDropPrimaryKeyOperation(), "DROP PRIMARY KEY" },
             { CreateForeignKeyOperation(), "ADD FOREIGN KEY" },
+            {
+                new DropSchemaOperation { Name = "unit_db" },
+                "DROP DATABASE"
+            },
             {
                 new SqlOperation { Sql = "TRUNCATE TABLE `widgets`" },
                 "TRUNCATE TABLE"

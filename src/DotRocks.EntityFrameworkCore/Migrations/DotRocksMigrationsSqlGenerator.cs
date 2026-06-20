@@ -109,6 +109,15 @@ internal sealed class DotRocksMigrationsSqlGenerator(
     }
 
     protected override void Generate(
+        DropSchemaOperation operation,
+        IModel? model,
+        MigrationCommandListBuilder builder
+    )
+    {
+        throw CreateUnsupportedMigrationOperationException("DROP DATABASE");
+    }
+
+    protected override void Generate(
         DropTableOperation operation,
         IModel? model,
         MigrationCommandListBuilder builder,
@@ -302,7 +311,7 @@ internal sealed class DotRocksMigrationsSqlGenerator(
         string operation
     ) =>
         new(
-            $"DotRocks EF Core migrations do not support {operation}; only initial CREATE TABLE migrations are supported in this release."
+            $"DotRocks EF Core migrations do not support {operation}; only conservative CREATE DATABASE, CREATE TABLE, and DROP TABLE operations are supported in this release."
         );
 
     private static string GetKeyClause(CreateTableOperation operation)

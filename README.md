@@ -117,10 +117,11 @@ Supported EF Core query surface:
   `UPDATE ... WHERE pk = @p`, and `DELETE ... WHERE pk = @p`. Multiple changed
   entities are emitted as separate parameterized commands; DotRocks does not currently
   model OLTP-style affected-row concurrency checks.
-- Minimal migrations can create and drop StarRocks tables and create the EF migrations
-  history table. `CREATE TABLE` defaults to `DUPLICATE KEY`, hash distribution by the
-  key columns, one bucket, and `replication_num = 1`. Configure table shape with
-  `HasStarRocksDuplicateKey(...)`, `HasStarRocksPrimaryKey(...)`,
+- Minimal migrations can create StarRocks databases from `EnsureSchema` as
+  `CREATE DATABASE IF NOT EXISTS`, create and drop StarRocks tables, and create the EF
+  migrations history table. `CREATE TABLE` defaults to `DUPLICATE KEY`, hash
+  distribution by the key columns, one bucket, and `replication_num = 1`. Configure
+  table shape with `HasStarRocksDuplicateKey(...)`, `HasStarRocksPrimaryKey(...)`,
   `HasStarRocksHashDistribution(...)`, and `HasStarRocksReplicationNum(...)`. The
   design-time package is `DotRocks.EntityFrameworkCore.Design`.
 
@@ -128,9 +129,9 @@ Unsupported EF Core behavior is explicit:
 
 - `ExecuteUpdate`, and `ExecuteDelete`.
 - `EnsureCreated` and schema deletion.
-- migration schema mutations beyond conservative table creation/drop, including
-  add/drop/alter/rename column, rename table, indexes, add/drop primary key, foreign
-  keys, defaults, and computed columns.
+- migration schema mutations beyond conservative database creation and table
+  creation/drop, including `DROP DATABASE`, add/drop/alter/rename column, rename table,
+  indexes, add/drop primary key, foreign keys, defaults, and computed columns.
 - idempotent migration scripts.
 - composite-key writes.
 - joins, `Include`, navigation materialization, and `GroupBy`.
