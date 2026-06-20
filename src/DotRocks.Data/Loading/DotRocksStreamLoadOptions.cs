@@ -65,7 +65,9 @@ public sealed class DotRocksStreamLoadOptions
             ["format"] = format == DotRocksStreamLoadFormat.Csv ? "csv" : "json",
         };
 
-        AddHeader(headers, "label", Label);
+        // A label makes a load idempotent: StarRocks rejects a duplicate label, so a resend
+        // (e.g. after a redirect) cannot double-load. Generate one when the caller omits it.
+        AddHeader(headers, "label", string.IsNullOrEmpty(Label) ? GenerateLabel() : Label);
         AddHeader(headers, "columns", Columns);
         AddHeader(headers, "where", Where);
         AddHeader(headers, "column_separator", ColumnSeparator);
@@ -111,7 +113,10 @@ public sealed class DotRocksStreamLoadOptions
         ValidateHeaderValue(RowDelimiter);
         ValidateHeaderValue(JsonPaths);
 
-        if (MaxFilterRatio is < 0 or > 1 || double.IsNaN(MaxFilterRatio.GetValueOrDefault()))
+        if (
+            MaxFilterRatio is not null
+            && (MaxFilterRatio is < 0 or > 1 || double.IsNaN(MaxFilterRatio.Value))
+        )
         {
             throw new ArgumentOutOfRangeException(
                 nameof(MaxFilterRatio),
@@ -125,6 +130,8 @@ public sealed class DotRocksStreamLoadOptions
             ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(Timeout.Value, TimeSpan.Zero);
         }
     }
+
+    private static string GenerateLabel() => "dotrocks_" + Guid.NewGuid().ToString("N");
 
     private static void AddHeader(Dictionary<string, string> headers, string name, string? value)
     {

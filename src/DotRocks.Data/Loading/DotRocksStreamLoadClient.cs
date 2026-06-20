@@ -308,7 +308,9 @@ public sealed class DotRocksStreamLoadClient : IDisposable
             request.Headers.Authorization = CreateAuthorizationHeader();
         }
 
-        request.Headers.ExpectContinue = true;
+        // Expect: 100-continue only matters when sending a body; on bodyless transaction
+        // control requests it just adds a wasted round-trip (and can hang on some servers).
+        request.Headers.ExpectContinue = payload is not null;
         foreach (KeyValuePair<string, string> header in headers)
         {
             request.Headers.TryAddWithoutValidation(header.Key, header.Value);

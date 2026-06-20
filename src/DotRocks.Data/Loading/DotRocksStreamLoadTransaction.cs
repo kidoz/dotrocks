@@ -163,6 +163,7 @@ public sealed class DotRocksStreamLoadTransaction
         return await CompleteAsync(
                 "commit",
                 DotRocksStreamLoadTransactionState.Committed,
+                serverFailureIsInDoubt: true,
                 cancellationToken
             )
             .ConfigureAwait(false);
@@ -189,6 +190,7 @@ public sealed class DotRocksStreamLoadTransaction
         return await CompleteAsync(
                 "rollback",
                 DotRocksStreamLoadTransactionState.RolledBack,
+                serverFailureIsInDoubt: false,
                 cancellationToken
             )
             .ConfigureAwait(false);
@@ -228,6 +230,7 @@ public sealed class DotRocksStreamLoadTransaction
     private async Task<DotRocksStreamLoadResult> CompleteAsync(
         string operation,
         DotRocksStreamLoadTransactionState completedState,
+        bool serverFailureIsInDoubt,
         CancellationToken cancellationToken
     )
     {
@@ -247,6 +250,14 @@ public sealed class DotRocksStreamLoadTransaction
         }
         catch (Exception ex) when (requestDispatched && IsInDoubtTransportException(ex))
         {
+            _state = DotRocksStreamLoadTransactionState.CompletionInDoubt;
+            throw new DotRocksStreamLoadTransactionInDoubtException(Label, operation, ex);
+        }
+        catch (DotRocksStreamLoadException ex) when (serverFailureIsInDoubt && requestDispatched)
+        {
+            // A commit that reaches the server but returns a non-success status is genuinely
+            // indeterminate: StarRocks may have applied it. Surface it as in-doubt so callers
+            // reconcile by label rather than assuming the commit did not happen.
             _state = DotRocksStreamLoadTransactionState.CompletionInDoubt;
             throw new DotRocksStreamLoadTransactionInDoubtException(Label, operation, ex);
         }

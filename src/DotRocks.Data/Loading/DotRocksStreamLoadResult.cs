@@ -98,11 +98,20 @@ public sealed class DotRocksStreamLoadResult
     public int? Sequence { get; }
 
     /// <summary>
-    /// Gets a value indicating whether StarRocks reported the load as successful.
+    /// Gets a value indicating whether the load was applied but its visibility publish timed out.
+    /// The rows are written; they may become queryable slightly later.
+    /// </summary>
+    public bool IsPublishTimeout =>
+        string.Equals(Status, "Publish Timeout", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Gets a value indicating whether StarRocks reported the load as successful. A publish
+    /// timeout counts as success because the data was written.
     /// </summary>
     public bool IsSuccess =>
         string.Equals(Status, "Success", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(Status, "OK", StringComparison.OrdinalIgnoreCase);
+        || string.Equals(Status, "OK", StringComparison.OrdinalIgnoreCase)
+        || IsPublishTimeout;
 
     internal static DotRocksStreamLoadResult Parse(string responseText)
     {

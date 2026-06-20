@@ -111,6 +111,58 @@ public sealed class DotRocksStreamLoadClientTests
     }
 
     [Fact]
+    public async Task LoadCsvAsync_PublishTimeoutIsTreatedAsSuccess()
+    {
+        using var handler = new RecordingHandler(
+            static (_, _) =>
+                Task.FromResult(
+                    JsonResponse(
+                        """
+                        { "Status": "Publish Timeout", "Message": "publish timeout", "NumberLoadedRows": 1 }
+                        """
+                    )
+                )
+        );
+        using var httpClient = new HttpClient(handler);
+        using var client = CreateClient(httpClient);
+        using var payload = new MemoryStream(Encoding.UTF8.GetBytes("1,one\\n"));
+
+        DotRocksStreamLoadResult result = await client
+            .LoadCsvAsync(
+                "warehouse",
+                "events",
+                payload,
+                cancellationToken: TestContext.Current.CancellationToken
+            )
+            .ConfigureAwait(true);
+
+        Assert.True(result.IsSuccess);
+        Assert.True(result.IsPublishTimeout);
+    }
+
+    [Fact]
+    public async Task LoadCsvAsync_WithoutLabel_GeneratesIdempotencyLabel()
+    {
+        using var handler = new RecordingHandler((_, _) => Task.FromResult(JsonResponse()));
+        using var httpClient = new HttpClient(handler);
+        using var client = CreateClient(httpClient);
+        using var payload = new MemoryStream(Encoding.UTF8.GetBytes("1,one\\n"));
+
+        _ = await client
+            .LoadCsvAsync(
+                "warehouse",
+                "events",
+                payload,
+                cancellationToken: TestContext.Current.CancellationToken
+            )
+            .ConfigureAwait(true);
+
+        Assert.NotNull(handler.Request);
+        Assert.True(handler.Request.Headers.TryGetValues("label", out IEnumerable<string>? labels));
+        Assert.StartsWith("dotrocks_", labels!.Single(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task LoadCsvAsync_FollowsTemporaryRedirectWithoutBuffering()
     {
         using var handler = new RedirectingHandler();
@@ -522,7 +574,8 @@ public sealed class DotRocksStreamLoadClientTests
             "http://starrocks.local:8030/api/transaction/begin",
             request.RequestUri!.AbsoluteUri
         );
-        Assert.True(request.Headers.ExpectContinue);
+        // A bodyless transaction control request must not send Expect: 100-continue.
+        Assert.NotEqual(true, request.Headers.ExpectContinue);
         AssertHeader(request.Headers, "label", "tx_label");
         AssertHeader(request.Headers, "db", "warehouse");
         AssertHeader(request.Headers, "table", "events");
@@ -637,7 +690,7 @@ public sealed class DotRocksStreamLoadClientTests
     }
 
     [Fact]
-    public async Task TransactionCommitFailure_MarksTransactionFailed()
+    public async Task TransactionCommitServerFailure_ReportsInDoubt()
     {
         using var handler = new TransactionSequenceHandler(commitSucceeds: false);
         using var httpClient = new HttpClient(handler);
@@ -652,15 +705,48 @@ public sealed class DotRocksStreamLoadClientTests
             .ConfigureAwait(true);
 
         await transaction.PrepareAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        // A commit that reaches the server but returns a failure status is indeterminate, not a
+        // clean failure: the commit may have applied server-side.
         await Assert
-            .ThrowsAsync<DotRocksStreamLoadException>(async () =>
+            .ThrowsAsync<DotRocksStreamLoadTransactionInDoubtException>(async () =>
                 await transaction
                     .CommitAsync(TestContext.Current.CancellationToken)
                     .ConfigureAwait(true)
             )
             .ConfigureAwait(true);
+
+        // An in-doubt transaction cannot be rolled back or re-committed.
         await Assert
             .ThrowsAsync<InvalidOperationException>(async () =>
+                await transaction
+                    .RollbackAsync(TestContext.Current.CancellationToken)
+                    .ConfigureAwait(true)
+            )
+            .ConfigureAwait(true);
+    }
+
+    [Fact]
+    public async Task TransactionRollbackServerFailure_MarksTransactionFailed()
+    {
+        using var handler = new TransactionSequenceHandler(
+            commitSucceeds: false,
+            failRollback: true
+        );
+        using var httpClient = new HttpClient(handler);
+        using var client = CreateClient(httpClient);
+        DotRocksStreamLoadTransaction transaction = await client
+            .BeginTransactionAsync(
+                "warehouse",
+                "events",
+                new DotRocksStreamLoadTransactionOptions { Label = "tx_label" },
+                TestContext.Current.CancellationToken
+            )
+            .ConfigureAwait(true);
+
+        // A failed rollback is a hard failure (the data was never committed), not in-doubt.
+        await Assert
+            .ThrowsAsync<DotRocksStreamLoadException>(async () =>
                 await transaction
                     .RollbackAsync(TestContext.Current.CancellationToken)
                     .ConfigureAwait(true)
@@ -930,7 +1016,10 @@ public sealed class DotRocksStreamLoadClientTests
         }
     }
 
-    private sealed class TransactionSequenceHandler(bool commitSucceeds = true) : HttpMessageHandler
+    private sealed class TransactionSequenceHandler(
+        bool commitSucceeds = true,
+        bool failRollback = false
+    ) : HttpMessageHandler
     {
         public List<HttpRequestMessage> Requests { get; } = [];
 
@@ -941,7 +1030,11 @@ public sealed class DotRocksStreamLoadClientTests
         {
             Requests.Add(request);
             string path = request.RequestUri!.AbsolutePath;
-            if (path.EndsWith("/commit", StringComparison.Ordinal) && !commitSucceeds)
+            bool commitFailed =
+                path.EndsWith("/commit", StringComparison.Ordinal) && !commitSucceeds;
+            bool rollbackFailed =
+                path.EndsWith("/rollback", StringComparison.Ordinal) && failRollback;
+            if (commitFailed || rollbackFailed)
             {
                 return Task.FromResult(
                     TransactionResponse(
