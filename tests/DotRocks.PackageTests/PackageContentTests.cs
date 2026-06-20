@@ -37,6 +37,7 @@ public sealed class PackageContentTests
             string[] entries = archive.Entries.Select(entry => entry.FullName).ToArray();
 
             Assert.Contains("README.md", entries);
+            Assert.Contains("THIRD-PARTY-NOTICES.md", entries);
             Assert.Contains("lib/net10.0/" + packageId + ".dll", entries);
             Assert.Contains("lib/net10.0/" + packageId + ".xml", entries);
             await AssertPackageReadmeAsync(archive).ConfigureAwait(true);
@@ -76,6 +77,7 @@ public sealed class PackageContentTests
             string[] entries = archive.Entries.Select(entry => entry.FullName).ToArray();
 
             Assert.Contains("README.md", entries);
+            Assert.Contains("THIRD-PARTY-NOTICES.md", entries);
             Assert.Contains("analyzers/dotnet/cs/" + packageId + ".dll", entries);
             await AssertPackageReadmeAsync(archive).ConfigureAwait(true);
             AssertAnalyzerPackageLayout(packageId, entries);

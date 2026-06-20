@@ -1,3 +1,12 @@
 <Project>
-  <!-- Reserved for repository-wide build targets (packaging, signing, API checks). -->
+  <!-- Ship the third-party license notices inside every packable NuGet package.
+       Declared here because Directory.Build.targets imports after the project sets IsPackable. -->
+  <ItemGroup Condition="'$(IsPackable)' == 'true'">
+    <None
+      Include="$(MSBuildThisFileDirectory)THIRD-PARTY-NOTICES.md"
+      Pack="true"
+      PackagePath="\"
+      Visible="false"
+    />
+  </ItemGroup>
 </Project>
