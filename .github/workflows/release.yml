@@ -1,0 +1,80 @@
+name: Release
+
+on:
+  release:
+    types:
+      - published
+  workflow_dispatch:
+
+permissions:
+  attestations: write
+  contents: read
+  id-token: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  nuget:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: nuget
+
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+      DOTNET_CLI_DO_NOT_USE_MSBUILD_SERVER: 1
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore packages
+        run: dotnet restore DotRocks.slnx --locked-mode
+
+      - name: Build
+        run: dotnet build DotRocks.slnx --configuration Release --no-restore
+
+      - name: Test package validation
+        run: dotnet test tests/DotRocks.PackageTests/DotRocks.PackageTests.csproj --configuration Release --no-build
+
+      - name: Pack
+        run: dotnet pack DotRocks.slnx --configuration Release --no-build --output artifacts/packages
+
+      - name: Attest package provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            artifacts/packages/*.nupkg
+            artifacts/packages/*.snupkg
+
+      - name: Upload package artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dotrocks-release-packages
+          path: |
+            artifacts/packages/*.nupkg
+            artifacts/packages/*.snupkg
+          if-no-files-found: error
+
+      - name: Publish to NuGet
+        if: github.event_name == 'release'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for package in artifacts/packages/*.nupkg artifacts/packages/*.snupkg; do
+            dotnet nuget push "${package}" \
+              --api-key "${NUGET_API_KEY}" \
+              --source https://api.nuget.org/v3/index.json \
+              --skip-duplicate
+          done
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}

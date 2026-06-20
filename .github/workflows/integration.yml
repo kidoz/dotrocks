@@ -1,0 +1,105 @@
+name: Integration
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  starrocks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+      DOTNET_CLI_DO_NOT_USE_MSBUILD_SERVER: 1
+      DOTROCKS_RUN_INTEGRATION: 1
+      DOTROCKS_HOST: 127.0.0.1
+      DOTROCKS_PORT: 9030
+      DOTROCKS_FE_HTTP_PORT: 8030
+      STARROCKS_VERSION: 4.0.7
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore packages
+        run: dotnet restore DotRocks.slnx --locked-mode
+
+      - name: Build
+        run: dotnet build DotRocks.slnx --configuration Release --no-restore
+
+      - name: Start StarRocks
+        run: docker compose -f dev/docker-compose.yml up -d
+
+      - name: Wait for StarRocks
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in {1..120}; do
+            if docker compose -f dev/docker-compose.yml exec -T starrocks \
+              mysql -h127.0.0.1 -P9030 -uroot -e 'SELECT 1' >/dev/null 2>&1; then
+              break
+            fi
+            if [ "${attempt}" = "120" ]; then
+              docker compose -f dev/docker-compose.yml logs --tail=200 starrocks >&2 || true
+              exit 1
+            fi
+            sleep 5
+          done
+
+          for attempt in {1..120}; do
+            if curl -fsS -o /dev/null "http://127.0.0.1:${DOTROCKS_FE_HTTP_PORT}/api/health" 2>/dev/null \
+              || curl -fsS -o /dev/null "http://127.0.0.1:${DOTROCKS_FE_HTTP_PORT}/" 2>/dev/null; then
+              exit 0
+            fi
+            if [ "${attempt}" = "120" ]; then
+              docker compose -f dev/docker-compose.yml logs --tail=200 starrocks >&2 || true
+              exit 1
+            fi
+            sleep 5
+          done
+
+      - name: Run ADO.NET integration tests
+        run: dotnet test tests/DotRocks.Data.IntegrationTests --configuration Release --no-build
+
+      - name: Run Dapper integration tests
+        run: dotnet test tests/DotRocks.Data.DapperTests --configuration Release --no-build
+
+      - name: Run EF Core integration tests
+        run: dotnet test tests/DotRocks.EntityFrameworkCore.IntegrationTests --configuration Release --no-build
+
+      - name: Collect StarRocks logs
+        if: always()
+        run: |
+          mkdir -p artifacts/integration
+          docker compose -f dev/docker-compose.yml logs --no-color > artifacts/integration/starrocks.log || true
+
+      - name: Upload StarRocks logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: starrocks-logs
+          path: artifacts/integration/starrocks.log
+          if-no-files-found: warn
+
+      - name: Stop StarRocks
+        if: always()
+        run: docker compose -f dev/docker-compose.yml down -v
