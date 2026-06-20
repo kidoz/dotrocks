@@ -19,8 +19,6 @@
 
   <ItemGroup Label="Internal test access">
     <InternalsVisibleTo Include="DotRocks.Protocol.Tests" />
-    <InternalsVisibleTo Include="DotRocks.Data.Tests" />
-    <InternalsVisibleTo Include="DotRocks.Data.SecurityTests" />
     <InternalsVisibleTo Include="DotRocks.CompatibilityHarness" />
   </ItemGroup>
 </Project>
