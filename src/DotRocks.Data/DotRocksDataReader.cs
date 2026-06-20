@@ -17,16 +17,17 @@ public sealed class DotRocksDataReader
         IDbColumnSchemaGenerator
 {
     private const ushort NotNullColumnFlag = 0x0001;
-    private readonly QueryResult? _bufferedResult;
+    private readonly IReadOnlyList<QueryResult>? _bufferedResults;
     private readonly StreamingQueryResult? _streamingResult;
     private readonly TextResultRowReader? _rowReader;
-    private readonly IReadOnlyList<ColumnDefinition> _columns;
+    private IReadOnlyList<ColumnDefinition> _columns;
     private readonly DotRocksConnection? _connection;
     private readonly CommandBehavior _behavior;
     private ReadOnlyCollection<DbColumn>? _columnSchema;
     private object?[]? _currentRow;
     private object?[]? _prefetchedRow;
     private int _rowIndex = -1;
+    private int _bufferedIndex;
     private bool _isClosed;
     private bool _isConsumed;
     private bool _connectionCompletionReported;
@@ -38,8 +39,21 @@ public sealed class DotRocksDataReader
         CommandBehavior behavior = CommandBehavior.Default
     )
     {
-        _bufferedResult = result;
+        _bufferedResults = [result];
         _columns = result.Columns;
+        _connection = connection;
+        _behavior = behavior;
+    }
+
+    internal DotRocksDataReader(
+        IReadOnlyList<QueryResult> results,
+        DotRocksConnection? connection,
+        CommandBehavior behavior
+    )
+    {
+        ArgumentNullException.ThrowIfNull(results);
+        _bufferedResults = results;
+        _columns = results.Count > 0 ? results[0].Columns : [];
         _connection = connection;
         _behavior = behavior;
     }
@@ -58,6 +72,11 @@ public sealed class DotRocksDataReader
         _isConsumed = !result.HasResultSet;
     }
 
+    private QueryResult? CurrentBufferedResult =>
+        _bufferedResults is not null && _bufferedIndex < _bufferedResults.Count
+            ? _bufferedResults[_bufferedIndex]
+            : null;
+
     /// <inheritdoc />
     public override object this[int ordinal] => GetValue(ordinal);
 
@@ -72,7 +91,7 @@ public sealed class DotRocksDataReader
 
     /// <inheritdoc />
     public override bool HasRows =>
-        _bufferedResult is not null ? _bufferedResult.Rows.Count > 0 : HasStreamingRows();
+        _bufferedResults is not null ? CurrentBufferedResult?.Rows.Count > 0 : HasStreamingRows();
 
     /// <inheritdoc />
     public override bool IsClosed => _isClosed;
@@ -314,13 +333,34 @@ public sealed class DotRocksDataReader
     }
 
     /// <inheritdoc />
-    public override bool NextResult() => false;
+    public override bool NextResult()
+    {
+        if (_isClosed)
+        {
+            throw new InvalidOperationException("The reader is closed.");
+        }
+
+        // Only buffered batches expose multiple result sets; the streaming single-command path
+        // has exactly one. Advancing resets row positioning and re-points the column metadata.
+        if (_bufferedResults is null || _bufferedIndex + 1 >= _bufferedResults.Count)
+        {
+            return false;
+        }
+
+        _bufferedIndex++;
+        _columns = _bufferedResults[_bufferedIndex].Columns;
+        _columnSchema = null;
+        _currentRow = null;
+        _rowIndex = -1;
+        _isConsumed = false;
+        return true;
+    }
 
     /// <inheritdoc />
     public override Task<bool> NextResultAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(false);
+        return Task.FromResult(NextResult());
     }
 
     /// <inheritdoc />
@@ -378,9 +418,10 @@ public sealed class DotRocksDataReader
             throw new InvalidOperationException("The reader is closed.");
         }
 
-        if (_bufferedResult is not null)
+        if (_bufferedResults is not null)
         {
-            if (_rowIndex + 1 >= _bufferedResult.Rows.Count)
+            QueryResult? current = CurrentBufferedResult;
+            if (current is null || _rowIndex + 1 >= current.Rows.Count)
             {
                 _isConsumed = true;
                 ReportConnectionCompletion(reusable: true);
@@ -388,7 +429,7 @@ public sealed class DotRocksDataReader
             }
 
             _rowIndex++;
-            _currentRow = _bufferedResult.Rows[_rowIndex];
+            _currentRow = current.Rows[_rowIndex];
             return true;
         }
 
@@ -403,7 +444,7 @@ public sealed class DotRocksDataReader
             throw new InvalidOperationException("The reader is closed.");
         }
 
-        if (_bufferedResult is not null)
+        if (_bufferedResults is not null)
         {
             cancellationToken.ThrowIfCancellationRequested();
             return Read();
@@ -512,7 +553,7 @@ public sealed class DotRocksDataReader
         }
 
         bool reusable =
-            _isConsumed || _bufferedResult is not null || _streamingResult?.HasResultSet != true;
+            _isConsumed || _bufferedResults is not null || _streamingResult?.HasResultSet != true;
         _isClosed = true;
         _isConsumed = true;
         ReportConnectionCompletion(reusable);
@@ -711,8 +752,27 @@ public sealed class DotRocksDataReader
         return value;
     }
 
-    private long RecordsAffectedCore =>
-        _bufferedResult?.RecordsAffected ?? _streamingResult?.RecordsAffected ?? -1;
+    private long RecordsAffectedCore
+    {
+        get
+        {
+            if (_bufferedResults is null)
+            {
+                return _streamingResult?.RecordsAffected ?? -1;
+            }
+
+            long total = -1;
+            foreach (QueryResult result in _bufferedResults)
+            {
+                if (result.RecordsAffected >= 0)
+                {
+                    total = (total < 0 ? 0 : total) + result.RecordsAffected;
+                }
+            }
+
+            return total;
+        }
+    }
 
     private void ReportConnectionCompletion(bool reusable)
     {

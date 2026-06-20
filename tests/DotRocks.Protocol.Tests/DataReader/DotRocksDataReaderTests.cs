@@ -451,6 +451,50 @@ public sealed class DotRocksDataReaderTests
         Assert.Equal(guid, reader.GetGuid(2));
     }
 
+    [Fact]
+    public void NextResult_WalksMultipleBufferedResults()
+    {
+        using var reader = new DotRocksDataReader(
+            new[]
+            {
+                QueryResult.FromRows(
+                    [Column("a")],
+                    [
+                        ["1"],
+                    ]
+                ),
+                QueryResult.FromRows(
+                    [Column("b"), Column("c")],
+                    [
+                        ["x", "y"],
+                        ["p", "q"],
+                    ]
+                ),
+            },
+            connection: null,
+            behavior: System.Data.CommandBehavior.Default
+        );
+
+        Assert.Equal(1, reader.FieldCount);
+        Assert.Equal("a", reader.GetName(0));
+        Assert.True(reader.Read());
+        Assert.Equal("1", reader.GetValue(0));
+        Assert.False(reader.Read());
+
+        Assert.True(reader.NextResult());
+        Assert.Equal(2, reader.FieldCount);
+        Assert.Equal("b", reader.GetName(0));
+        Assert.Equal("c", reader.GetName(1));
+        Assert.True(reader.Read());
+        Assert.Equal("x", reader.GetValue(0));
+        Assert.Equal("y", reader.GetValue(1));
+        Assert.True(reader.Read());
+        Assert.Equal("p", reader.GetValue(0));
+        Assert.False(reader.Read());
+
+        Assert.False(reader.NextResult());
+    }
+
     private static ColumnDefinition Column(
         string name,
         byte columnType = (byte)ColumnType.VarString,

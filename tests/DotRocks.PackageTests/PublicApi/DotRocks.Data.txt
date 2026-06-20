@@ -4,6 +4,33 @@ public static class DotRocks.Data.Diagnostics.DotRocksTelemetry
   public static field System.String ActivitySourceName
   public static field System.String MeterName
 
+public sealed class DotRocks.Data.DotRocksBatch System.Data.Common.DbBatch
+  public DotRocks.Data.DotRocksBatch()
+  protected property System.Data.Common.DbBatchCommandCollection DbBatchCommands { get; }
+  protected property System.Data.Common.DbConnection DbConnection { get; set; }
+  protected property System.Data.Common.DbTransaction DbTransaction { get; set; }
+  public property System.Int32 Timeout { get; set; }
+  protected virtual method System.Data.Common.DbBatchCommand CreateDbBatchCommand()
+  protected virtual method System.Data.Common.DbDataReader ExecuteDbDataReader(System.Data.CommandBehavior behavior)
+  protected virtual method System.Threading.Tasks.Task<System.Data.Common.DbDataReader> ExecuteDbDataReaderAsync(System.Data.CommandBehavior behavior, System.Threading.CancellationToken cancellationToken)
+  public virtual method System.Int32 ExecuteNonQuery()
+  public virtual method System.Object ExecuteScalar()
+  public virtual method System.Threading.Tasks.Task PrepareAsync(System.Threading.CancellationToken cancellationToken)
+  public virtual method System.Threading.Tasks.Task<System.Int32> ExecuteNonQueryAsync(System.Threading.CancellationToken cancellationToken)
+  public virtual method System.Threading.Tasks.Task<System.Object> ExecuteScalarAsync(System.Threading.CancellationToken cancellationToken)
+  public virtual method System.Void Cancel()
+  public virtual method System.Void Prepare()
+
+public sealed class DotRocks.Data.DotRocksBatchCommand System.Data.Common.DbBatchCommand
+  public DotRocks.Data.DotRocksBatchCommand()
+  public DotRocks.Data.DotRocksBatchCommand(System.String commandText)
+  public property System.Boolean CanCreateParameter { get; }
+  public property System.String CommandText { get; set; }
+  public property System.Data.CommandType CommandType { get; set; }
+  protected property System.Data.Common.DbParameterCollection DbParameterCollection { get; }
+  public property System.Int32 RecordsAffected { get; }
+  public virtual method System.Data.Common.DbParameter CreateParameter()
+
 public sealed class DotRocks.Data.DotRocksCommand System.Data.Common.DbCommand
   public DotRocks.Data.DotRocksCommand()
   public DotRocks.Data.DotRocksCommand(System.String commandText, DotRocks.Data.DotRocksConnection connection)
@@ -29,12 +56,14 @@ public sealed class DotRocks.Data.DotRocksCommand System.Data.Common.DbCommand
 public sealed class DotRocks.Data.DotRocksConnection System.Data.Common.DbConnection
   public DotRocks.Data.DotRocksConnection()
   public DotRocks.Data.DotRocksConnection(System.String connectionString)
+  public property System.Boolean CanCreateBatch { get; }
   public property System.String ConnectionString { get; set; }
   public property System.String DataSource { get; }
   public property System.String Database { get; }
   protected property System.Data.Common.DbProviderFactory DbProviderFactory { get; }
   public property System.String ServerVersion { get; }
   public property System.Data.ConnectionState State { get; }
+  protected virtual method System.Data.Common.DbBatch CreateDbBatch()
   protected virtual method System.Data.Common.DbCommand CreateDbCommand()
   protected virtual method System.Data.Common.DbTransaction BeginDbTransaction(System.Data.IsolationLevel isolationLevel)
   protected virtual method System.Threading.Tasks.ValueTask<System.Data.Common.DbTransaction> BeginDbTransactionAsync(System.Data.IsolationLevel isolationLevel, System.Threading.CancellationToken cancellationToken)

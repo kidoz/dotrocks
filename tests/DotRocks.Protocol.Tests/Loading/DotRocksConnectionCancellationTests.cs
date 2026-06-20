@@ -27,6 +27,42 @@ public sealed class DotRocksConnectionCancellationTests
     private static readonly byte[] AuthPart2 = [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 0];
 
     [Fact]
+    public async Task Batch_ExecutesCommandsSequentiallyWithBoundParameters()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        var commands = new List<string>();
+        using var server = FakeStarRocksServer.Start(async stream =>
+        {
+            await CompleteAuthenticationAsync(stream).ConfigureAwait(true);
+            commands.Add(await ReadCommandAndReplyOkAsync(stream).ConfigureAwait(true));
+            commands.Add(await ReadCommandAndReplyOkAsync(stream).ConfigureAwait(true));
+        });
+
+        using var connection = new DotRocksConnection(BuildFakeServerConnectionString(server.Port));
+        await connection.OpenAsync(ct).ConfigureAwait(true);
+
+        Assert.True(connection.CanCreateBatch);
+        using DbBatch batch = connection.CreateBatch();
+
+        DbBatchCommand first = batch.CreateBatchCommand();
+        first.CommandText = "INSERT INTO t SELECT 1";
+        batch.BatchCommands.Add(first);
+
+        DbBatchCommand second = batch.CreateBatchCommand();
+        second.CommandText = "INSERT INTO t SELECT @v";
+        DbParameter parameter = second.CreateParameter();
+        parameter.ParameterName = "@v";
+        parameter.Value = 2;
+        second.Parameters.Add(parameter);
+        batch.BatchCommands.Add(second);
+
+        int affected = await batch.ExecuteNonQueryAsync(ct).ConfigureAwait(true);
+
+        Assert.Equal(["INSERT INTO t SELECT 1", "INSERT INTO t SELECT 2"], commands);
+        Assert.Equal(0, affected);
+    }
+
+    [Fact]
     public async Task DisposingUncommittedTransaction_RollsBackAndKeepsConnectionUsable()
     {
         CancellationToken ct = TestContext.Current.CancellationToken;

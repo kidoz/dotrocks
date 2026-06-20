@@ -232,6 +232,12 @@ public sealed class DotRocksConnection : DbConnection
     /// <inheritdoc />
     protected override DbCommand CreateDbCommand() => new DotRocksCommand(this);
 
+    /// <inheritdoc />
+    public override bool CanCreateBatch => true;
+
+    /// <inheritdoc />
+    protected override DbBatch CreateDbBatch() => new DotRocksBatch(this);
+
     internal async ValueTask<QueryResult> ExecuteQueryAsync(
         string commandText,
         CancellationToken cancellationToken
