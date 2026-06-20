@@ -77,7 +77,10 @@ internal static class TextResultParser
                 throw ResultPacket.ReadError(rowPayload, connectionId);
             }
 
-            if (ResultPacket.IsEndOfResultSet(rowPayload) || ResultPacket.IsOk(rowPayload))
+            // Rows are terminated by an EOF packet (the client negotiates EOF, not
+            // DEPRECATE_EOF). A 0x00 first byte here is a row whose first column is an empty
+            // string, not an OK terminator — treating it as OK would silently truncate results.
+            if (ResultPacket.IsEndOfResultSet(rowPayload))
             {
                 break;
             }

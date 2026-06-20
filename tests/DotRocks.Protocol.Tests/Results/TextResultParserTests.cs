@@ -51,6 +51,58 @@ public sealed class TextResultParserTests
     }
 
     [Fact]
+    public async Task ReadAsync_EmptyLeadingColumnValue_DoesNotTruncateResult()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using MemoryStream stream = BuildPayloadStream(
+            BuildColumnDefinition("value"),
+            EofPayload(),
+            BuildTextRow(""),
+            BuildTextRow("second"),
+            EofPayload()
+        );
+        var packetReader = new PacketReader(stream);
+        packetReader.ResetSequence(1);
+
+        QueryResult result = await TextResultParser.ReadAsync([0x01], packetReader, null, ct);
+
+        // A row whose first column is the empty string (0x00) must not be mistaken for an
+        // OK terminator and silently drop this and every following row.
+        Assert.Equal(2, result.Rows.Count);
+        Assert.Equal("", result.Rows[0][0]);
+        Assert.Equal("second", result.Rows[1][0]);
+    }
+
+    [Fact]
+    public async Task TextResultRowReader_EmptyLeadingColumnValue_DoesNotTerminateEarly()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using MemoryStream stream = BuildPayloadStream(
+            BuildTextRow(""),
+            BuildTextRow("second"),
+            EofPayload()
+        );
+        var packetReader = new PacketReader(stream);
+        packetReader.ResetSequence(1);
+        ColumnDefinition[] columns =
+        [
+            TextResultParser.ReadColumnDefinition(BuildColumnDefinition("value")),
+        ];
+        var rowReader = new TextResultRowReader(packetReader, columns, connectionId: null);
+
+        var rows = new List<object?[]>();
+        object?[]? row;
+        while ((row = await rowReader.ReadRowAsync(ct)) is not null)
+        {
+            rows.Add(row);
+        }
+
+        Assert.Equal(2, rows.Count);
+        Assert.Equal("", rows[0][0]);
+        Assert.Equal("second", rows[1][0]);
+    }
+
+    [Fact]
     public async Task ReadAsync_ParsesTypedTextValues()
     {
         CancellationToken ct = TestContext.Current.CancellationToken;

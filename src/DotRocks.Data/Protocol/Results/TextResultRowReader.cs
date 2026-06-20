@@ -38,7 +38,10 @@ internal sealed class TextResultRowReader
             throw ResultPacket.ReadError(rowPayload, _connectionId);
         }
 
-        if (ResultPacket.IsEndOfResultSet(rowPayload) || ResultPacket.IsOk(rowPayload))
+        // Rows are terminated by an EOF packet only. A 0x00 first byte is a row whose first
+        // column is an empty string, not an OK terminator; treating it as a terminator would
+        // silently truncate the result set.
+        if (ResultPacket.IsEndOfResultSet(rowPayload))
         {
             _isConsumed = true;
             return null;
