@@ -69,6 +69,48 @@ public sealed class DotRocksEfCoreIntegrationTests
     }
 
     [Fact]
+    public async Task DatabaseCreator_Exists_ReflectsDatabasePresenceNotJustConnectivity()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
+        }
+
+        using DotRocksTestContext setup = CreateContext(
+            IntegrationTestEnvironment.ConnectionString
+        );
+        await EnsureLinqDatabaseAsync(setup).ConfigureAwait(true);
+
+        using DotRocksTestContext existing = CreateContext(
+            BuildDatabaseConnectionString(LinqDatabaseName)
+        );
+        var existingCreator = existing.GetService<IRelationalDatabaseCreator>();
+        Assert.True(
+            await existingCreator
+                .ExistsAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true)
+        );
+
+        using DotRocksTestContext missing = CreateContext(
+            BuildDatabaseConnectionString("dotrocks_definitely_absent_db")
+        );
+        var missingCreator = missing.GetService<IRelationalDatabaseCreator>();
+        // The server is reachable, but the target database does not exist.
+        Assert.True(
+            await missingCreator
+                .CanConnectAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true)
+        );
+        Assert.False(
+            await missingCreator
+                .ExistsAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true)
+        );
+    }
+
+    [Fact]
     public async Task ExecuteSqlRawAsync_CreatesDatabase()
     {
         if (!IntegrationTestEnvironment.IsEnabled)

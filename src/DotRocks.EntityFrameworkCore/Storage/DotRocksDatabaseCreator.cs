@@ -92,10 +92,70 @@ internal sealed class DotRocksDatabaseCreator(IRelationalConnection connection)
         throw CreateUnsupportedException();
     }
 
-    public bool Exists() => CanConnect();
+    public bool Exists()
+    {
+        string? database = GetDatabaseName();
+        if (string.IsNullOrEmpty(database))
+        {
+            return CanConnect();
+        }
 
-    public Task<bool> ExistsAsync(CancellationToken cancellationToken = default) =>
-        CanConnectAsync(cancellationToken);
+        try
+        {
+            bool opened = connection.Open(errorsExpected: true);
+            try
+            {
+                using DbCommand command = CreateSchemaExistsCommand(database);
+                return command.ExecuteScalar() is not null and not DBNull;
+            }
+            finally
+            {
+                if (opened)
+                {
+                    connection.Close();
+                }
+            }
+        }
+        catch (Exception ex) when (IsConnectionFailure(ex))
+        {
+            return false;
+        }
+    }
+
+    public async Task<bool> ExistsAsync(CancellationToken cancellationToken = default)
+    {
+        string? database = GetDatabaseName();
+        if (string.IsNullOrEmpty(database))
+        {
+            return await CanConnectAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        try
+        {
+            bool opened = await connection
+                .OpenAsync(cancellationToken, errorsExpected: true)
+                .ConfigureAwait(false);
+            try
+            {
+                using DbCommand command = CreateSchemaExistsCommand(database);
+                object? result = await command
+                    .ExecuteScalarAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                return result is not null and not DBNull;
+            }
+            finally
+            {
+                if (opened)
+                {
+                    await connection.CloseAsync().ConfigureAwait(false);
+                }
+            }
+        }
+        catch (Exception ex) when (IsConnectionFailure(ex))
+        {
+            return false;
+        }
+    }
 
     public string GenerateCreateScript() => throw CreateUnsupportedException();
 
@@ -107,13 +167,23 @@ internal sealed class DotRocksDatabaseCreator(IRelationalConnection connection)
         throw CreateUnsupportedException();
     }
 
+    private string? GetDatabaseName() => connection.DbConnection.Database;
+
+    private DbCommand CreateSchemaExistsCommand(string database)
+    {
+        DbCommand command = connection.DbConnection.CreateCommand();
+        command.CommandText =
+            "SELECT SCHEMA_NAME FROM information_schema.schemata WHERE SCHEMA_NAME = @name";
+        DbParameter parameter = command.CreateParameter();
+        parameter.ParameterName = "@name";
+        parameter.Value = database;
+        command.Parameters.Add(parameter);
+        return command;
+    }
+
     private static NotSupportedException CreateUnsupportedException() =>
         new("DotRocks EF Core schema creation and deletion are not implemented yet.");
 
     private static bool IsConnectionFailure(Exception exception) =>
-        exception
-            is DotRocksException
-                or DbException
-                or InvalidOperationException
-                or TimeoutException;
+        exception is DotRocksException or DbException or TimeoutException;
 }
