@@ -1,5 +1,9 @@
 # DotRocks.Data
 
+public static class DotRocks.Data.Diagnostics.DotRocksTelemetry
+  public static field System.String ActivitySourceName
+  public static field System.String MeterName
+
 public sealed class DotRocks.Data.DotRocksCommand System.Data.Common.DbCommand
   public DotRocks.Data.DotRocksCommand()
   public DotRocks.Data.DotRocksCommand(System.String commandText, DotRocks.Data.DotRocksConnection connection)
@@ -206,6 +210,7 @@ public sealed class DotRocks.Data.Loading.DotRocksStreamLoadOptions
 
 public sealed class DotRocks.Data.Loading.DotRocksStreamLoadResult
   public property System.Uri ErrorUrl { get; }
+  public property System.Boolean IsPublishTimeout { get; }
   public property System.Boolean IsSuccess { get; }
   public property System.String Label { get; }
   public property System.Int64 LoadBytes { get; }

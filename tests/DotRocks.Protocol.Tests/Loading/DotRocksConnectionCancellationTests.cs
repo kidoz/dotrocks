@@ -1,5 +1,7 @@
 using System.Data;
 using System.Data.Common;
+using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
@@ -9,6 +11,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using DotRocks.Data;
 using DotRocks.Data.Authentication;
+using DotRocks.Data.Diagnostics;
 using DotRocks.Data.Protocol.Framing;
 using DotRocks.Data.Protocol.Handshake;
 using DotRocks.Data.Protocol.Results;
@@ -53,6 +56,81 @@ public sealed class DotRocksConnectionCancellationTests
         _ = await command.ExecuteScalarAsync(ct).ConfigureAwait(true);
 
         Assert.Equal(["START TRANSACTION", "ROLLBACK WORK", "SELECT 1"], commands);
+    }
+
+    [Fact]
+    public async Task OpenAndExecute_RecordTracingAndMetrics()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+
+        var activities = new List<Activity>();
+        using var activityListener = new ActivityListener
+        {
+            ShouldListenTo = source => source.Name == DotRocksTelemetry.ActivitySourceName,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) =>
+                ActivitySamplingResult.AllData,
+            ActivityStopped = activities.Add,
+        };
+        ActivitySource.AddActivityListener(activityListener);
+
+        long connectionsOpened = 0;
+        long commandsExecuted = 0;
+        bool durationRecorded = false;
+        using var meterListener = new MeterListener();
+        meterListener.InstrumentPublished = (instrument, listener) =>
+        {
+            if (instrument.Meter.Name == DotRocksTelemetry.MeterName)
+            {
+                listener.EnableMeasurementEvents(instrument);
+            }
+        };
+        meterListener.SetMeasurementEventCallback<long>(
+            (instrument, measurement, _, _) =>
+            {
+                if (instrument.Name == "dotrocks.connections.opened")
+                {
+                    Interlocked.Add(ref connectionsOpened, measurement);
+                }
+                else if (instrument.Name == "dotrocks.commands.executed")
+                {
+                    Interlocked.Add(ref commandsExecuted, measurement);
+                }
+            }
+        );
+        meterListener.SetMeasurementEventCallback<double>(
+            (instrument, _, _, _) =>
+            {
+                if (instrument.Name == "dotrocks.command.duration")
+                {
+                    durationRecorded = true;
+                }
+            }
+        );
+        meterListener.Start();
+
+        using var server = FakeStarRocksServer.Start(async stream =>
+        {
+            await CompleteAuthenticationAsync(stream).ConfigureAwait(true);
+            _ = await ReadCommandAndReplyOkAsync(stream).ConfigureAwait(true);
+        });
+
+        using (
+            var connection = new DotRocksConnection(BuildFakeServerConnectionString(server.Port))
+        )
+        {
+            await connection.OpenAsync(ct).ConfigureAwait(true);
+            using DbCommand command = connection.CreateCommand();
+            command.CommandText = "SELECT 1";
+            _ = await command.ExecuteScalarAsync(ct).ConfigureAwait(true);
+        }
+
+        meterListener.Dispose();
+
+        Assert.Contains(activities, a => a.OperationName == "dotrocks.connection.open");
+        Assert.Contains(activities, a => a.OperationName == "dotrocks.command.execute");
+        Assert.True(connectionsOpened >= 1);
+        Assert.True(commandsExecuted >= 1);
+        Assert.True(durationRecorded);
     }
 
     [Fact]

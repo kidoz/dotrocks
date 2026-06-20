@@ -287,6 +287,25 @@ HTTP Stream Load endpoints send Basic authentication without transport encryptio
 rejected by default. For trusted local test environments such as the pinned Docker
 container, set `Allow Insecure Stream Load=true` explicitly.
 
+## Observability
+
+DotRocks emits OpenTelemetry-compatible tracing and metrics. Subscribe by name via
+`DotRocksTelemetry.ActivitySourceName` and `DotRocksTelemetry.MeterName` (both
+`"DotRocks.Data"`):
+
+- Activities: `dotrocks.connection.open`, `dotrocks.command.execute`.
+- Metrics: `dotrocks.connections.opened`, `dotrocks.commands.executed`,
+  and the `dotrocks.command.duration` histogram (ms).
+
+```csharp
+builder.Services.AddOpenTelemetry()
+    .WithTracing(t => t.AddSource(DotRocksTelemetry.ActivitySourceName))
+    .WithMetrics(m => m.AddMeter(DotRocksTelemetry.MeterName));
+```
+
+Pooled connections are liveness-checked on lease, so a connection the server closed while
+idle is discarded rather than handed out.
+
 ## Build and test
 
 Common tasks are exposed via [`just`](https://github.com/casey/just) (see `justfile`):

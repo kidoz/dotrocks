@@ -1,6 +1,8 @@
 using System.Data;
 using System.Data.Common;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using DotRocks.Data.Diagnostics;
 using DotRocks.Data.Protocol.Commands;
 using DotRocks.Data.Protocol.Results;
 
@@ -246,6 +248,11 @@ public sealed class DotRocksCommand : DbCommand
         );
 
         SetActiveCommandCancellation(commandCancellation);
+        using Activity? activity = DotRocksTelemetry.ActivitySource.StartActivity(
+            "dotrocks.command.execute",
+            ActivityKind.Client
+        );
+        long startTimestamp = Stopwatch.GetTimestamp();
         try
         {
             StreamingQueryResult result = await _connection
@@ -302,6 +309,10 @@ public sealed class DotRocksCommand : DbCommand
         }
         finally
         {
+            DotRocksTelemetry.CommandDuration.Record(
+                Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
+            );
+            DotRocksTelemetry.CommandsExecuted.Add(1);
             ClearActiveCommandCancellation(commandCancellation);
         }
     }

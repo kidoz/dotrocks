@@ -1,6 +1,8 @@
 using System.Data;
 using System.Data.Common;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using DotRocks.Data.Diagnostics;
 using DotRocks.Data.Loading;
 using DotRocks.Data.Pooling;
 using DotRocks.Data.Protocol.Results;
@@ -147,14 +149,21 @@ public sealed class DotRocksConnection : DbConnection
             timeout.Token
         );
 
+        using Activity? activity = DotRocksTelemetry.ActivitySource.StartActivity(
+            "dotrocks.connection.open",
+            ActivityKind.Client
+        );
         try
         {
             _lease = await OpenLeaseAsync(linked.Token).ConfigureAwait(false);
             _serverVersion = _lease.PhysicalConnection.ServerVersion;
             _state = ConnectionState.Open;
+            DotRocksTelemetry.ConnectionsOpened.Add(1);
+            activity?.SetStatus(ActivityStatusCode.Ok);
         }
-        catch
+        catch (Exception ex)
         {
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
             CloseCore(reusable: false);
             throw;
         }
