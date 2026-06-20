@@ -52,6 +52,26 @@ public sealed class DotRocksSqlGenerationTests
     }
 
     [Fact]
+    public void ToQueryString_SkipWithoutTake_SynthesizesLimitBeforeOffset()
+    {
+        using var context = CreateContext();
+
+        string sql = context.Widgets.OrderBy(widget => widget.Id).Skip(5).ToQueryString();
+
+        // StarRocks rejects a bare OFFSET; a LIMIT must precede it.
+        int limitIndex = sql.IndexOf("LIMIT", StringComparison.Ordinal);
+        int offsetIndex = sql.IndexOf("OFFSET", StringComparison.Ordinal);
+        Assert.True(limitIndex >= 0, "Expected a synthesized LIMIT for a Skip-only query.");
+        Assert.True(offsetIndex >= 0);
+        Assert.True(limitIndex < offsetIndex, "LIMIT must precede OFFSET for StarRocks.");
+        Assert.Contains(
+            long.MaxValue.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            sql,
+            StringComparison.Ordinal
+        );
+    }
+
+    [Fact]
     public void SqlGenerationHelper_FormatsSchemaQualifiedIdentifiers()
     {
         using var context = CreateContext();

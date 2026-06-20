@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Query.SqlExpressions;
@@ -47,6 +48,14 @@ internal sealed class DotRocksQuerySqlGenerator(QuerySqlGeneratorDependencies de
         {
             Sql.AppendLine().Append("LIMIT ");
             Visit(selectExpression.Limit);
+        }
+        else if (selectExpression.Offset is not null)
+        {
+            // StarRocks requires LIMIT to precede OFFSET; a bare OFFSET is a syntax error.
+            // Synthesize an effectively-unbounded LIMIT for Skip-without-Take queries.
+            Sql.AppendLine()
+                .Append("LIMIT ")
+                .Append(long.MaxValue.ToString(CultureInfo.InvariantCulture));
         }
 
         if (selectExpression.Offset is not null)
