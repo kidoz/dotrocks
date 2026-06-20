@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using DotRocks.Data;
 using Xunit;
 
@@ -30,6 +31,32 @@ public sealed class ConnectionStringBuilderTests
             "Stream Load Endpoint=http://starrocks.local:8030/",
             builder.ToString(),
             StringComparison.Ordinal
+        );
+    }
+
+    [Fact]
+    public void ToString_RedactsPasswordAliasAndConnectionDebugSurfaceHasNoSecretDisplay()
+    {
+        const string secret = "debug-secret-value";
+        var builder = new DotRocksConnectionStringBuilder(
+            "Host=starrocks.local;User=alice;Pwd=" + secret
+        );
+        using var connection = new DotRocksConnection(builder.ConnectionString);
+
+        Assert.Contains("Password=***", builder.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain(secret, builder.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain(secret, connection.ToString(), StringComparison.Ordinal);
+        Assert.Null(
+            Attribute.GetCustomAttribute(
+                typeof(DotRocksConnection),
+                typeof(DebuggerDisplayAttribute)
+            )
+        );
+        Assert.Null(
+            Attribute.GetCustomAttribute(
+                typeof(DotRocksConnectionStringBuilder),
+                typeof(DebuggerDisplayAttribute)
+            )
         );
     }
 

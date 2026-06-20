@@ -145,6 +145,41 @@ public sealed class TextResultParserTests
         Assert.Contains("syntax error", exception.Message, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [MemberData(nameof(MalformedColumnDefinitionPayloads))]
+    public void ReadColumnDefinition_MalformedPayload_ThrowsMalformedPacketException(byte[] payload)
+    {
+        Assert.Throws<MalformedPacketException>(() =>
+            TextResultParser.ReadColumnDefinition(payload)
+        );
+    }
+
+    [Fact]
+    public async Task ReadAsync_MalformedColumnDefinitionPacket_ThrowsMalformedPacketException()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using MemoryStream stream = BuildPayloadStream([ProtocolConstants.NullValueMarker]);
+        var packetReader = new PacketReader(stream);
+        packetReader.ResetSequence(1);
+
+        await Assert
+            .ThrowsAsync<MalformedPacketException>(async () =>
+                await TextResultParser
+                    .ReadAsync([0x01], packetReader, null, ct)
+                    .ConfigureAwait(true)
+            )
+            .ConfigureAwait(true);
+    }
+
+    public static TheoryData<byte[]> MalformedColumnDefinitionPayloads() =>
+        new()
+        {
+            { [] },
+            { [ProtocolConstants.NullValueMarker] },
+            { BuildColumnDefinitionWithFixedLength("bad_length", 0x0B) },
+            { BuildColumnDefinition("truncated")[..^1] },
+        };
+
     private static MemoryStream BuildPayloadStream(params byte[][] payloads)
     {
         var stream = new MemoryStream();
@@ -179,6 +214,25 @@ public sealed class TextResultParserTests
         writer.WriteFixedInteger(0x21, 2);
         writer.WriteFixedInteger(1024, 4);
         writer.WriteByte(columnType);
+        writer.WriteFixedInteger(0, 2);
+        writer.WriteByte(0);
+        writer.WriteFixedInteger(0, 2);
+        return writer.ToArray();
+    }
+
+    private static byte[] BuildColumnDefinitionWithFixedLength(string name, ulong fixedLength)
+    {
+        using var writer = new ProtocolWriter();
+        writer.WriteLengthEncodedString("def", Encoding.UTF8);
+        writer.WriteLengthEncodedString(string.Empty, Encoding.UTF8);
+        writer.WriteLengthEncodedString(string.Empty, Encoding.UTF8);
+        writer.WriteLengthEncodedString(string.Empty, Encoding.UTF8);
+        writer.WriteLengthEncodedString(name, Encoding.UTF8);
+        writer.WriteLengthEncodedString(name, Encoding.UTF8);
+        writer.WriteLengthEncodedInteger(fixedLength);
+        writer.WriteFixedInteger(0x21, 2);
+        writer.WriteFixedInteger(1024, 4);
+        writer.WriteByte((byte)ColumnType.VarString);
         writer.WriteFixedInteger(0, 2);
         writer.WriteByte(0);
         writer.WriteFixedInteger(0, 2);

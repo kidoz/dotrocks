@@ -74,4 +74,25 @@ public sealed class LengthEncodedIntegerTests
             reader.ReadLengthEncodedInteger();
         });
     }
+
+    [Theory]
+    [MemberData(nameof(MalformedLengthEncodedIntegers))]
+    public void MalformedLengthEncodedInteger_Throws(byte[] payload)
+    {
+        Assert.Throws<MalformedPacketException>(() =>
+        {
+            var reader = new ProtocolReader(payload);
+            reader.ReadLengthEncodedInteger();
+        });
+    }
+
+    public static TheoryData<byte[]> MalformedLengthEncodedIntegers() =>
+        new()
+        {
+            { [] },
+            { [ProtocolConstants.LengthEncodedTwoBytePrefix] },
+            { [ProtocolConstants.LengthEncodedThreeBytePrefix, 0x01, 0x02] },
+            { [ProtocolConstants.LengthEncodedEightBytePrefix, 0x01, 0x02, 0x03] },
+            { [ProtocolConstants.ErrorPacketHeader] },
+        };
 }

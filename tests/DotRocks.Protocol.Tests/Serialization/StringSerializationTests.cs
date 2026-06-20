@@ -82,4 +82,37 @@ public sealed class StringSerializationTests
         Assert.False(isNull);
         Assert.True(actual.SequenceEqual(payload));
     }
+
+    [Fact]
+    public void LengthEncodedBytes_WhenClaimExceedsRemaining_Throws()
+    {
+        Assert.Throws<MalformedPacketException>(() =>
+        {
+            ReadOnlySpan<byte> truncated = [0x05, 0x01, 0x02];
+            var reader = new ProtocolReader(truncated);
+            reader.ReadLengthEncodedBytes(out _);
+        });
+    }
+
+    [Fact]
+    public void LengthEncodedBytes_WithHugeClaimAndNoPayload_Throws()
+    {
+        Assert.Throws<MalformedPacketException>(() =>
+        {
+            ReadOnlySpan<byte> truncated =
+            [
+                ProtocolConstants.LengthEncodedEightBytePrefix,
+                0xFF,
+                0xFF,
+                0xFF,
+                0xFF,
+                0xFF,
+                0xFF,
+                0xFF,
+                0x7F,
+            ];
+            var reader = new ProtocolReader(truncated);
+            reader.ReadLengthEncodedBytes(out _);
+        });
+    }
 }
