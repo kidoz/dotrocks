@@ -1,4 +1,5 @@
 using DotRocks.EntityFrameworkCore.Diagnostics;
+using DotRocks.EntityFrameworkCore.Metadata;
 using DotRocks.EntityFrameworkCore.Metadata.Conventions;
 using DotRocks.EntityFrameworkCore.Migrations;
 using DotRocks.EntityFrameworkCore.Query;
@@ -6,6 +7,7 @@ using DotRocks.EntityFrameworkCore.Storage;
 using DotRocks.EntityFrameworkCore.Update;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Metadata.Conventions.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Query;
@@ -39,6 +41,7 @@ public static class DotRocksServiceCollectionExtensions
         builder.TryAdd<IDatabaseCreator, DotRocksDatabaseCreator>();
         builder.TryAdd<IRelationalDatabaseCreator, DotRocksDatabaseCreator>();
         builder.TryAdd<ISqlGenerationHelper, DotRocksSqlGenerationHelper>();
+        builder.TryAdd<IRelationalAnnotationProvider, DotRocksRelationalAnnotationProvider>();
         builder.TryAdd<IRelationalTypeMappingSource, DotRocksTypeMappingSource>();
         builder.TryAdd<IMethodCallTranslatorProvider, DotRocksMethodCallTranslatorProvider>();
         builder.TryAdd<

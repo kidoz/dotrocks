@@ -1,6 +1,9 @@
+using DotRocks.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Migrations.Internal;
 using Microsoft.EntityFrameworkCore.Migrations.Operations;
 using Xunit;
 
@@ -8,6 +11,10 @@ namespace DotRocks.EntityFrameworkCore.Tests;
 
 public sealed class DotRocksMigrationsTests
 {
+    private static readonly string[] IdColumn = ["id"];
+    private static readonly string[] NameColumn = ["name"];
+    private static readonly string[] MissingColumn = ["missing"];
+
     [Fact]
     public void Generate_CreateTable_ProducesStarRocksPrimaryKeyTableSql()
     {
@@ -22,6 +29,130 @@ public sealed class DotRocksMigrationsTests
         Assert.Contains("DUPLICATE KEY(`id`)", sql, StringComparison.Ordinal);
         Assert.Contains("DISTRIBUTED BY HASH(`id`) BUCKETS 1", sql, StringComparison.Ordinal);
         Assert.Contains("PROPERTIES ('replication_num' = '1')", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Generate_CreateTableWithPrimaryKeyShape_ProducesPrimaryKeyTableSql()
+    {
+        using var context = CreateContext();
+        var generator = context.GetService<IMigrationsSqlGenerator>();
+        CreateTableOperation operation = CreateWidgetsTable();
+        operation.AddAnnotation("DotRocks:KeyModel", DotRocksTableKeyModel.PrimaryKey);
+        operation.AddAnnotation("DotRocks:KeyColumns", IdColumn);
+
+        string sql = GenerateSql(generator, operation);
+
+        Assert.Contains("PRIMARY KEY(`id`)", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("DUPLICATE KEY", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Generate_CreateTableWithDistributionAndReplicationShape_UsesConfiguredValues()
+    {
+        using var context = CreateContext();
+        var generator = context.GetService<IMigrationsSqlGenerator>();
+        CreateTableOperation operation = CreateWidgetsTable();
+        operation.AddAnnotation("DotRocks:DistributionColumns", NameColumn);
+        operation.AddAnnotation("DotRocks:DistributionBuckets", 8);
+        operation.AddAnnotation("DotRocks:ReplicationNum", 3);
+
+        string sql = GenerateSql(generator, operation);
+
+        Assert.Contains("DISTRIBUTED BY HASH(`name`) BUCKETS 8", sql, StringComparison.Ordinal);
+        Assert.Contains("PROPERTIES ('replication_num' = '3')", sql, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [MemberData(nameof(UnsupportedTableShapeAnnotations))]
+    public void Generate_CreateTableWithUnsupportedTableShapeAnnotation_ThrowsNotSupportedException(
+        string annotation,
+        object value,
+        string expectedMessage
+    )
+    {
+        using var context = CreateContext();
+        var generator = context.GetService<IMigrationsSqlGenerator>();
+        CreateTableOperation operation = CreateWidgetsTable();
+        operation.AddAnnotation(annotation, value);
+
+        NotSupportedException exception = Assert.Throws<NotSupportedException>(() =>
+            GenerateSql(generator, operation)
+        );
+
+        Assert.Contains(expectedMessage, exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void EntityTypeBuilderExtensions_SetStarRocksTableShapeAnnotations()
+    {
+        var optionsBuilder = new DbContextOptionsBuilder<TableShapeContext>();
+        optionsBuilder.UseStarRocks("Server=127.0.0.1;Port=9030;User ID=root");
+
+        using var context = new TableShapeContext(optionsBuilder.Options);
+        var entityType = context.Model.FindEntityType(typeof(TableShapeWidget));
+
+        Assert.NotNull(entityType);
+        Assert.Equal(
+            DotRocksTableKeyModel.PrimaryKey,
+            entityType.FindAnnotation("DotRocks:KeyModel")?.Value
+        );
+        Assert.Equal(
+            IdColumn,
+            Assert.IsType<string[]>(entityType.FindAnnotation("DotRocks:KeyColumns")?.Value)
+        );
+        Assert.Equal(
+            IdColumn,
+            Assert.IsType<string[]>(
+                entityType.FindAnnotation("DotRocks:DistributionColumns")?.Value
+            )
+        );
+        Assert.Equal(4, entityType.FindAnnotation("DotRocks:DistributionBuckets")?.Value);
+        Assert.Equal(2, entityType.FindAnnotation("DotRocks:ReplicationNum")?.Value);
+    }
+
+    [Fact]
+    public void MigrationsModelDiffer_CarriesTableShapeAnnotationsFromModel()
+    {
+        var optionsBuilder = new DbContextOptionsBuilder<TableShapeContext>();
+        optionsBuilder.UseStarRocks("Server=127.0.0.1;Port=9030;User ID=root");
+        using var context = new TableShapeContext(optionsBuilder.Options);
+        var differ = context.GetService<IMigrationsModelDiffer>();
+        IRelationalModel model = context.GetService<IDesignTimeModel>().Model.GetRelationalModel();
+
+        CreateTableOperation operation = Assert.Single(
+            differ.GetDifferences(null, model).OfType<CreateTableOperation>()
+        );
+
+        Assert.Equal(
+            DotRocksTableKeyModel.PrimaryKey,
+            operation.FindAnnotation("DotRocks:KeyModel")?.Value
+        );
+        Assert.Equal(
+            IdColumn,
+            Assert.IsType<string[]>(operation.FindAnnotation("DotRocks:KeyColumns")?.Value)
+        );
+        Assert.Equal(
+            IdColumn,
+            Assert.IsType<string[]>(operation.FindAnnotation("DotRocks:DistributionColumns")?.Value)
+        );
+        Assert.Equal(4, operation.FindAnnotation("DotRocks:DistributionBuckets")?.Value);
+        Assert.Equal(2, operation.FindAnnotation("DotRocks:ReplicationNum")?.Value);
+    }
+
+    [Fact]
+    public void EntityTypeBuilderExtensions_RejectInvalidTableShapeValues()
+    {
+        var builder = new ModelBuilder();
+
+        Assert.Throws<ArgumentException>(() =>
+            builder.Entity<TableShapeWidget>().HasStarRocksPrimaryKey([])
+        );
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            builder.Entity<TableShapeWidget>().HasStarRocksHashDistribution(0, "id")
+        );
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            builder.Entity<TableShapeWidget>().HasStarRocksReplicationNum(0)
+        );
     }
 
     [Theory]
@@ -130,6 +261,17 @@ public sealed class DotRocksMigrationsTests
             { CreateAddPrimaryKeyOperation(), "ADD PRIMARY KEY" },
             { CreateDropPrimaryKeyOperation(), "DROP PRIMARY KEY" },
             { CreateForeignKeyOperation(), "ADD FOREIGN KEY" },
+        };
+
+    public static TheoryData<string, object, string> UnsupportedTableShapeAnnotations() =>
+        new()
+        {
+            { "DotRocks:KeyModel", "AGGREGATE KEY", "table key model" },
+            { "DotRocks:KeyColumns", Array.Empty<string>(), "table key column" },
+            { "DotRocks:KeyColumns", MissingColumn, "unknown column" },
+            { "DotRocks:DistributionColumns", MissingColumn, "unknown column" },
+            { "DotRocks:DistributionBuckets", 0, "bucket" },
+            { "DotRocks:ReplicationNum", 0, "replication" },
         };
 
     private static string GenerateSql(
@@ -306,5 +448,32 @@ public sealed class DotRocksMigrationsTests
         public int Id { get; set; }
 
         public string Name { get; set; } = string.Empty;
+    }
+
+    private sealed class TableShapeContext(DbContextOptions<TableShapeContext> options)
+        : DbContext(options)
+    {
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<TableShapeWidget>(entity =>
+            {
+                entity.ToTable("table_shape_widgets", "unit_db");
+                entity.HasKey(widget => widget.Id);
+                entity.Property(widget => widget.Id).ValueGeneratedNever().HasColumnName("id");
+                entity.HasStarRocksPrimaryKey("id");
+                entity.HasStarRocksHashDistribution(4, "id");
+                entity.HasStarRocksReplicationNum(2);
+            });
+        }
+    }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Performance",
+        "CA1812:Avoid uninstantiated internal classes",
+        Justification = "EF Core uses this entity type through DbContext model metadata."
+    )]
+    private sealed class TableShapeWidget
+    {
+        public int Id { get; set; }
     }
 }

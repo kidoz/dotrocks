@@ -50,6 +50,9 @@ internal sealed class SampleContext(DbContextOptions<SampleContext> options) : D
                 .Property(widget => widget.Amount)
                 .ValueGeneratedNever()
                 .HasColumnType("decimal(10, 2)");
+            entity.HasStarRocksPrimaryKey("id");
+            entity.HasStarRocksHashDistribution(1, "id");
+            entity.HasStarRocksReplicationNum(1);
         });
     }
 }

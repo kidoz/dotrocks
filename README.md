@@ -114,16 +114,23 @@ Supported EF Core query surface:
 - `SaveChangesAsync` for a constrained single-table write model: explicit primary key,
   scalar properties only, single-column keys, `ValueGeneratedNever()`, no navigations, no
   generated values, and no concurrency tokens. Supported DML is parameterized `INSERT`,
-  `UPDATE ... WHERE pk = @p`, and `DELETE ... WHERE pk = @p`.
-- Minimal migrations can create StarRocks primary-key tables and the EF migrations
-  history table. The design-time package is `DotRocks.EntityFrameworkCore.Design`.
+  `UPDATE ... WHERE pk = @p`, and `DELETE ... WHERE pk = @p`. Multiple changed
+  entities are emitted as separate parameterized commands; DotRocks does not currently
+  model OLTP-style affected-row concurrency checks.
+- Minimal migrations can create and drop StarRocks tables and create the EF migrations
+  history table. `CREATE TABLE` defaults to `DUPLICATE KEY`, hash distribution by the
+  key columns, one bucket, and `replication_num = 1`. Configure table shape with
+  `HasStarRocksDuplicateKey(...)`, `HasStarRocksPrimaryKey(...)`,
+  `HasStarRocksHashDistribution(...)`, and `HasStarRocksReplicationNum(...)`. The
+  design-time package is `DotRocks.EntityFrameworkCore.Design`.
 
 Unsupported EF Core behavior is explicit:
 
 - `ExecuteUpdate`, and `ExecuteDelete`.
 - `EnsureCreated` and schema deletion.
-- migration operations beyond the initial `CREATE TABLE` path, including add/alter
-  column, indexes, foreign keys, defaults, and computed columns.
+- migration schema mutations beyond conservative table creation/drop, including
+  add/drop/alter/rename column, rename table, indexes, add/drop primary key, foreign
+  keys, defaults, and computed columns.
 - idempotent migration scripts.
 - composite-key writes.
 - joins, `Include`, navigation materialization, and `GroupBy`.
@@ -134,6 +141,12 @@ A compilable EF Core sample lives at
 [`samples/DotRocks.Samples.EntityFrameworkCore`](samples/DotRocks.Samples.EntityFrameworkCore).
 It demonstrates `UseStarRocks`, `ValueGeneratedNever()`, `SaveChangesAsync` insert/update/delete,
 and a minimal hand-authored migration.
+
+StarRocks transaction behavior is characterized by live tests. `COMMIT WORK` makes EF
+`SaveChangesAsync` rows visible. Some StarRocks builds accept `ROLLBACK WORK` for DML
+but still expose inserted rows; DotRocks keeps rollback tests as characterization tests
+and does not claim OLTP rollback semantics beyond the behavior verified by the target
+StarRocks server.
 
 EF Core type mapping:
 
@@ -169,6 +182,20 @@ provider-compatibility issues. `DotRocks.Analyzers.CodeFixes` ships optional IDE
 fixes for diagnostics where the correction is mechanical. Reference these as
 development-time analyzer packages; they do not add runtime assemblies to application
 output.
+
+Package consumption:
+
+```xml
+<PackageReference Include="DotRocks.Data" Version="1.0.0" />
+<PackageReference Include="DotRocks.EntityFrameworkCore" Version="1.0.0" />
+<PackageReference Include="DotRocks.EntityFrameworkCore.Design" Version="1.0.0" PrivateAssets="all" />
+<PackageReference Include="DotRocks.Analyzers" Version="1.0.0" PrivateAssets="all" />
+<PackageReference Include="DotRocks.Analyzers.CodeFixes" Version="1.0.0" PrivateAssets="all" />
+```
+
+The test suite validates these packages through a local NuGet-source consumer project
+and verifies analyzer diagnostics fire from package consumption, not only project
+references.
 
 Current diagnostics:
 

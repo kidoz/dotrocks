@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using DotRocks.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Migrations.Operations;
@@ -29,6 +30,35 @@ internal sealed class DotRocksMigrationsSqlGenerator(
             );
         }
 
+        string[] keyColumns = GetColumnListAnnotation(
+            operation,
+            DotRocksAnnotationNames.KeyColumns,
+            operation.PrimaryKey.Columns,
+            "table key"
+        );
+        string[] distributionColumns = GetColumnListAnnotation(
+            operation,
+            DotRocksAnnotationNames.DistributionColumns,
+            keyColumns,
+            "hash distribution"
+        );
+        int distributionBuckets = GetPositiveIntAnnotation(
+            operation,
+            DotRocksAnnotationNames.DistributionBuckets,
+            1,
+            "hash distribution bucket count"
+        );
+        int replicationNum = GetPositiveIntAnnotation(
+            operation,
+            DotRocksAnnotationNames.ReplicationNum,
+            1,
+            "replication number"
+        );
+        string keyClause = GetKeyClause(operation);
+
+        ValidateColumnsExist(operation, keyColumns, "table key");
+        ValidateColumnsExist(operation, distributionColumns, "hash distribution");
+
         builder.Append("CREATE TABLE ");
         builder.Append(
             Dependencies.SqlGenerationHelper.DelimitIdentifier(operation.Name, operation.Schema)
@@ -46,13 +76,19 @@ internal sealed class DotRocksMigrationsSqlGenerator(
             builder.AppendLine();
         }
 
-        builder.Append(") DUPLICATE KEY(");
-        AppendDelimitedColumnList(builder, operation.PrimaryKey.Columns);
+        builder.Append(") ").Append(keyClause).Append("(");
+        AppendDelimitedColumnList(builder, keyColumns);
         builder.AppendLine(")");
         builder.Append("DISTRIBUTED BY HASH(");
-        AppendDelimitedColumnList(builder, operation.PrimaryKey.Columns);
-        builder.AppendLine(") BUCKETS 1");
-        builder.Append("PROPERTIES ('replication_num' = '1')");
+        AppendDelimitedColumnList(builder, distributionColumns);
+        builder
+            .Append(") BUCKETS ")
+            .Append(distributionBuckets.ToString(CultureInfo.InvariantCulture))
+            .AppendLine();
+        builder
+            .Append("PROPERTIES ('replication_num' = '")
+            .Append(replicationNum.ToString(CultureInfo.InvariantCulture))
+            .Append("')");
 
         if (terminate)
         {
@@ -250,4 +286,99 @@ internal sealed class DotRocksMigrationsSqlGenerator(
         new(
             $"DotRocks EF Core migrations do not support {operation}; only initial CREATE TABLE migrations are supported in this release."
         );
+
+    private static string GetKeyClause(CreateTableOperation operation)
+    {
+        object? value = operation.FindAnnotation(DotRocksAnnotationNames.KeyModel)?.Value;
+        return value switch
+        {
+            null => "DUPLICATE KEY",
+            DotRocksTableKeyModel.DuplicateKey => "DUPLICATE KEY",
+            DotRocksTableKeyModel.PrimaryKey => "PRIMARY KEY",
+            string text
+                when string.Equals(text, "DUPLICATE KEY", StringComparison.OrdinalIgnoreCase) =>
+                "DUPLICATE KEY",
+            string text
+                when string.Equals(text, "PRIMARY KEY", StringComparison.OrdinalIgnoreCase) =>
+                "PRIMARY KEY",
+            _ => throw new NotSupportedException(
+                $"DotRocks EF Core migrations do not support StarRocks table key model '{value}'."
+            ),
+        };
+    }
+
+    private static string[] GetColumnListAnnotation(
+        CreateTableOperation operation,
+        string annotationName,
+        string[] fallback,
+        string description
+    )
+    {
+        object? value = operation.FindAnnotation(annotationName)?.Value;
+        string[] columns = value switch
+        {
+            null => fallback,
+            string[] stringArray => stringArray,
+            IReadOnlyList<string> stringList => stringList.ToArray(),
+            _ => throw new NotSupportedException(
+                $"DotRocks EF Core migrations require {description} columns to be configured as string column names."
+            ),
+        };
+
+        if (columns.Length == 0 || columns.Any(string.IsNullOrWhiteSpace))
+        {
+            throw new NotSupportedException(
+                $"DotRocks EF Core migrations require at least one non-empty {description} column."
+            );
+        }
+
+        return columns;
+    }
+
+    private static int GetPositiveIntAnnotation(
+        CreateTableOperation operation,
+        string annotationName,
+        int fallback,
+        string description
+    )
+    {
+        object? value = operation.FindAnnotation(annotationName)?.Value;
+        int number = value switch
+        {
+            null => fallback,
+            int intValue => intValue,
+            _ => throw new NotSupportedException(
+                $"DotRocks EF Core migrations require {description} to be configured as a positive integer."
+            ),
+        };
+
+        if (number <= 0)
+        {
+            throw new NotSupportedException(
+                $"DotRocks EF Core migrations require {description} to be greater than zero."
+            );
+        }
+
+        return number;
+    }
+
+    private static void ValidateColumnsExist(
+        CreateTableOperation operation,
+        string[] columns,
+        string description
+    )
+    {
+        HashSet<string> knownColumns = operation
+            .Columns.Select(column => column.Name)
+            .ToHashSet(StringComparer.Ordinal);
+        foreach (string column in columns)
+        {
+            if (!knownColumns.Contains(column))
+            {
+                throw new NotSupportedException(
+                    $"DotRocks EF Core migrations cannot use unknown column '{column}' in the StarRocks {description} clause."
+                );
+            }
+        }
+    }
 }

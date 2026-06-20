@@ -1,0 +1,69 @@
+using System.Diagnostics.CodeAnalysis;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Metadata;
+
+namespace DotRocks.EntityFrameworkCore.Metadata;
+
+[SuppressMessage(
+    "Performance",
+    "CA1812:Avoid uninstantiated internal classes",
+    Justification = "The EF Core service provider constructs this internal service through dependency injection."
+)]
+internal sealed class DotRocksRelationalAnnotationProvider(
+    RelationalAnnotationProviderDependencies dependencies
+) : RelationalAnnotationProvider(dependencies)
+{
+    private static readonly string[] TableShapeAnnotationNames =
+    [
+        DotRocksAnnotationNames.KeyModel,
+        DotRocksAnnotationNames.KeyColumns,
+        DotRocksAnnotationNames.DistributionColumns,
+        DotRocksAnnotationNames.DistributionBuckets,
+        DotRocksAnnotationNames.ReplicationNum,
+    ];
+
+    public override IEnumerable<IAnnotation> For(ITable table, bool designTime)
+    {
+        foreach (IAnnotation annotation in base.For(table, designTime))
+        {
+            yield return annotation;
+        }
+
+        foreach (string annotationName in TableShapeAnnotationNames)
+        {
+            IAnnotation? annotation = GetTableShapeAnnotation(table, annotationName);
+            if (annotation is not null)
+            {
+                yield return annotation;
+            }
+        }
+    }
+
+    private static IAnnotation? GetTableShapeAnnotation(ITable table, string annotationName)
+    {
+        IAnnotation? result = null;
+        foreach (
+            IEntityType entityType in table
+                .EntityTypeMappings.Select(mapping => mapping.TypeBase)
+                .OfType<IEntityType>()
+        )
+        {
+            IAnnotation? annotation = entityType.FindAnnotation(annotationName);
+            if (annotation is null)
+            {
+                continue;
+            }
+
+            if (result is not null && !Equals(result.Value, annotation.Value))
+            {
+                throw new NotSupportedException(
+                    $"DotRocks EF Core migrations do not support conflicting '{annotationName}' table-shape annotations on shared table '{table.SchemaQualifiedName}'."
+                );
+            }
+
+            result = annotation;
+        }
+
+        return result;
+    }
+}

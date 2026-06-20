@@ -11,9 +11,10 @@ The sample demonstrates:
 
 - `UseStarRocks(...)`.
 - A supported writable entity with a single explicit primary key and `ValueGeneratedNever()`.
+- StarRocks table-shape configuration for key model, hash distribution, and replication.
 - `SaveChangesAsync` insert, update, and delete.
 - Minimal `MigrateAsync()` usage with a hand-authored `CREATE TABLE` migration.
 
 Current unsupported EF behavior includes generated values, composite keys, navigations,
 owned types, concurrency tokens, binary/varbinary mapping, idempotent migration scripts,
-and migration operations beyond initial table creation.
+and migration schema mutations beyond conservative table creation/drop.
