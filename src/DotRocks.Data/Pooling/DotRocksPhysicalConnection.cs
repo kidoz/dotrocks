@@ -17,8 +17,8 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
 {
     private readonly TcpClient _client;
     private readonly Stream _stream;
-    private bool _isDisposed;
-    private bool _isBroken;
+    private volatile bool _isDisposed;
+    private volatile bool _isBroken;
 
     private DotRocksPhysicalConnection(TcpClient client, Stream stream, string serverVersion)
     {

@@ -1026,6 +1026,61 @@ public sealed class ConnectionIntegrationTests
     }
 
     [Fact]
+    public async Task PooledConnections_ConcurrentLeaseAndClearDoNotDeadlockOrLeakPermits()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
+        }
+
+        DotRocksConnection.ClearAllPools();
+        string connectionString = BuildPoolingConnectionString(maximumPoolSize: 4);
+
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        CancellationToken ct = cancellation.Token;
+
+        async Task LeaseLoopAsync()
+        {
+            for (int i = 0; i < 25; i++)
+            {
+                using var connection = new DotRocksConnection(connectionString);
+                await connection.OpenAsync(ct).ConfigureAwait(true);
+                using DbCommand command = connection.CreateCommand();
+                command.CommandText = "SELECT 1";
+                _ = await command.ExecuteScalarAsync(ct).ConfigureAwait(true);
+                await connection.CloseAsync().ConfigureAwait(true);
+            }
+        }
+
+        Task clearLoop = Task.Run(
+            async () =>
+            {
+                for (int i = 0; i < 10; i++)
+                {
+                    DotRocksConnection.ClearAllPools();
+                    await Task.Delay(TimeSpan.FromMilliseconds(20), ct).ConfigureAwait(true);
+                }
+            },
+            ct
+        );
+
+        Task[] leaseLoops = [.. Enumerable.Range(0, 8).Select(_ => LeaseLoopAsync())];
+
+        // If a permit were lost or the pool deadlocked, this would exceed the 30s token and throw.
+        await Task.WhenAll([.. leaseLoops, clearLoop]).ConfigureAwait(true);
+
+        // The pool must still be fully usable after the concurrent churn.
+        DotRocksConnection.ClearAllPools();
+        using var probe = new DotRocksConnection(connectionString);
+        await probe.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+        Assert.Equal(ConnectionState.Open, probe.State);
+        await probe.CloseAsync().ConfigureAwait(true);
+        DotRocksConnection.ClearAllPools();
+    }
+
+    [Fact]
     public async Task PooledConnections_DiscardBrokenPhysicalConnection()
     {
         if (!IntegrationTestEnvironment.IsEnabled)

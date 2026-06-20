@@ -14,7 +14,7 @@ internal sealed class DotRocksConnectionPool : IDisposable
     private readonly DotRocksConnectionOptions _options;
     private readonly SemaphoreSlim _leaseGate;
     private readonly Queue<PooledPhysicalConnection> _idleConnections = new();
-    private bool _isDisposed;
+    private volatile bool _isDisposed;
 
     private DotRocksConnectionPool(DotRocksConnectionOptions options)
     {
@@ -36,6 +36,7 @@ internal sealed class DotRocksConnectionPool : IDisposable
         await _leaseGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            ObjectDisposedException.ThrowIf(_isDisposed, this);
             DotRocksPhysicalConnection? physicalConnection = TryTakeIdleConnection();
             physicalConnection ??= await DotRocksPhysicalConnection
                 .OpenAsync(_options, cancellationToken)
@@ -44,7 +45,7 @@ internal sealed class DotRocksConnectionPool : IDisposable
         }
         catch
         {
-            _leaseGate.Release();
+            ReleaseLease();
             throw;
         }
     }
@@ -55,32 +56,47 @@ internal sealed class DotRocksConnectionPool : IDisposable
 
         try
         {
-            if (_isDisposed)
+            // The decision to keep or discard, and the disposed-state check, must be made under
+            // the gate together with the enqueue so a concurrent Dispose() cannot drain the idle
+            // queue between the check and the enqueue (which would leak the connection).
+            bool enqueued = false;
+            if (reusable && physicalConnection.IsReusable)
             {
-                physicalConnection.Dispose();
-                return;
+                lock (_gate)
+                {
+                    if (!_isDisposed)
+                    {
+                        PruneExpiredIdleConnections();
+                        _idleConnections.Enqueue(
+                            new PooledPhysicalConnection(physicalConnection, DateTimeOffset.UtcNow)
+                        );
+                        enqueued = true;
+                    }
+                }
             }
 
-            if (!reusable || !physicalConnection.IsReusable)
+            if (!enqueued)
             {
                 physicalConnection.Dispose();
-                return;
-            }
-
-            lock (_gate)
-            {
-                PruneExpiredIdleConnections();
-                _idleConnections.Enqueue(
-                    new PooledPhysicalConnection(physicalConnection, DateTimeOffset.UtcNow)
-                );
             }
         }
         finally
         {
-            if (!_isDisposed)
-            {
-                _leaseGate.Release();
-            }
+            // Always return the permit taken by the matching LeaseAsync. A disposed pool's
+            // permit accounting no longer matters, so tolerate a disposed semaphore.
+            ReleaseLease();
+        }
+    }
+
+    private void ReleaseLease()
+    {
+        try
+        {
+            _leaseGate.Release();
+        }
+        catch (ObjectDisposedException)
+        {
+            // The pool was disposed while a lease was outstanding; the permit count is moot.
         }
     }
 
@@ -155,26 +171,22 @@ internal sealed class DotRocksConnectionPool : IDisposable
         }
     }
 
-    private void Clear()
+    public void Dispose()
     {
         lock (_gate)
         {
+            if (_isDisposed)
+            {
+                return;
+            }
+
+            _isDisposed = true;
             while (_idleConnections.TryDequeue(out PooledPhysicalConnection? pooled))
             {
                 pooled.Connection.Dispose();
             }
         }
-    }
 
-    public void Dispose()
-    {
-        if (_isDisposed)
-        {
-            return;
-        }
-
-        _isDisposed = true;
-        Clear();
         _leaseGate.Dispose();
     }
 
