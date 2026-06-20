@@ -125,12 +125,40 @@ internal sealed class DotRocksMigrationsSqlGenerator(
     }
 
     protected override void Generate(
+        DropColumnOperation operation,
+        IModel? model,
+        MigrationCommandListBuilder builder,
+        bool terminate = true
+    )
+    {
+        throw CreateUnsupportedMigrationOperationException("DROP COLUMN");
+    }
+
+    protected override void Generate(
         AlterColumnOperation operation,
         IModel? model,
         MigrationCommandListBuilder builder
     )
     {
         throw CreateUnsupportedMigrationOperationException("ALTER COLUMN");
+    }
+
+    protected override void Generate(
+        RenameTableOperation operation,
+        IModel? model,
+        MigrationCommandListBuilder builder
+    )
+    {
+        throw CreateUnsupportedMigrationOperationException("RENAME TABLE");
+    }
+
+    protected override void Generate(
+        RenameColumnOperation operation,
+        IModel? model,
+        MigrationCommandListBuilder builder
+    )
+    {
+        throw CreateUnsupportedMigrationOperationException("RENAME COLUMN");
     }
 
     protected override void Generate(
@@ -141,6 +169,36 @@ internal sealed class DotRocksMigrationsSqlGenerator(
     )
     {
         throw CreateUnsupportedMigrationOperationException("CREATE INDEX");
+    }
+
+    protected override void Generate(
+        DropIndexOperation operation,
+        IModel? model,
+        MigrationCommandListBuilder builder,
+        bool terminate = true
+    )
+    {
+        throw CreateUnsupportedMigrationOperationException("DROP INDEX");
+    }
+
+    protected override void Generate(
+        AddPrimaryKeyOperation operation,
+        IModel? model,
+        MigrationCommandListBuilder builder,
+        bool terminate = true
+    )
+    {
+        throw CreateUnsupportedMigrationOperationException("ADD PRIMARY KEY");
+    }
+
+    protected override void Generate(
+        DropPrimaryKeyOperation operation,
+        IModel? model,
+        MigrationCommandListBuilder builder,
+        bool terminate = true
+    )
+    {
+        throw CreateUnsupportedMigrationOperationException("DROP PRIMARY KEY");
     }
 
     protected override void Generate(

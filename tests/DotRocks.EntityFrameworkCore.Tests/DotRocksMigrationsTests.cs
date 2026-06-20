@@ -121,8 +121,14 @@ public sealed class DotRocksMigrationsTests
         new()
         {
             { CreateAddColumnOperation(), "ADD COLUMN" },
+            { CreateDropColumnOperation(), "DROP COLUMN" },
             { CreateAlterColumnOperation(), "ALTER COLUMN" },
+            { CreateRenameTableOperation(), "RENAME TABLE" },
+            { CreateRenameColumnOperation(), "RENAME COLUMN" },
             { CreateIndexOperation(), "CREATE INDEX" },
+            { CreateDropIndexOperation(), "DROP INDEX" },
+            { CreateAddPrimaryKeyOperation(), "ADD PRIMARY KEY" },
+            { CreateDropPrimaryKeyOperation(), "DROP PRIMARY KEY" },
             { CreateForeignKeyOperation(), "ADD FOREIGN KEY" },
         };
 
@@ -197,6 +203,32 @@ public sealed class DotRocksMigrationsTests
             },
         };
 
+    private static DropColumnOperation CreateDropColumnOperation() =>
+        new()
+        {
+            Name = "name",
+            Table = "widgets",
+            Schema = "unit_db",
+        };
+
+    private static RenameTableOperation CreateRenameTableOperation() =>
+        new()
+        {
+            Name = "widgets",
+            Schema = "unit_db",
+            NewName = "widgets_renamed",
+            NewSchema = "unit_db",
+        };
+
+    private static RenameColumnOperation CreateRenameColumnOperation() =>
+        new()
+        {
+            Name = "name",
+            Table = "widgets",
+            Schema = "unit_db",
+            NewName = "display_name",
+        };
+
     private static CreateIndexOperation CreateIndexOperation() =>
         new()
         {
@@ -204,6 +236,31 @@ public sealed class DotRocksMigrationsTests
             Table = "widgets",
             Schema = "unit_db",
             Columns = ["name"],
+        };
+
+    private static DropIndexOperation CreateDropIndexOperation() =>
+        new()
+        {
+            Name = "IX_widgets_name",
+            Table = "widgets",
+            Schema = "unit_db",
+        };
+
+    private static AddPrimaryKeyOperation CreateAddPrimaryKeyOperation() =>
+        new()
+        {
+            Name = "PK_widgets",
+            Table = "widgets",
+            Schema = "unit_db",
+            Columns = ["id"],
+        };
+
+    private static DropPrimaryKeyOperation CreateDropPrimaryKeyOperation() =>
+        new()
+        {
+            Name = "PK_widgets",
+            Table = "widgets",
+            Schema = "unit_db",
         };
 
     private static AddForeignKeyOperation CreateForeignKeyOperation() =>
