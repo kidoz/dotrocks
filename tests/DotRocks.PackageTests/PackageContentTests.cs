@@ -26,6 +26,7 @@ public sealed class PackageContentTests
     public async Task Packages_HaveExpectedContentAndMetadata()
     {
         string packageDirectory = await PackSourcePackagesAsync().ConfigureAwait(true);
+        AssertExpectedPackageFiles(packageDirectory);
 
         foreach (string packageId in RuntimePackageIds)
         {
@@ -162,6 +163,7 @@ public sealed class PackageContentTests
         XDocument nuspec = XDocument.Load(nuspecStream);
 
         Assert.Equal(packageId, NuspecValue(nuspec, "id"));
+        Assert.Equal("README.md", NuspecValue(nuspec, "readme"));
         Assert.Equal("MIT", NuspecValue(nuspec, "license"));
         Assert.Equal(
             "https://github.com/dotrocks/dotrocks",
@@ -200,6 +202,45 @@ public sealed class PackageContentTests
         Assert.Contains("Verified robustness", readme, StringComparison.Ordinal);
         Assert.Contains("DotRocksDataSource", readme, StringComparison.Ordinal);
         Assert.Contains("DotRocksFactory", readme, StringComparison.Ordinal);
+    }
+
+    private static void AssertExpectedPackageFiles(string packageDirectory)
+    {
+        string[] regularPackages = Directory
+            .GetFiles(packageDirectory, "*.nupkg")
+            .Where(path => !path.EndsWith(".snupkg", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(Path.GetFileName, StringComparer.Ordinal)
+            .ToArray();
+        string[] symbolPackages = Directory
+            .GetFiles(packageDirectory, "*.snupkg")
+            .OrderBy(Path.GetFileName, StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Equal(RuntimePackageIds.Length + AnalyzerPackageIds.Length, regularPackages.Length);
+        Assert.Equal(RuntimePackageIds.Length, symbolPackages.Length);
+        Assert.DoesNotContain(
+            regularPackages,
+            path => Path.GetFileName(path).Contains(".symbols.", StringComparison.OrdinalIgnoreCase)
+        );
+
+        string[] regularPackageIds = regularPackages
+            .Select(GetPackageIdFromPath)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        string[] symbolPackageIds = symbolPackages
+            .Select(GetPackageIdFromPath)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Equal(
+            RuntimePackageIds.Concat(AnalyzerPackageIds).Order(StringComparer.Ordinal).ToArray(),
+            regularPackageIds
+        );
+        Assert.Equal(RuntimePackageIds.Order(StringComparer.Ordinal).ToArray(), symbolPackageIds);
+        Assert.DoesNotContain(
+            symbolPackageIds,
+            packageId => AnalyzerPackageIds.Contains(packageId)
+        );
     }
 
     private static string? NuspecValue(
@@ -348,6 +389,17 @@ public sealed class PackageContentTests
             && fileName.Length > expectedPrefix.Length
             && char.IsDigit(fileName[expectedPrefix.Length])
             && fileName.EndsWith(".snupkg", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string GetPackageIdFromPath(string path)
+    {
+        string fileName = Path.GetFileName(path);
+        string? packageId = RuntimePackageIds
+            .Concat(AnalyzerPackageIds)
+            .OrderByDescending(id => id.Length)
+            .FirstOrDefault(id => fileName.StartsWith(id + ".", StringComparison.Ordinal));
+        Assert.NotNull(packageId);
+        return packageId;
     }
 
     private static async Task<string> PackSourcePackagesAsync()
