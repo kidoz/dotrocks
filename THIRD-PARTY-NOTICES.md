@@ -6,6 +6,7 @@ dependencies.
 
 | Package | Purpose |
 | --- | --- |
+| `BenchmarkDotNet` | Benchmark-only performance measurement harness. |
 | `Dapper` | Test-only Dapper compatibility coverage. |
 | `Microsoft.CodeAnalysis.Analyzers` | Analyzer project build-time Roslyn analyzer rules. |
 | `Microsoft.CodeAnalysis.CSharp` | Analyzer implementation and analyzer unit tests. |
