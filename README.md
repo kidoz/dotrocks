@@ -22,7 +22,12 @@ Roslyn analyzer suite built specifically for [StarRocks](https://www.starrocks.i
 
 ## Status
 
-Early development. Nothing here is described as working unless it is built and tested.
+DotRocks 1.0.0. The ADO.NET driver (`DotRocks.Data`), EF Core provider
+(`DotRocks.EntityFrameworkCore`), and analyzer suite (`DotRocks.Analyzers`) are released and
+validated against live StarRocks (4.0.7 and 3.3.5) in CI. The supported surface is exactly
+what this README documents: features are described as working only where they are built and
+covered by tests, and everything outside the documented surface is an explicit, deliberate
+boundary rather than an unfinished gap.
 
 DotRocks implements **its own** managed StarRocks client protocol. It takes no runtime
 dependency on MySqlConnector, Oracle MySQL Connector/NET, Pomelo, or any other MySQL
