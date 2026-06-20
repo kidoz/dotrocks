@@ -92,70 +92,14 @@ internal sealed class DotRocksDatabaseCreator(IRelationalConnection connection)
         throw CreateUnsupportedException();
     }
 
-    public bool Exists()
-    {
-        string? database = GetDatabaseName();
-        if (string.IsNullOrEmpty(database))
-        {
-            return CanConnect();
-        }
+    // StarRocks rejects login when the connection's default database does not exist, so for a
+    // database-scoped connection "can connect" is equivalent to "the database exists". Probing
+    // information_schema is both unnecessary and unsafe here (it would issue a command that
+    // violates the active migration transaction's command-enlistment guard).
+    public bool Exists() => CanConnect();
 
-        try
-        {
-            bool opened = connection.Open(errorsExpected: true);
-            try
-            {
-                using DbCommand command = CreateSchemaExistsCommand(database);
-                return command.ExecuteScalar() is not null and not DBNull;
-            }
-            finally
-            {
-                if (opened)
-                {
-                    connection.Close();
-                }
-            }
-        }
-        catch (Exception ex) when (IsConnectionFailure(ex))
-        {
-            return false;
-        }
-    }
-
-    public async Task<bool> ExistsAsync(CancellationToken cancellationToken = default)
-    {
-        string? database = GetDatabaseName();
-        if (string.IsNullOrEmpty(database))
-        {
-            return await CanConnectAsync(cancellationToken).ConfigureAwait(false);
-        }
-
-        try
-        {
-            bool opened = await connection
-                .OpenAsync(cancellationToken, errorsExpected: true)
-                .ConfigureAwait(false);
-            try
-            {
-                using DbCommand command = CreateSchemaExistsCommand(database);
-                object? result = await command
-                    .ExecuteScalarAsync(cancellationToken)
-                    .ConfigureAwait(false);
-                return result is not null and not DBNull;
-            }
-            finally
-            {
-                if (opened)
-                {
-                    await connection.CloseAsync().ConfigureAwait(false);
-                }
-            }
-        }
-        catch (Exception ex) when (IsConnectionFailure(ex))
-        {
-            return false;
-        }
-    }
+    public Task<bool> ExistsAsync(CancellationToken cancellationToken = default) =>
+        CanConnectAsync(cancellationToken);
 
     public string GenerateCreateScript() => throw CreateUnsupportedException();
 
@@ -165,20 +109,6 @@ internal sealed class DotRocksDatabaseCreator(IRelationalConnection connection)
     {
         cancellationToken.ThrowIfCancellationRequested();
         throw CreateUnsupportedException();
-    }
-
-    private string? GetDatabaseName() => connection.DbConnection.Database;
-
-    private DbCommand CreateSchemaExistsCommand(string database)
-    {
-        DbCommand command = connection.DbConnection.CreateCommand();
-        command.CommandText =
-            "SELECT SCHEMA_NAME FROM information_schema.schemata WHERE SCHEMA_NAME = @name";
-        DbParameter parameter = command.CreateParameter();
-        parameter.ParameterName = "@name";
-        parameter.Value = database;
-        command.Parameters.Add(parameter);
-        return command;
     }
 
     private static NotSupportedException CreateUnsupportedException() =>
