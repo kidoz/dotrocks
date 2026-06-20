@@ -1,4 +1,4 @@
-name: Build
+name: Packaging
 
 on:
   pull_request:
@@ -10,11 +10,11 @@ permissions:
   contents: read
 
 concurrency:
-  group: build-${{ github.ref }}
+  group: packaging-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build:
+  packaging:
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -34,17 +34,23 @@ jobs:
         with:
           global-json-file: global.json
 
-      - name: Restore tools
-        run: dotnet tool restore
-
       - name: Restore packages
         run: dotnet restore DotRocks.slnx --locked-mode
-
-      - name: Check formatting
-        run: dotnet csharpier check .
 
       - name: Build
         run: dotnet build DotRocks.slnx --configuration Release --no-restore
 
-      - name: Test
-        run: dotnet test DotRocks.slnx --configuration Release --no-build
+      - name: Run package tests
+        run: dotnet test tests/DotRocks.PackageTests/DotRocks.PackageTests.csproj --configuration Release --no-build
+
+      - name: Pack
+        run: dotnet pack DotRocks.slnx --configuration Release --no-build --output artifacts/packages
+
+      - name: Upload package artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dotrocks-packages
+          path: |
+            artifacts/packages/*.nupkg
+            artifacts/packages/*.snupkg
+          if-no-files-found: error
