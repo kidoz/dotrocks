@@ -260,6 +260,7 @@ public sealed class DotRocksStreamLoadClient : IDisposable
                     }
 
                     requestUri = GetRedirectUri(response, requestUri);
+                    ValidateRedirectUri(requestUri);
                     continue;
                 }
 
@@ -380,6 +381,33 @@ public sealed class DotRocksStreamLoadClient : IDisposable
         }
 
         return location.IsAbsoluteUri ? location : new Uri(requestUri, location);
+    }
+
+    private void ValidateRedirectUri(Uri redirectUri)
+    {
+        if (redirectUri.Scheme is not ("http" or "https"))
+        {
+            throw new DotRocksStreamLoadException(
+                "StarRocks Stream Load redirected to an unsupported URI scheme."
+            );
+        }
+
+        if (!string.IsNullOrEmpty(redirectUri.UserInfo))
+        {
+            throw new DotRocksStreamLoadException(
+                "StarRocks Stream Load redirect URI must not include user information."
+            );
+        }
+
+        if (
+            string.Equals(redirectUri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+            && !_options.AllowInsecureStreamLoad
+        )
+        {
+            throw new DotRocksStreamLoadException(
+                "StarRocks Stream Load redirected to an HTTP endpoint. Use HTTPS or set 'Allow Insecure Stream Load=true' for trusted local test environments."
+            );
+        }
     }
 
     private static void ValidateTransportSecurity(DotRocksConnectionOptions options)

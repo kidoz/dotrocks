@@ -183,6 +183,67 @@ public sealed class DotRocksStreamLoadClientTests
         Assert.Single(handler.Requests);
     }
 
+    [Fact]
+    public async Task LoadCsvAsync_HttpsEndpointRedirectToHttpWithoutOptIn_ThrowsBeforeForwardingAuth()
+    {
+        using var handler = new SingleRedirectHandler(
+            new Uri("http://be.starrocks.local:8040/api/warehouse/events/_stream_load")
+        );
+        using var httpClient = new HttpClient(handler);
+        DotRocksConnectionOptions options = DotRocksConnectionOptions.Parse(
+            "Server=starrocks.local;User ID=alice;Password=secret;Stream Load Endpoint=https://starrocks.local:8030"
+        );
+        using var client = new DotRocksStreamLoadClient(
+            options,
+            httpClient,
+            disposeHttpClient: false
+        );
+        using var payload = new MemoryStream(Encoding.UTF8.GetBytes("1,one\\n"));
+
+        DotRocksStreamLoadException exception = await Assert
+            .ThrowsAsync<DotRocksStreamLoadException>(async () =>
+                await client
+                    .LoadCsvAsync(
+                        "warehouse",
+                        "events",
+                        payload,
+                        cancellationToken: TestContext.Current.CancellationToken
+                    )
+                    .ConfigureAwait(true)
+            )
+            .ConfigureAwait(true);
+
+        Assert.Contains("HTTP endpoint", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Single(handler.Requests);
+    }
+
+    [Fact]
+    public async Task LoadCsvAsync_RedirectWithUserInfo_ThrowsBeforeForwardingAuth()
+    {
+        using var handler = new SingleRedirectHandler(
+            new Uri("https://alice@be.starrocks.local:8040/api/warehouse/events/_stream_load")
+        );
+        using var httpClient = new HttpClient(handler);
+        using var client = CreateClient(httpClient);
+        using var payload = new MemoryStream(Encoding.UTF8.GetBytes("1,one\\n"));
+
+        DotRocksStreamLoadException exception = await Assert
+            .ThrowsAsync<DotRocksStreamLoadException>(async () =>
+                await client
+                    .LoadCsvAsync(
+                        "warehouse",
+                        "events",
+                        payload,
+                        cancellationToken: TestContext.Current.CancellationToken
+                    )
+                    .ConfigureAwait(true)
+            )
+            .ConfigureAwait(true);
+
+        Assert.Contains("user information", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Single(handler.Requests);
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData(" ")]
@@ -777,6 +838,25 @@ public sealed class DotRocksStreamLoadClientTests
                 .Content!.ReadAsStringAsync(cancellationToken)
                 .ConfigureAwait(true);
             return JsonResponse();
+        }
+    }
+
+    private sealed class SingleRedirectHandler(Uri location) : HttpMessageHandler
+    {
+        public List<HttpRequestMessage> Requests { get; } = [];
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken
+        )
+        {
+            Requests.Add(request);
+            return Task.FromResult(
+                new HttpResponseMessage(HttpStatusCode.TemporaryRedirect)
+                {
+                    Headers = { Location = location },
+                }
+            );
         }
     }
 
