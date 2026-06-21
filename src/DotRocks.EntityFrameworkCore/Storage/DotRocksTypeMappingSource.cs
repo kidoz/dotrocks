@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Data;
 using System.Diagnostics.CodeAnalysis;
 using DotRocks.Data;
@@ -17,38 +18,39 @@ internal sealed class DotRocksTypeMappingSource(
 {
     private const int MaxExactDecimalPrecision = 29;
 
-    private static readonly Dictionary<Type, RelationalTypeMapping> ClrMappings = new()
-    {
-        [typeof(bool)] = new BoolTypeMapping("boolean", DbType.Boolean),
-        [typeof(sbyte)] = new SByteTypeMapping("tinyint", DbType.SByte),
-        [typeof(byte)] = new ByteTypeMapping("tinyint unsigned", DbType.Byte),
-        [typeof(short)] = new ShortTypeMapping("smallint", DbType.Int16),
-        [typeof(int)] = new IntTypeMapping("int", DbType.Int32),
-        [typeof(long)] = new LongTypeMapping("bigint", DbType.Int64),
-        [typeof(Int128)] = new DotRocksInt128TypeMapping(),
-        [typeof(float)] = new FloatTypeMapping("float", DbType.Single),
-        [typeof(double)] = new DoubleTypeMapping("double", DbType.Double),
-        // A bare `decimal` property defaults to a precision/scale that preserves fractional
-        // digits and stays within System.Decimal's range. Without this, StarRocks would create
-        // DECIMAL(10,0) and silently truncate the scale. Override per-property with HasPrecision.
-        [typeof(decimal)] = new DecimalTypeMapping(
-            "decimal(28,9)",
-            DbType.Decimal,
-            precision: 28,
-            scale: 9
-        ),
-        [typeof(DotRocksDecimal)] = new DotRocksDecimalTypeMapping(),
-        [typeof(string)] = new StringTypeMapping(
-            "varchar",
-            DbType.String,
-            unicode: true,
-            size: null
-        ),
-        [typeof(DateTime)] = new DateTimeTypeMapping("datetime", DbType.DateTime),
-        [typeof(DateOnly)] = new DateOnlyTypeMapping("date", DbType.Date),
-        [typeof(TimeOnly)] = new TimeOnlyTypeMapping("time", DbType.Time),
-        [typeof(Guid)] = new DotRocksGuidTypeMapping(),
-    };
+    private static readonly FrozenDictionary<Type, RelationalTypeMapping> ClrMappings =
+        new Dictionary<Type, RelationalTypeMapping>
+        {
+            [typeof(bool)] = new BoolTypeMapping("boolean", DbType.Boolean),
+            [typeof(sbyte)] = new SByteTypeMapping("tinyint", DbType.SByte),
+            [typeof(byte)] = new ByteTypeMapping("tinyint unsigned", DbType.Byte),
+            [typeof(short)] = new ShortTypeMapping("smallint", DbType.Int16),
+            [typeof(int)] = new IntTypeMapping("int", DbType.Int32),
+            [typeof(long)] = new LongTypeMapping("bigint", DbType.Int64),
+            [typeof(Int128)] = new DotRocksInt128TypeMapping(),
+            [typeof(float)] = new FloatTypeMapping("float", DbType.Single),
+            [typeof(double)] = new DoubleTypeMapping("double", DbType.Double),
+            // A bare `decimal` property defaults to a precision/scale that preserves fractional
+            // digits and stays within System.Decimal's range. Without this, StarRocks would create
+            // DECIMAL(10,0) and silently truncate the scale. Override per-property with HasPrecision.
+            [typeof(decimal)] = new DecimalTypeMapping(
+                "decimal(28,9)",
+                DbType.Decimal,
+                precision: 28,
+                scale: 9
+            ),
+            [typeof(DotRocksDecimal)] = new DotRocksDecimalTypeMapping(),
+            [typeof(string)] = new StringTypeMapping(
+                "varchar",
+                DbType.String,
+                unicode: true,
+                size: null
+            ),
+            [typeof(DateTime)] = new DateTimeTypeMapping("datetime", DbType.DateTime),
+            [typeof(DateOnly)] = new DateOnlyTypeMapping("date", DbType.Date),
+            [typeof(TimeOnly)] = new TimeOnlyTypeMapping("time", DbType.Time),
+            [typeof(Guid)] = new DotRocksGuidTypeMapping(),
+        }.ToFrozenDictionary();
 
     private static readonly RelationalTypeMapping JsonStringMapping = new StringTypeMapping(
         "json",
@@ -57,31 +59,30 @@ internal sealed class DotRocksTypeMappingSource(
         size: null
     );
 
-    private static readonly Dictionary<string, RelationalTypeMapping> StoreTypeMappings = new(
-        StringComparer.OrdinalIgnoreCase
-    )
-    {
-        ["boolean"] = ClrMappings[typeof(bool)],
-        ["bool"] = ClrMappings[typeof(bool)],
-        ["tinyint"] = ClrMappings[typeof(sbyte)],
-        ["smallint"] = ClrMappings[typeof(short)],
-        ["int"] = ClrMappings[typeof(int)],
-        ["integer"] = ClrMappings[typeof(int)],
-        ["mediumint"] = ClrMappings[typeof(int)],
-        ["bigint"] = ClrMappings[typeof(long)],
-        ["largeint"] = ClrMappings[typeof(Int128)],
-        ["float"] = ClrMappings[typeof(float)],
-        ["double"] = ClrMappings[typeof(double)],
-        ["decimal"] = ClrMappings[typeof(decimal)],
-        ["char"] = ClrMappings[typeof(string)],
-        ["varchar"] = ClrMappings[typeof(string)],
-        ["text"] = ClrMappings[typeof(string)],
-        ["string"] = ClrMappings[typeof(string)],
-        ["datetime"] = ClrMappings[typeof(DateTime)],
-        ["date"] = ClrMappings[typeof(DateOnly)],
-        ["time"] = ClrMappings[typeof(TimeOnly)],
-        ["json"] = JsonStringMapping,
-    };
+    private static readonly FrozenDictionary<string, RelationalTypeMapping> StoreTypeMappings =
+        new Dictionary<string, RelationalTypeMapping>
+        {
+            ["boolean"] = ClrMappings[typeof(bool)],
+            ["bool"] = ClrMappings[typeof(bool)],
+            ["tinyint"] = ClrMappings[typeof(sbyte)],
+            ["smallint"] = ClrMappings[typeof(short)],
+            ["int"] = ClrMappings[typeof(int)],
+            ["integer"] = ClrMappings[typeof(int)],
+            ["mediumint"] = ClrMappings[typeof(int)],
+            ["bigint"] = ClrMappings[typeof(long)],
+            ["largeint"] = ClrMappings[typeof(Int128)],
+            ["float"] = ClrMappings[typeof(float)],
+            ["double"] = ClrMappings[typeof(double)],
+            ["decimal"] = ClrMappings[typeof(decimal)],
+            ["char"] = ClrMappings[typeof(string)],
+            ["varchar"] = ClrMappings[typeof(string)],
+            ["text"] = ClrMappings[typeof(string)],
+            ["string"] = ClrMappings[typeof(string)],
+            ["datetime"] = ClrMappings[typeof(DateTime)],
+            ["date"] = ClrMappings[typeof(DateOnly)],
+            ["time"] = ClrMappings[typeof(TimeOnly)],
+            ["json"] = JsonStringMapping,
+        }.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
 
     protected override RelationalTypeMapping? FindMapping(in RelationalTypeMappingInfo mappingInfo)
     {
