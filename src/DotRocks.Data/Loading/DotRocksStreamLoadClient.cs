@@ -1,6 +1,8 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Net.Http.Headers;
 using System.Text;
+using DotRocks.Data.Pooling;
+using DotRocks.Data.Protocol.Handshake;
 
 namespace DotRocks.Data.Loading;
 
@@ -13,6 +15,12 @@ public sealed class DotRocksStreamLoadClient : IDisposable
     private readonly DotRocksConnectionOptions _options;
     private readonly HttpClient _httpClient;
     private readonly bool _disposeHttpClient;
+    private readonly Func<
+        DotRocksConnectionOptions,
+        CancellationToken,
+        ValueTask<DotRocksServerCapabilities?>
+    > _capabilityProbe;
+    private DotRocksServerCapabilities? _capabilities;
     private bool _isDisposed;
 
     /// <summary>
@@ -26,12 +34,18 @@ public sealed class DotRocksStreamLoadClient : IDisposable
     internal DotRocksStreamLoadClient(
         DotRocksConnectionOptions options,
         HttpClient httpClient,
-        bool disposeHttpClient
+        bool disposeHttpClient,
+        Func<
+            DotRocksConnectionOptions,
+            CancellationToken,
+            ValueTask<DotRocksServerCapabilities?>
+        >? capabilityProbe = null
     )
     {
         _options = options;
         _httpClient = httpClient;
         _disposeHttpClient = disposeHttpClient;
+        _capabilityProbe = capabilityProbe ?? ProbeServerCapabilitiesAsync;
         ValidateTransportSecurity(options);
     }
 
@@ -112,6 +126,12 @@ public sealed class DotRocksStreamLoadClient : IDisposable
         ValidateIdentifier(tableName, nameof(tableName));
         ArgumentNullException.ThrowIfNull(options);
 
+        if (options.IsMultiTable)
+        {
+            await EnsureMultiTableTransactionSupportedAsync(cancellationToken)
+                .ConfigureAwait(false);
+        }
+
         DotRocksStreamLoadResult result = await SendTransactionOperationAsync(
                 "begin",
                 options.BuildBeginHeaders(databaseName, tableName),
@@ -119,6 +139,44 @@ public sealed class DotRocksStreamLoadClient : IDisposable
             )
             .ConfigureAwait(false);
         return new DotRocksStreamLoadTransaction(this, databaseName, tableName, options, result);
+    }
+
+    // Multi-table Stream Load transactions are a StarRocks 4.0+ capability; earlier lines are
+    // single-table only. Probe the server version once (lazily, only for the multi-table path) and
+    // reject before any HTTP call when the version is known to predate support. When the version
+    // cannot be determined, defer to the server's own rejection rather than blocking a valid setup.
+    private async ValueTask EnsureMultiTableTransactionSupportedAsync(
+        CancellationToken cancellationToken
+    )
+    {
+        _capabilities ??= await _capabilityProbe(_options, cancellationToken).ConfigureAwait(false);
+
+        if (_capabilities is { SupportsMultiTableStreamLoadTransaction: false })
+        {
+            throw new DotRocksStreamLoadException(
+                $"Multi-table Stream Load transactions require StarRocks 4.0 or later; the server reports '{_capabilities.ServerVersion.Raw}'. Use single-table transactions on this server."
+            );
+        }
+    }
+
+    private static async ValueTask<DotRocksServerCapabilities?> ProbeServerCapabilitiesAsync(
+        DotRocksConnectionOptions options,
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            using DotRocksPhysicalConnection probe = await DotRocksPhysicalConnection
+                .OpenAsync(options, cancellationToken)
+                .ConfigureAwait(false);
+            return probe.Capabilities;
+        }
+        catch (DotRocksException)
+        {
+            // The query port may be unreachable from a Stream-Load-only deployment; fall back to
+            // server-side enforcement instead of failing a load that might be valid.
+            return null;
+        }
     }
 
     /// <inheritdoc />

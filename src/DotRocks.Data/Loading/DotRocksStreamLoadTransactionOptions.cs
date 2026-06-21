@@ -13,7 +13,9 @@ public sealed class DotRocksStreamLoadTransactionOptions
     public string? Label { get; set; }
 
     /// <summary>
-    /// Gets or sets a value indicating whether the transaction can load multiple tables.
+    /// Gets or sets a value indicating whether the transaction can load multiple tables. Requires
+    /// StarRocks 4.0 or later; on earlier lines (single-table only) beginning the transaction is
+    /// rejected.
     /// </summary>
     public bool IsMultiTable { get; set; }
 

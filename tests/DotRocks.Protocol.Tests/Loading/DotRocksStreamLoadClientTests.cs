@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using DotRocks.Data;
 using DotRocks.Data.Loading;
+using DotRocks.Data.Protocol.Handshake;
 using Xunit;
 
 namespace DotRocks.Protocol.Tests.Loading;
@@ -864,12 +865,163 @@ public sealed class DotRocksStreamLoadClientTests
         return transaction;
     }
 
+    [Fact]
+    public async Task BeginTransactionAsync_MultiTableOnPre40Server_RejectsBeforeHttp()
+    {
+        using var handler = new RecordingHandler(
+            static (_, _) => Task.FromResult(TransactionResponse())
+        );
+        using var httpClient = new HttpClient(handler);
+        using DotRocksStreamLoadClient client = CreateClient(
+            httpClient,
+            CapabilityProbeFor("3.3.5")
+        );
+
+        DotRocksStreamLoadException exception = await Assert
+            .ThrowsAsync<DotRocksStreamLoadException>(async () =>
+                await client
+                    .BeginTransactionAsync(
+                        "warehouse",
+                        "events",
+                        new DotRocksStreamLoadTransactionOptions
+                        {
+                            Label = "tx_label",
+                            IsMultiTable = true,
+                        },
+                        TestContext.Current.CancellationToken
+                    )
+                    .ConfigureAwait(true)
+            )
+            .ConfigureAwait(true);
+
+        Assert.Contains("4.0", exception.Message, StringComparison.Ordinal);
+        Assert.Null(handler.Request);
+    }
+
+    [Fact]
+    public async Task BeginTransactionAsync_MultiTableOn40Server_Proceeds()
+    {
+        using var handler = new RecordingHandler(
+            static (_, _) => Task.FromResult(TransactionResponse())
+        );
+        using var httpClient = new HttpClient(handler);
+        using DotRocksStreamLoadClient client = CreateClient(
+            httpClient,
+            CapabilityProbeFor("4.0.7")
+        );
+
+        DotRocksStreamLoadTransaction transaction = await client
+            .BeginTransactionAsync(
+                "warehouse",
+                "events",
+                new DotRocksStreamLoadTransactionOptions
+                {
+                    Label = "tx_label",
+                    IsMultiTable = true,
+                },
+                TestContext.Current.CancellationToken
+            )
+            .ConfigureAwait(true);
+
+        Assert.Equal("tx_label", transaction.Label);
+        Assert.NotNull(handler.Request);
+        AssertHeader(handler.Request!.Headers, "transaction_type", "multi");
+    }
+
+    [Fact]
+    public async Task BeginTransactionAsync_MultiTableProbeFails_FallsBackToServer()
+    {
+        using var handler = new RecordingHandler(
+            static (_, _) => Task.FromResult(TransactionResponse())
+        );
+        using var httpClient = new HttpClient(handler);
+        using DotRocksStreamLoadClient client = CreateClient(
+            httpClient,
+            static (_, _) => ValueTask.FromResult<DotRocksServerCapabilities?>(null)
+        );
+
+        DotRocksStreamLoadTransaction transaction = await client
+            .BeginTransactionAsync(
+                "warehouse",
+                "events",
+                new DotRocksStreamLoadTransactionOptions
+                {
+                    Label = "tx_label",
+                    IsMultiTable = true,
+                },
+                TestContext.Current.CancellationToken
+            )
+            .ConfigureAwait(true);
+
+        Assert.Equal("tx_label", transaction.Label);
+        Assert.NotNull(handler.Request);
+    }
+
+    [Fact]
+    public async Task BeginTransactionAsync_SingleTable_DoesNotProbe()
+    {
+        using var handler = new RecordingHandler(
+            static (_, _) => Task.FromResult(TransactionResponse())
+        );
+        using var httpClient = new HttpClient(handler);
+        using DotRocksStreamLoadClient client = CreateClient(
+            httpClient,
+            static (_, _) =>
+                throw new Xunit.Sdk.XunitException(
+                    "Single-table transactions must not probe server capabilities."
+                )
+        );
+
+        DotRocksStreamLoadTransaction transaction = await client
+            .BeginTransactionAsync(
+                "warehouse",
+                "events",
+                new DotRocksStreamLoadTransactionOptions { Label = "tx_label" },
+                TestContext.Current.CancellationToken
+            )
+            .ConfigureAwait(true);
+
+        Assert.Equal("tx_label", transaction.Label);
+    }
+
+    private static Func<
+        DotRocksConnectionOptions,
+        CancellationToken,
+        ValueTask<DotRocksServerCapabilities?>
+    > CapabilityProbeFor(string starRocksVersion) =>
+        (_, _) =>
+            ValueTask.FromResult<DotRocksServerCapabilities?>(
+                DotRocksServerCapabilities.For(
+                    DotRocksServerVersion.Parse($"8.0.33-StarRocks-{starRocksVersion}")
+                )
+            );
+
     private static DotRocksStreamLoadClient CreateClient(HttpClient httpClient)
     {
         DotRocksConnectionOptions options = DotRocksConnectionOptions.Parse(
             "Server=starrocks.local;User ID=alice;Password=secret;Allow Insecure Stream Load=true"
         );
         return new DotRocksStreamLoadClient(options, httpClient, disposeHttpClient: false);
+    }
+
+    private static DotRocksStreamLoadClient CreateClient(
+        HttpClient httpClient,
+        Func<
+            DotRocksConnectionOptions,
+            CancellationToken,
+            ValueTask<DotRocksServerCapabilities?>
+        > capabilityProbe
+    )
+    {
+        DotRocksConnectionOptions options = DotRocksConnectionOptions.Parse(
+            "Server=starrocks.local;User ID=alice;Password=secret;Allow Insecure Stream Load=true"
+        );
+        return new DotRocksStreamLoadClient(
+            options,
+            httpClient,
+            disposeHttpClient: false,
+            capabilityProbe
+        );
     }
 
     private static HttpResponseMessage JsonResponse(
