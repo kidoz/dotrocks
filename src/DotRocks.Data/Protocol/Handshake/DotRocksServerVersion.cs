@@ -123,6 +123,25 @@ internal readonly struct DotRocksServerVersion
         );
     }
 
+    /// <summary>
+    /// Creates a recognized StarRocks version from explicit components. Intended for the
+    /// capability derivation table's introduced-in / removed-in thresholds, not for parsing.
+    /// </summary>
+    public static DotRocksServerVersion ForStarRocks(int major, int minor, int patch)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(major);
+        ArgumentOutOfRangeException.ThrowIfNegative(minor);
+        ArgumentOutOfRangeException.ThrowIfNegative(patch);
+
+        return new DotRocksServerVersion(
+            true,
+            major,
+            minor,
+            patch,
+            string.Create(CultureInfo.InvariantCulture, $"{major}.{minor}.{patch}")
+        );
+    }
+
     /// <inheritdoc />
     public int CompareTo(DotRocksServerVersion other)
     {

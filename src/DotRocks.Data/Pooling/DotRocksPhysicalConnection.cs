@@ -20,14 +20,21 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
     private volatile bool _isDisposed;
     private volatile bool _isBroken;
 
-    private DotRocksPhysicalConnection(TcpClient client, Stream stream, string serverVersion)
+    private DotRocksPhysicalConnection(
+        TcpClient client,
+        Stream stream,
+        DotRocksServerCapabilities capabilities
+    )
     {
         _client = client;
         _stream = stream;
-        ServerVersion = serverVersion;
+        Capabilities = capabilities;
     }
 
-    public string ServerVersion { get; }
+    /// <summary>The StarRocks feature gates negotiated from the handshake server version.</summary>
+    public DotRocksServerCapabilities Capabilities { get; }
+
+    public string ServerVersion => Capabilities.ServerVersion.Raw;
 
     public bool IsReusable => !_isDisposed && !_isBroken && _client.Connected && IsSocketAlive();
 
@@ -109,7 +116,10 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
                 .ConfigureAwait(false);
             AuthenticationResult.Read(authResultPayload, handshake.ConnectionId);
 
-            var physical = new DotRocksPhysicalConnection(client, stream, handshake.ServerVersion);
+            var capabilities = DotRocksServerCapabilities.For(
+                DotRocksServerVersion.Parse(handshake.ServerVersion)
+            );
+            var physical = new DotRocksPhysicalConnection(client, stream, capabilities);
             client = null;
             stream = null;
             return physical;
