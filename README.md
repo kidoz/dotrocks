@@ -89,6 +89,12 @@ revocation in offline mode to avoid a blocking OCSP/CRL fetch during the handsha
 `Trust Server Certificate=true` disables validation and is intended only for controlled
 local test environments with self-signed certificates.
 
+DotRocks gates version-specific behavior on the StarRocks version, which it reads with
+`SELECT current_version()` (the MySQL-protocol handshake only reports a compatibility version
+such as `8.0.33`). Set `Server Compatibility Level` to pin that version — for example
+`Server Compatibility Level=4.0` — when detection is unavailable or you want to force a
+specific capability set. When unset, DotRocks detects the version per connection.
+
 ## Entity Framework Core
 
 `DotRocks.EntityFrameworkCore` provides the current EF Core provider surface for
