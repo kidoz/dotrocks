@@ -15,14 +15,27 @@ public sealed class DotRocks.Analyzers.EntityFrameworkCore.EfValueGeneratedNever
   public property System.Collections.Immutable.ImmutableArray<Microsoft.CodeAnalysis.DiagnosticDescriptor> SupportedDiagnostics { get; }
   public virtual method System.Void Initialize(Microsoft.CodeAnalysis.Diagnostics.AnalysisContext context)
 
+public sealed class DotRocks.Analyzers.EntityFrameworkCore.MultiRowSaveChangesAnalyzer Microsoft.CodeAnalysis.Diagnostics.DiagnosticAnalyzer
+  public DotRocks.Analyzers.EntityFrameworkCore.MultiRowSaveChangesAnalyzer()
+  public property System.Collections.Immutable.ImmutableArray<Microsoft.CodeAnalysis.DiagnosticDescriptor> SupportedDiagnostics { get; }
+  public virtual method System.Void Initialize(Microsoft.CodeAnalysis.Diagnostics.AnalysisContext context)
+
 public sealed class DotRocks.Analyzers.EntityFrameworkCore.UnsupportedBinaryMappingAnalyzer Microsoft.CodeAnalysis.Diagnostics.DiagnosticAnalyzer
   public DotRocks.Analyzers.EntityFrameworkCore.UnsupportedBinaryMappingAnalyzer()
+  public property System.Collections.Immutable.ImmutableArray<Microsoft.CodeAnalysis.DiagnosticDescriptor> SupportedDiagnostics { get; }
+  public virtual method System.Void Initialize(Microsoft.CodeAnalysis.Diagnostics.AnalysisContext context)
+
+public sealed class DotRocks.Analyzers.EntityFrameworkCore.UnsupportedEfApiAnalyzer Microsoft.CodeAnalysis.Diagnostics.DiagnosticAnalyzer
+  public DotRocks.Analyzers.EntityFrameworkCore.UnsupportedEfApiAnalyzer()
   public property System.Collections.Immutable.ImmutableArray<Microsoft.CodeAnalysis.DiagnosticDescriptor> SupportedDiagnostics { get; }
   public virtual method System.Void Initialize(Microsoft.CodeAnalysis.Diagnostics.AnalysisContext context)
 
 public static class DotRocks.Analyzers.Infrastructure.DotRocksDiagnosticDescriptors
   public static field System.String InsecureStreamLoadEndpointDiagnosticId
   public static field System.String MissingValueGeneratedNeverDiagnosticId
+  public static field System.String MultiRowSaveChangesDiagnosticId
   public static field System.String TransactionDoubleCompletionDiagnosticId
   public static field System.String UnsupportedBinaryMappingDiagnosticId
+  public static field System.String UnsupportedBulkDmlDiagnosticId
+  public static field System.String UnsupportedDatabaseCreatorDiagnosticId
 

@@ -380,6 +380,241 @@ public sealed class DotRocksUsageAnalyzerTests
         );
     }
 
+    [Theory]
+    [InlineData("EnsureCreated")]
+    [InlineData("EnsureCreatedAsync")]
+    [InlineData("EnsureDeleted")]
+    [InlineData("EnsureDeletedAsync")]
+    public async Task UnsupportedEfDatabaseCreatorApi_ReportsDiagnostic(string methodName)
+    {
+        Diagnostic[] diagnostics = await AnalyzeAsync(
+                EfStubs
+                    + $$"""
+
+                    internal sealed class SampleContext : Microsoft.EntityFrameworkCore.DbContext
+                    {
+                    }
+
+                    internal static class Sample
+                    {
+                        public static void Run(SampleContext context)
+                        {
+                            _ = context.Database.{{methodName}}();
+                        }
+                    }
+                    """
+            )
+            .ConfigureAwait(true);
+
+        Assert.Contains(
+            diagnostics,
+            diagnostic =>
+                diagnostic.Id
+                == DotRocksDiagnosticDescriptors.UnsupportedDatabaseCreatorDiagnosticId
+        );
+    }
+
+    [Fact]
+    public async Task NonEfEnsureCreated_DoesNotReportDiagnostic()
+    {
+        Diagnostic[] diagnostics = await AnalyzeAsync(
+                """
+                internal sealed class Database
+                {
+                    public bool EnsureCreated() => true;
+                }
+
+                internal static class Sample
+                {
+                    public static void Run(Database database)
+                    {
+                        _ = database.EnsureCreated();
+                    }
+                }
+                """
+            )
+            .ConfigureAwait(true);
+
+        Assert.DoesNotContain(
+            diagnostics,
+            diagnostic =>
+                diagnostic.Id
+                == DotRocksDiagnosticDescriptors.UnsupportedDatabaseCreatorDiagnosticId
+        );
+    }
+
+    [Theory]
+    [InlineData("ExecuteUpdate")]
+    [InlineData("ExecuteUpdateAsync")]
+    [InlineData("ExecuteDelete")]
+    [InlineData("ExecuteDeleteAsync")]
+    public async Task UnsupportedEfBulkDmlApi_ReportsDiagnostic(string methodName)
+    {
+        Diagnostic[] diagnostics = await AnalyzeAsync(
+                EfStubs
+                    + $$"""
+
+                    internal sealed class Widget
+                    {
+                        public int Id { get; set; }
+                    }
+
+                    internal static class Sample
+                    {
+                        public static void Run(System.Linq.IQueryable<Widget> widgets)
+                        {
+                            _ = Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.{{methodName}}(widgets);
+                        }
+                    }
+                    """
+            )
+            .ConfigureAwait(true);
+
+        Assert.Contains(
+            diagnostics,
+            diagnostic =>
+                diagnostic.Id == DotRocksDiagnosticDescriptors.UnsupportedBulkDmlDiagnosticId
+        );
+    }
+
+    [Fact]
+    public async Task UnsupportedEfBulkDmlExtensionSyntax_ReportsDiagnostic()
+    {
+        Diagnostic[] diagnostics = await AnalyzeAsync(
+                "using Microsoft.EntityFrameworkCore;"
+                    + Environment.NewLine
+                    + EfStubs
+                    + """
+
+                    internal sealed class Widget
+                    {
+                        public int Id { get; set; }
+                    }
+
+                    internal static class Sample
+                    {
+                        public static void Run(System.Linq.IQueryable<Widget> widgets)
+                        {
+                            _ = widgets.ExecuteDelete();
+                        }
+                    }
+                    """
+            )
+            .ConfigureAwait(true);
+
+        Assert.Contains(
+            diagnostics,
+            diagnostic =>
+                diagnostic.Id == DotRocksDiagnosticDescriptors.UnsupportedBulkDmlDiagnosticId
+        );
+    }
+
+    [Fact]
+    public async Task RangeChangeFollowedBySaveChanges_ReportsDiagnostic()
+    {
+        Diagnostic[] diagnostics = await AnalyzeAsync(
+                EfStubs
+                    + """
+
+                    internal sealed class Widget
+                    {
+                        public int Id { get; set; }
+                    }
+
+                    internal sealed class SampleContext : Microsoft.EntityFrameworkCore.DbContext
+                    {
+                        public Microsoft.EntityFrameworkCore.DbSet<Widget> Widgets { get; } = new();
+                    }
+
+                    internal static class Sample
+                    {
+                        public static void Run(SampleContext context, Widget first, Widget second)
+                        {
+                            context.Widgets.AddRange(first, second);
+                            context.SaveChanges();
+                        }
+                    }
+                    """
+            )
+            .ConfigureAwait(true);
+
+        Assert.Contains(
+            diagnostics,
+            diagnostic =>
+                diagnostic.Id == DotRocksDiagnosticDescriptors.MultiRowSaveChangesDiagnosticId
+        );
+    }
+
+    [Fact]
+    public async Task DbContextRangeChangeFollowedBySaveChanges_ReportsDiagnostic()
+    {
+        Diagnostic[] diagnostics = await AnalyzeAsync(
+                EfStubs
+                    + """
+
+                    internal sealed class Widget
+                    {
+                        public int Id { get; set; }
+                    }
+
+                    internal sealed class SampleContext : Microsoft.EntityFrameworkCore.DbContext
+                    {
+                    }
+
+                    internal static class Sample
+                    {
+                        public static void Run(SampleContext context, Widget first, Widget second)
+                        {
+                            context.AddRange(first, second);
+                            context.SaveChanges();
+                        }
+                    }
+                    """
+            )
+            .ConfigureAwait(true);
+
+        Assert.Contains(
+            diagnostics,
+            diagnostic =>
+                diagnostic.Id == DotRocksDiagnosticDescriptors.MultiRowSaveChangesDiagnosticId
+        );
+    }
+
+    [Fact]
+    public async Task RangeChangeWithoutSaveChanges_DoesNotReportDiagnostic()
+    {
+        Diagnostic[] diagnostics = await AnalyzeAsync(
+                EfStubs
+                    + """
+
+                    internal sealed class Widget
+                    {
+                        public int Id { get; set; }
+                    }
+
+                    internal sealed class SampleContext : Microsoft.EntityFrameworkCore.DbContext
+                    {
+                        public Microsoft.EntityFrameworkCore.DbSet<Widget> Widgets { get; } = new();
+                    }
+
+                    internal static class Sample
+                    {
+                        public static void Run(SampleContext context, Widget first, Widget second)
+                        {
+                            context.Widgets.AddRange(first, second);
+                        }
+                    }
+                    """
+            )
+            .ConfigureAwait(true);
+
+        Assert.DoesNotContain(
+            diagnostics,
+            diagnostic =>
+                diagnostic.Id == DotRocksDiagnosticDescriptors.MultiRowSaveChangesDiagnosticId
+        );
+    }
+
     [Fact]
     public async Task NonDotRocksTransactionDoubleCompletion_DoesNotReportDiagnostic()
     {
@@ -563,6 +798,21 @@ public sealed class DotRocksUsageAnalyzerTests
             result.Output,
             StringComparison.Ordinal
         );
+        Assert.Contains(
+            DotRocksDiagnosticDescriptors.UnsupportedDatabaseCreatorDiagnosticId,
+            result.Output,
+            StringComparison.Ordinal
+        );
+        Assert.Contains(
+            DotRocksDiagnosticDescriptors.UnsupportedBulkDmlDiagnosticId,
+            result.Output,
+            StringComparison.Ordinal
+        );
+        Assert.Contains(
+            DotRocksDiagnosticDescriptors.MultiRowSaveChangesDiagnosticId,
+            result.Output,
+            StringComparison.Ordinal
+        );
     }
 
     [Fact]
@@ -665,6 +915,8 @@ public sealed class DotRocksUsageAnalyzerTests
             new EfValueGeneratedNeverAnalyzer(),
             new UnsupportedBinaryMappingAnalyzer(),
             new TransactionCompletionAnalyzer(),
+            new UnsupportedEfApiAnalyzer(),
+            new MultiRowSaveChangesAnalyzer(),
         ];
         CompilationWithAnalyzers compilationWithAnalyzers = compilation.WithAnalyzers(
             ImmutableArray.Create(analyzers)
@@ -823,6 +1075,18 @@ public sealed class DotRocksUsageAnalyzerTests
         {
             public class DbContext
             {
+                public Microsoft.EntityFrameworkCore.Infrastructure.DatabaseFacade Database { get; } = new();
+
+                public int SaveChanges() => 0;
+
+                public System.Threading.Tasks.Task<int> SaveChangesAsync() => System.Threading.Tasks.Task.FromResult(0);
+
+                public void AddRange(params object[] entities) { }
+
+                public void UpdateRange(params object[] entities) { }
+
+                public void RemoveRange(params object[] entities) { }
+
                 protected virtual void OnModelCreating(ModelBuilder modelBuilder) { }
             }
 
@@ -843,6 +1107,50 @@ public sealed class DotRocksUsageAnalyzerTests
                 public PropertyBuilder<TProperty> ValueGeneratedNever() => this;
 
                 public PropertyBuilder<TProperty> HasColumnType(string storeType) => this;
+            }
+
+            public class DbSet<TEntity>
+            {
+                public void AddRange(params TEntity[] entities) { }
+
+                public void UpdateRange(params TEntity[] entities) { }
+
+                public void RemoveRange(params TEntity[] entities) { }
+            }
+
+            public static class EntityFrameworkQueryableExtensions
+            {
+                public static int ExecuteUpdate<TEntity>(
+                    this System.Linq.IQueryable<TEntity> source
+                ) => 0;
+
+                public static System.Threading.Tasks.Task<int> ExecuteUpdateAsync<TEntity>(
+                    this System.Linq.IQueryable<TEntity> source
+                ) => System.Threading.Tasks.Task.FromResult(0);
+
+                public static int ExecuteDelete<TEntity>(
+                    this System.Linq.IQueryable<TEntity> source
+                ) => 0;
+
+                public static System.Threading.Tasks.Task<int> ExecuteDeleteAsync<TEntity>(
+                    this System.Linq.IQueryable<TEntity> source
+                ) => System.Threading.Tasks.Task.FromResult(0);
+            }
+        }
+
+        namespace Microsoft.EntityFrameworkCore.Infrastructure
+        {
+            public sealed class DatabaseFacade
+            {
+                public bool EnsureCreated() => true;
+
+                public System.Threading.Tasks.Task<bool> EnsureCreatedAsync() =>
+                    System.Threading.Tasks.Task.FromResult(true);
+
+                public bool EnsureDeleted() => true;
+
+                public System.Threading.Tasks.Task<bool> EnsureDeletedAsync() =>
+                    System.Threading.Tasks.Task.FromResult(true);
             }
         }
         """;

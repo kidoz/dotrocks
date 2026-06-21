@@ -1,3 +1,4 @@
+using System.Linq;
 using DotRocks.Data;
 using DotRocks.Data.Loading;
 using Microsoft.EntityFrameworkCore;
@@ -34,6 +35,11 @@ namespace Microsoft.EntityFrameworkCore
 {
     public class DbContext
     {
+        public Microsoft.EntityFrameworkCore.Infrastructure.DatabaseFacade Database { get; } =
+            new();
+
+        public int SaveChanges() => 0;
+
         protected virtual void OnModelCreating(ModelBuilder modelBuilder) { }
     }
 
@@ -59,6 +65,24 @@ namespace Microsoft.EntityFrameworkCore
 
         public PropertyBuilder<TProperty> HasColumnType(string storeType) => this;
     }
+
+    public class DbSet<TEntity>
+    {
+        public void AddRange(params TEntity[] entities) { }
+    }
+
+    public static class EntityFrameworkQueryableExtensions
+    {
+        public static int ExecuteDelete<TEntity>(this IQueryable<TEntity> source) => 0;
+    }
+}
+
+namespace Microsoft.EntityFrameworkCore.Infrastructure
+{
+    public sealed class DatabaseFacade
+    {
+        public bool EnsureCreated() => true;
+    }
 }
 
 internal sealed class Widget
@@ -70,6 +94,8 @@ internal sealed class Widget
 
 internal sealed class SampleContext : DbContext
 {
+    public DbSet<Widget> Widgets { get; } = new();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Widget>().HasKey(widget => widget.Id);
@@ -77,6 +103,24 @@ internal sealed class SampleContext : DbContext
         modelBuilder.Entity<Widget>().Property(widget => widget.Id).ValueGeneratedNever();
 #else
         modelBuilder.Entity<Widget>().Property(widget => widget.Data).HasColumnType("varbinary");
+#endif
+    }
+}
+
+internal static class EfUsageSample
+{
+    public static void Run(
+        SampleContext context,
+        IQueryable<Widget> widgets,
+        Widget first,
+        Widget second
+    )
+    {
+#if DIAGNOSTIC
+        _ = context.Database.EnsureCreated();
+        _ = EntityFrameworkQueryableExtensions.ExecuteDelete(widgets);
+        context.Widgets.AddRange(first, second);
+        context.SaveChanges();
 #endif
     }
 }

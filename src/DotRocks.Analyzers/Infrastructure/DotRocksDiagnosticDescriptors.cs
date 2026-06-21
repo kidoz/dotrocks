@@ -27,6 +27,21 @@ public static class DotRocksDiagnosticDescriptors
     /// </summary>
     public const string TransactionDoubleCompletionDiagnosticId = "DTR0004";
 
+    /// <summary>
+    /// Diagnostic id for unsupported EF EnsureCreated and EnsureDeleted usage.
+    /// </summary>
+    public const string UnsupportedDatabaseCreatorDiagnosticId = "DTR0005";
+
+    /// <summary>
+    /// Diagnostic id for unsupported EF ExecuteUpdate and ExecuteDelete usage.
+    /// </summary>
+    public const string UnsupportedBulkDmlDiagnosticId = "DTR0006";
+
+    /// <summary>
+    /// Diagnostic id for source-visible range changes followed by SaveChanges.
+    /// </summary>
+    public const string MultiRowSaveChangesDiagnosticId = "DTR0007";
+
     internal static readonly DiagnosticDescriptor InsecureStreamLoadEndpoint = new(
         InsecureStreamLoadEndpointDiagnosticId,
         "Avoid insecure Stream Load endpoints with credentials",
@@ -65,5 +80,35 @@ public static class DotRocksDiagnosticDescriptors
         DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
         description: "DotRocks SQL transactions and Stream Load transactions are single-use after commit or rollback."
+    );
+
+    internal static readonly DiagnosticDescriptor UnsupportedDatabaseCreator = new(
+        UnsupportedDatabaseCreatorDiagnosticId,
+        "EF database creator API is unsupported",
+        "DotRocks EF Core does not support '{0}'",
+        "Usage",
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "DotRocks EF Core supports migrations for conservative StarRocks DDL; EnsureCreated and EnsureDeleted are explicit unsupported APIs."
+    );
+
+    internal static readonly DiagnosticDescriptor UnsupportedBulkDml = new(
+        UnsupportedBulkDmlDiagnosticId,
+        "EF bulk LINQ DML is unsupported",
+        "DotRocks EF Core does not support '{0}'",
+        "Usage",
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "DotRocks EF Core does not translate ExecuteUpdate or ExecuteDelete; use tracked single-row SaveChanges or raw SQL with explicit parameters."
+    );
+
+    internal static readonly DiagnosticDescriptor MultiRowSaveChanges = new(
+        MultiRowSaveChangesDiagnosticId,
+        "Avoid multi-row EF SaveChanges",
+        "Range change '{0}' followed by SaveChanges may produce unsupported multi-row DML for StarRocks",
+        "Usage",
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "StarRocks rejects a second DML against a table already written in the same SQL transaction; DotRocks EF Core supports one row per SaveChanges for tracked writes."
     );
 }
