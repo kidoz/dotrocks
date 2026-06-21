@@ -164,6 +164,13 @@ Unsupported EF Core behavior is explicit:
 - binary/varbinary EF mapping until byte-array query translation and materialization are
   broader than the verified ADO.NET reader path.
 
+These constraints are enforced at **model validation** (when the model is first built), not only
+at `SaveChanges`. DotRocks requires the whole mapped model to be write-safe: any keyed entity with
+a navigation, complex property, composite key, concurrency token, generated/default/computed value,
+or binary property is rejected up front, even for a query-only `DbContext`. Configure mapped
+properties accordingly (for example `ValueGeneratedNever()` on keys) regardless of whether you
+intend to write.
+
 A compilable EF Core sample lives at
 [`samples/DotRocks.Samples.EntityFrameworkCore`](samples/DotRocks.Samples.EntityFrameworkCore).
 It demonstrates `UseStarRocks`, `ValueGeneratedNever()`, `SaveChangesAsync` insert/update/delete,
@@ -232,11 +239,15 @@ Current diagnostics:
 | `DTR0002` | Warning | EF Core key properties without a visible `ValueGeneratedNever()` configuration. | Configure each writable key property with `ValueGeneratedNever()`. A code fix adds the property configuration for simple `HasKey(entity => entity.Id)` chains. |
 | `DTR0003` | Warning | EF Core `binary` / `varbinary` column type mappings. | Avoid EF binary mappings until DotRocks verifies EF read/write binary support. No automatic fix is provided. |
 | `DTR0004` | Warning | Source-visible double completion of `DotRocksTransaction` or `DotRocksStreamLoadTransaction`. | Commit or roll back a transaction object once and do not reuse it after completion. No automatic fix is provided because transaction flow needs human intent. |
+| `DTR0005` | Warning | EF Core `EnsureCreated` / `EnsureDeleted` calls. | Use migrations for conservative StarRocks DDL; these database creator APIs are intentionally unsupported. |
+| `DTR0006` | Warning | EF Core `ExecuteUpdate` / `ExecuteDelete` calls. | Use tracked single-row `SaveChanges` or raw SQL with explicit parameters; bulk LINQ DML is not translated. |
+| `DTR0007` | Warning | Source-visible `AddRange` / `UpdateRange` / `RemoveRange` followed by one `SaveChanges` call. | Save one row per `SaveChanges`, or use Stream Load for bulk ingestion. |
 
 Analyzer limits: diagnostics currently inspect source-visible constants, local string
 assignments, `DotRocksConnectionStringBuilder` initializers, and local method bodies.
 They do not perform interprocedural data-flow analysis, inspect runtime-built connection
-strings, or prove transaction state across method boundaries.
+strings, prove transaction state across method boundaries, or prove whether a range change
+contains only one entity at runtime.
 
 ## Stream Load
 
@@ -304,6 +315,14 @@ HTTP Stream Load endpoints send Basic authentication without transport encryptio
 rejected by default. For trusted local test environments such as the pinned Docker
 container, set `Allow Insecure Stream Load=true` explicitly.
 
+The payload is streamed to StarRocks without buffering the whole input. One limitation:
+StarRocks redirects the load from the FE to a BE/CN, and replaying the request after a redirect
+requires rewinding the body. DotRocks rewinds **seekable** streams automatically, but a
+**non-seekable** payload (a pipe, network, or compression stream) cannot be replayed and fails
+explicitly after a redirect rather than being silently buffered. For non-seekable sources, use a
+seekable stream (for example buffer to a `MemoryStream` or file) or send directly to a BE/CN
+endpoint that does not redirect.
+
 ## Observability
 
 DotRocks emits OpenTelemetry-compatible tracing and metrics. Subscribe by name via
@@ -322,6 +341,12 @@ builder.Services.AddOpenTelemetry()
 
 Pooled connections are liveness-checked on lease, so a connection the server closed while
 idle is discarded rather than handed out.
+
+Connection pooling is **process-global**, keyed by the normalized connection configuration, and is
+not owned by any single `DotRocksConnection` or `DotRocksDataSource`. Disposing a `DotRocksDataSource`
+stops it from opening new connections but does **not** evict that configuration's idle physical
+connections from the shared pools. To release all idle pooled connections process-wide, call
+`DotRocksConnection.ClearAllPools()`.
 
 ## Build and test
 
