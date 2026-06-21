@@ -2,6 +2,7 @@ using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text;
+using DotRocks.Data;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Microsoft.EntityFrameworkCore.Migrations;
 
@@ -43,6 +44,151 @@ internal sealed class DotRocksHistoryRepository(HistoryRepositoryDependencies de
     {
         cancellationToken.ThrowIfCancellationRequested();
         return Task.FromResult<IMigrationsDatabaseLock>(new DotRocksMigrationDatabaseLock(this));
+    }
+
+    // EF Core wraps the whole migration in an explicit transaction, but StarRocks rejects every
+    // non-INSERT statement inside one (3.5 allows INSERT only). The history-table reads below would
+    // otherwise run inside that transaction, so they execute on a separate, transaction-free
+    // connection. With the read queries moved out, and the generated DDL plus the history
+    // INSERT/DELETE already transaction-suppressed, the migration transaction stays empty and
+    // commits cleanly across StarRocks versions.
+
+    [SuppressMessage(
+        "Security",
+        "CA2100:Review SQL queries for security vulnerabilities",
+        Justification = "The command text is the provider-generated history existence query over escaped identifiers."
+    )]
+    public override bool Exists()
+    {
+        using DotRocksConnection connection = CreateNonTransactionalConnection();
+        if (!TryOpen(connection))
+        {
+            return false;
+        }
+
+        using DbCommand command = connection.CreateCommand();
+        command.CommandText = ExistsSql;
+        return InterpretExistsResult(command.ExecuteScalar());
+    }
+
+    [SuppressMessage(
+        "Security",
+        "CA2100:Review SQL queries for security vulnerabilities",
+        Justification = "The command text is the provider-generated history existence query over escaped identifiers."
+    )]
+    public override async Task<bool> ExistsAsync(CancellationToken cancellationToken = default)
+    {
+        DotRocksConnection connection = CreateNonTransactionalConnection();
+        await using var connectionScope = connection.ConfigureAwait(false);
+        if (!await TryOpenAsync(connection, cancellationToken).ConfigureAwait(false))
+        {
+            return false;
+        }
+
+        using DbCommand command = connection.CreateCommand();
+        command.CommandText = ExistsSql;
+        return InterpretExistsResult(
+            await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false)
+        );
+    }
+
+    [SuppressMessage(
+        "Security",
+        "CA2100:Review SQL queries for security vulnerabilities",
+        Justification = "The command text is the provider-generated applied-migrations query over escaped identifiers."
+    )]
+    public override IReadOnlyList<HistoryRow> GetAppliedMigrations()
+    {
+        if (!Exists())
+        {
+            return [];
+        }
+
+        var rows = new List<HistoryRow>();
+        using DotRocksConnection connection = CreateNonTransactionalConnection();
+        connection.Open();
+        using DbCommand command = connection.CreateCommand();
+        command.CommandText = GetAppliedMigrationsSql;
+        using DbDataReader reader = command.ExecuteReader();
+        while (reader.Read())
+        {
+            rows.Add(new HistoryRow(reader.GetString(0), reader.GetString(1)));
+        }
+
+        return rows;
+    }
+
+    [SuppressMessage(
+        "Security",
+        "CA2100:Review SQL queries for security vulnerabilities",
+        Justification = "The command text is the provider-generated applied-migrations query over escaped identifiers."
+    )]
+    public override async Task<IReadOnlyList<HistoryRow>> GetAppliedMigrationsAsync(
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (!await ExistsAsync(cancellationToken).ConfigureAwait(false))
+        {
+            return [];
+        }
+
+        var rows = new List<HistoryRow>();
+        DotRocksConnection connection = CreateNonTransactionalConnection();
+        await using var connectionScope = connection.ConfigureAwait(false);
+        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        using DbCommand command = connection.CreateCommand();
+        command.CommandText = GetAppliedMigrationsSql;
+        DbDataReader reader = await command
+            .ExecuteReaderAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await using var readerScope = reader.ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            rows.Add(new HistoryRow(reader.GetString(0), reader.GetString(1)));
+        }
+
+        return rows;
+    }
+
+    private DotRocksConnection CreateNonTransactionalConnection()
+    {
+        string? connectionString = Dependencies.Connection.ConnectionString;
+        return connectionString is null
+            ? throw new InvalidOperationException(
+                "The migration connection has no connection string to open a transaction-free history connection."
+            )
+            : new DotRocksConnection(connectionString);
+    }
+
+    private static bool TryOpen(DotRocksConnection connection)
+    {
+        try
+        {
+            connection.Open();
+            return true;
+        }
+        catch (DotRocksException)
+        {
+            // The database does not exist (StarRocks refuses login to a missing database), so the
+            // history table cannot exist either.
+            return false;
+        }
+    }
+
+    private static async Task<bool> TryOpenAsync(
+        DotRocksConnection connection,
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+        catch (DotRocksException)
+        {
+            return false;
+        }
     }
 
     bool IHistoryRepository.CreateIfNotExists()
