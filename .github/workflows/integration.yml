@@ -22,7 +22,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        starrocks-version: ["3.3.5", "4.0.7"]
+        starrocks-version: ["3.5.5", "4.0.7"]
 
     env:
       DOTNET_NOLOGO: true
