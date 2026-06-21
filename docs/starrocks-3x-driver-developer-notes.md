@@ -1,6 +1,8 @@
 # StarRocks 3.x Driver Developer Notes
 
-Source snapshot: 2026-06-20.
+Source snapshot: 2026-06-20. Live validation: 2026-06-21 against
+`starrocks/allin1-ubuntu:3.5.5` and `4.0.7` (sections marked "verified live" reflect
+observed image behavior, which in places differs from the published docs).
 
 This document summarizes StarRocks 3.x behavior that matters when building and
 maintaining DotRocks against older lines. It is research guidance, not a
@@ -136,6 +138,10 @@ mapping, with the decimal boundary as the key difference:
 
 Important 3.x type notes:
 
+- Bare integer literals are typed per version: a `SELECT 1` returns `INT` (`int`) on
+  3.3/4.0 but `BIGINT` (`long`) on 3.5 — verified live. The driver maps the wire type
+  faithfully, so consumers and tests must not assume a fixed CLR integer width for an
+  unqualified literal; compare numerically.
 - `LARGEINT` is a 16-byte signed integer. Driver tests should cover min, max, and
   ordinary values.
 - `DECIMAL256` is not available on 3.x. 3.x supports Fast DECIMAL / DECIMAL128
@@ -158,7 +164,13 @@ below 3.5.
 3.5 SQL transaction limitations that DotRocks must preserve:
 
 - Beta feature.
-- Only `INSERT` and `SELECT` statements are supported inside SQL transactions.
+- **Only `INSERT` is supported inside an explicit transaction.** The 3.5 docs say
+  `INSERT` and `SELECT`, but live testing against `starrocks/allin1-ubuntu:3.5.5`
+  showed that `SELECT` (literal, table, and `information_schema`), `DELETE`, and DDL
+  all fail inside `START TRANSACTION ... COMMIT` with `ERROR 5305 (25P01): Explicit
+  transaction only support insert statement`. Treat the documented "INSERT and
+  SELECT" allowance as not reliable on this line. An empty transaction
+  (`START TRANSACTION; COMMIT;`) does commit.
 - Multiple `INSERT` statements against the same table are not allowed.
 - Target tables must be in the same database.
 - Previous transaction writes are invisible to later statements in the same
@@ -180,6 +192,16 @@ DotRocks requirements:
 - Never return a pooled physical connection with an active transaction.
 - Reject foreign, completed, or mismatched transaction objects immediately.
 - Disable or reject savepoints.
+
+EF Core migrations on 3.5:
+
+- EF Core 10 wraps each migration in an explicit transaction and offers no opt-out.
+  Because 3.5 rejects every non-`INSERT` statement in a transaction, the migration's
+  history-table reads (`Exists`, `GetAppliedMigrations`) would fail there.
+- DotRocks runs those history reads on a separate, transaction-free connection. The
+  generated DDL is transaction-suppressed and the history `INSERT`/`DELETE` is
+  auto-suppressed (because the DDL is), so the migration transaction stays empty and
+  commits. This is verified green against 3.5.5 and 4.0.7.
 
 ## Stream Load
 
@@ -297,9 +319,12 @@ DotRocks should not depend on them. The driver should:
 ## Capability Gates
 
 DotRocks needs a runtime version/capability model before it can support multiple
-StarRocks lines cleanly. Populate an internal capability profile from the
-handshake server version plus live feature probes where the version string is
-ambiguous:
+StarRocks lines cleanly. Populate an internal capability profile from the StarRocks
+version. Note that the MySQL-protocol handshake only reports a bare compatibility
+string (for example `8.0.33`, with no `StarRocks` marker) — verified live — so the
+real version must come from `SELECT current_version()` (for example `3.5.5-fd4e51b`).
+A `Server Compatibility Level` connection-string override can pin the version when it
+is unavailable or unexpected:
 
 | Capability | 4.0 baseline | 3.5 | 3.4/3.3 | 3.2 | 3.1/3.0 |
 | --- | --- | --- | --- | --- | --- |
@@ -317,14 +342,18 @@ ambiguous:
 
 Implementation work:
 
-- Add `DotRocksServerVersion` parsing from handshake strings such as
-  `8.0.33-StarRocks-3.5.x`.
+- Add `DotRocksServerVersion` parsing. The source is `SELECT current_version()`
+  (`ParseCurrentVersion`, a bare `major.minor.patch` with a build-hash suffix and no
+  marker), not the handshake `server_version`. `Parse` (marker-anchored) and
+  `TryParseLevel` (bare override values) share the same scanner.
 - Add `DotRocksServerCapabilities` with flags for SQL transactions, SQL
   transaction DML set, Stream Load transaction multi-table support,
-  `prepared_timeout`, TLS availability, DECIMAL256, and HTTP SQL API.
-- Make capability checks happen before feature execution where possible.
-- Use feature probes only for behavior that cannot be trusted from version
-  strings.
+  `prepared_timeout`, TLS availability, DECIMAL256, and HTTP SQL API, derived from a
+  single introduced-in threshold table (forward-compatible for future lines).
+- Make capability checks happen before feature execution where possible — for
+  example, reject multi-table Stream Load transactions on pre-4.0 servers.
+- Resolve capabilities lazily where a gate consults them, not on every connection
+  open, so the `current_version()` round-trip is only paid when needed.
 - Surface unsupported capability failures as `NotSupportedException` or a
   specific DotRocks exception with sanitized messages.
 
