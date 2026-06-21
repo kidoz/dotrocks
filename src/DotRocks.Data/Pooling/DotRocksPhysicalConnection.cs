@@ -129,7 +129,18 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
         }
         catch (MalformedPacketException ex)
         {
-            throw new DotRocksException("StarRocks returned malformed protocol bytes.", ex);
+            // A peer that accepts the socket then drops it during the handshake (RST or FIN)
+            // surfaces as an end-of-stream/IO failure wrapped in a malformed-packet error. That is
+            // a transient open failure (e.g. a draining/restarting FE) and is safe to retry, unlike
+            // genuinely malformed handshake bytes, which stay non-transient.
+            throw new DotRocksException(
+                "StarRocks returned malformed protocol bytes.",
+                serverErrorCode: null,
+                sqlState: null,
+                isTransient: ex.InnerException is EndOfStreamException or IOException,
+                connectionId: null,
+                innerException: ex
+            );
         }
         catch (SocketException ex)
         {
