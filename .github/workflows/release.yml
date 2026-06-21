@@ -92,6 +92,18 @@ jobs:
             artifacts/packages/*.snupkg
           if-no-files-found: error
 
+      # Trusted Publishing: exchange the GitHub OIDC token for a short-lived nuget.org API key
+      # (no long-lived NUGET_API_KEY secret). Requires id-token: write (set above) and a trusted
+      # publishing policy on nuget.org for this repo + workflow + the `nuget` environment.
+      - name: NuGet login (trusted publishing)
+        id: nuget-login
+        if: github.event_name == 'release'
+        uses: NuGet/login@v1
+        with:
+          # The nuget.org account username (profile name), not an email address. Kept in a secret
+          # so it is masked in logs, per the NuGet Trusted Publishing guidance.
+          user: ${{ secrets.NUGET_USER }}
+
       - name: Publish to NuGet
         if: github.event_name == 'release'
         shell: bash
@@ -105,4 +117,4 @@ jobs:
               --source https://api.nuget.org/v3/index.json
           done
         env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+          NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
