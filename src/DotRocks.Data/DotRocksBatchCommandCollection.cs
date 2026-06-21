@@ -13,8 +13,7 @@ internal sealed class DotRocksBatchCommandCollection : DbBatchCommandCollection
 
     public override void Add(DbBatchCommand item)
     {
-        ArgumentNullException.ThrowIfNull(item);
-        _items.Add(item);
+        _items.Add(Validate(item));
     }
 
     public override void Clear() => _items.Clear();
@@ -30,8 +29,7 @@ internal sealed class DotRocksBatchCommandCollection : DbBatchCommandCollection
 
     public override void Insert(int index, DbBatchCommand item)
     {
-        ArgumentNullException.ThrowIfNull(item);
-        _items.Insert(index, item);
+        _items.Insert(index, Validate(item));
     }
 
     public override bool Remove(DbBatchCommand item) => _items.Remove(item);
@@ -42,7 +40,19 @@ internal sealed class DotRocksBatchCommandCollection : DbBatchCommandCollection
 
     protected override void SetBatchCommand(int index, DbBatchCommand batchCommand)
     {
-        ArgumentNullException.ThrowIfNull(batchCommand);
-        _items[index] = batchCommand;
+        _items[index] = Validate(batchCommand);
+    }
+
+    // Only DotRocksBatchCommand objects (created by DotRocksBatch.CreateBatchCommand) can execute,
+    // because execution casts to that type. Reject foreign commands at insertion with a clear
+    // message instead of letting them fail later with an InvalidCastException.
+    private static DotRocksBatchCommand Validate(DbBatchCommand item)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        return item as DotRocksBatchCommand
+            ?? throw new ArgumentException(
+                "DotRocksBatch only accepts batch commands created by DotRocksBatch.CreateBatchCommand().",
+                nameof(item)
+            );
     }
 }
