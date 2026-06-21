@@ -2,6 +2,7 @@ using System.Data.Common;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using DotRocks.Data;
+using DotRocks.Data.Protocol.Handshake;
 
 namespace DotRocks.Data.Loading;
 
@@ -23,7 +24,8 @@ internal sealed record DotRocksConnectionOptions(
     bool AllowInsecureStreamLoad,
     int MaxConnectionRetries,
     TimeSpan ConnectionRetryDelay,
-    string ConnectionString
+    string ConnectionString,
+    DotRocksServerVersion? ServerCompatibilityLevel
 )
 {
     public const string DefaultServer = "127.0.0.1";
@@ -58,7 +60,8 @@ internal sealed record DotRocksConnectionOptions(
             false,
             DefaultMaxConnectionRetries,
             TimeSpan.FromMilliseconds(DefaultConnectionRetryDelayMilliseconds),
-            string.Empty
+            string.Empty,
+            null
         );
 
     public static DotRocksConnectionOptions Parse(string? connectionString)
@@ -118,6 +121,7 @@ internal sealed record DotRocksConnectionOptions(
         );
         ArgumentOutOfRangeException.ThrowIfNegative(maxConnectionRetries);
         ArgumentOutOfRangeException.ThrowIfNegative(connectionRetryDelayMs);
+        DotRocksServerVersion? serverCompatibilityLevel = GetCompatibilityLevel(builder);
 
         Validate(
             server,
@@ -148,7 +152,8 @@ internal sealed record DotRocksConnectionOptions(
             streamLoadEndpoint,
             allowInsecureStreamLoad,
             maxConnectionRetries,
-            connectionRetryDelayMs
+            connectionRetryDelayMs,
+            serverCompatibilityLevel
         );
 
         return new DotRocksConnectionOptions(
@@ -169,7 +174,8 @@ internal sealed record DotRocksConnectionOptions(
             allowInsecureStreamLoad,
             maxConnectionRetries,
             TimeSpan.FromMilliseconds(connectionRetryDelayMs),
-            canonical
+            canonical,
+            serverCompatibilityLevel
         );
     }
 
@@ -191,7 +197,8 @@ internal sealed record DotRocksConnectionOptions(
             StreamLoadEndpoint,
             AllowInsecureStreamLoad,
             MaxConnectionRetries,
-            (int)ConnectionRetryDelay.TotalMilliseconds
+            (int)ConnectionRetryDelay.TotalMilliseconds,
+            ServerCompatibilityLevel
         );
 
     internal DotRocksConnectionPoolKey CreatePoolKey() =>
@@ -204,7 +211,8 @@ internal sealed record DotRocksConnectionOptions(
             (int)ConnectionTimeout.TotalSeconds,
             SslMode,
             TrustServerCertificate,
-            SslRevocationMode
+            SslRevocationMode,
+            ServerCompatibilityLevel
         );
 
     private static void Validate(
@@ -383,6 +391,35 @@ internal sealed record DotRocksConnectionOptions(
         return fallback;
     }
 
+    private static DotRocksServerVersion? GetCompatibilityLevel(DbConnectionStringBuilder builder)
+    {
+        foreach (string keyword in Aliases("Server Compatibility Level"))
+        {
+            if (builder.TryGetValue(keyword, out object? value))
+            {
+                string text =
+                    Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture)
+                    ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(text))
+                {
+                    return null;
+                }
+
+                if (!DotRocksServerVersion.TryParseLevel(text, out DotRocksServerVersion version))
+                {
+                    throw new ArgumentException(
+                        $"Server Compatibility Level value '{text}' is not a valid StarRocks version.",
+                        nameof(builder)
+                    );
+                }
+
+                return version;
+            }
+        }
+
+        return null;
+    }
+
     internal static Uri BuildDefaultStreamLoadEndpoint(string server) =>
         new($"http://{server}:{DefaultStreamLoadPort}", UriKind.Absolute);
 
@@ -431,6 +468,12 @@ internal sealed record DotRocksConnectionOptions(
                 "ConnectionRetryDelay",
                 "Retry Delay",
             ],
+            "Server Compatibility Level" =>
+            [
+                "Server Compatibility Level",
+                "ServerCompatibilityLevel",
+                "Compatibility Level",
+            ],
             _ => [canonical],
         };
 
@@ -451,7 +494,8 @@ internal sealed record DotRocksConnectionOptions(
         Uri streamLoadEndpoint,
         bool allowInsecureStreamLoad,
         int maxConnectionRetries,
-        int connectionRetryDelayMilliseconds
+        int connectionRetryDelayMilliseconds,
+        DotRocksServerVersion? serverCompatibilityLevel
     )
     {
         var builder = new StringBuilder();
@@ -518,6 +562,11 @@ internal sealed record DotRocksConnectionOptions(
                 System.Globalization.CultureInfo.InvariantCulture
             )
         );
+        if (serverCompatibilityLevel is { } level)
+        {
+            Append(builder, "Server Compatibility Level", level.Raw);
+        }
+
         return builder.ToString();
     }
 
@@ -543,14 +592,18 @@ internal sealed record DotRocksConnectionPoolKey(
     int ConnectionTimeoutSeconds,
     DotRocksSslMode SslMode,
     bool TrustServerCertificate,
-    X509RevocationMode SslRevocationMode
+    X509RevocationMode SslRevocationMode,
+    DotRocksServerVersion? ServerCompatibilityLevel
 )
 {
     // Equality/hash still use the real Password (pool identity), but the default record ToString
     // would print it; redact so the key cannot leak the password through logs or diagnostics.
+    // The compatibility level is part of identity so a pooled connection's computed capabilities
+    // are never reused under a different override.
     public override string ToString() =>
         $"DotRocksConnectionPoolKey {{ Server = {Server}, Port = {Port}, UserId = {UserId}, "
         + $"Password = ***, Database = {Database}, ConnectionTimeoutSeconds = {ConnectionTimeoutSeconds}, "
         + $"SslMode = {SslMode}, TrustServerCertificate = {TrustServerCertificate}, "
-        + $"SslRevocationMode = {SslRevocationMode} }}";
+        + $"SslRevocationMode = {SslRevocationMode}, "
+        + $"ServerCompatibilityLevel = {ServerCompatibilityLevel?.Raw ?? "(auto)"} }}";
 }

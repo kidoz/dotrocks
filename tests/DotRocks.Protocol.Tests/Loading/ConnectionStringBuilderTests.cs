@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using DotRocks.Data;
 using DotRocks.Data.Loading;
+using DotRocks.Data.Protocol.Handshake;
 using Xunit;
 
 namespace DotRocks.Protocol.Tests.Loading;
@@ -214,5 +215,71 @@ public sealed class ConnectionStringBuilderTests
         var builder = new DotRocksConnectionStringBuilder();
 
         Assert.Throws<ArgumentException>(() => builder.StreamLoadEndpoint = endpoint);
+    }
+
+    [Fact]
+    public void Parse_NoCompatibilityLevel_IsNull()
+    {
+        DotRocksConnectionOptions options = DotRocksConnectionOptions.Parse("Server=h;User ID=a");
+
+        Assert.Null(options.ServerCompatibilityLevel);
+    }
+
+    [Theory]
+    [InlineData("Server=h;User ID=a;Server Compatibility Level=4.0")]
+    [InlineData("Server=h;User ID=a;ServerCompatibilityLevel=4.0")]
+    [InlineData("Server=h;User ID=a;Compatibility Level=4.0")]
+    public void Parse_CompatibilityLevel_AcceptsCanonicalAndAliases(string connectionString)
+    {
+        DotRocksConnectionOptions options = DotRocksConnectionOptions.Parse(connectionString);
+
+        Assert.Equal(DotRocksServerVersion.ForStarRocks(4, 0, 0), options.ServerCompatibilityLevel);
+    }
+
+    [Fact]
+    public void Parse_InvalidCompatibilityLevel_Throws()
+    {
+        ArgumentException exception = Assert.Throws<ArgumentException>(() =>
+            DotRocksConnectionOptions.Parse("Server=h;User ID=a;Server Compatibility Level=four")
+        );
+
+        Assert.Contains("Server Compatibility Level", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Parse_CompatibilityLevel_RoundTripsThroughCanonicalString()
+    {
+        DotRocksConnectionOptions options = DotRocksConnectionOptions.Parse(
+            "Server=h;User ID=a;Server Compatibility Level=3.5.4"
+        );
+
+        DotRocksConnectionOptions reparsed = DotRocksConnectionOptions.Parse(
+            options.ConnectionString
+        );
+
+        Assert.Equal(
+            DotRocksServerVersion.ForStarRocks(3, 5, 4),
+            reparsed.ServerCompatibilityLevel
+        );
+    }
+
+    [Fact]
+    public void PoolKey_DiffersByCompatibilityLevel()
+    {
+        DotRocksConnectionPoolKey withOverride = DotRocksConnectionOptions
+            .Parse("Server=h;User ID=a;Server Compatibility Level=4.0")
+            .CreatePoolKey();
+        DotRocksConnectionPoolKey withoutOverride = DotRocksConnectionOptions
+            .Parse("Server=h;User ID=a")
+            .CreatePoolKey();
+
+        Assert.NotEqual(withoutOverride, withOverride);
+        Assert.Contains("(auto)", withoutOverride.ToString(), StringComparison.Ordinal);
+        Assert.Equal(
+            withOverride,
+            DotRocksConnectionOptions
+                .Parse("Server=h;User ID=a;Server Compatibility Level=4.0")
+                .CreatePoolKey()
+        );
     }
 }

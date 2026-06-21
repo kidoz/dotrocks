@@ -154,7 +154,7 @@ public sealed class DotRocksStreamLoadClient : IDisposable
         if (_capabilities is { SupportsMultiTableStreamLoadTransaction: false })
         {
             throw new DotRocksStreamLoadException(
-                $"Multi-table Stream Load transactions require StarRocks 4.0 or later; the server reports '{_capabilities.ServerVersion.Raw}'. Use single-table transactions on this server."
+                $"Multi-table Stream Load transactions require StarRocks 4.0 or later; the effective StarRocks version is '{_capabilities.EffectiveVersion.Raw}'. Use single-table transactions on this server."
             );
         }
     }
@@ -164,6 +164,13 @@ public sealed class DotRocksStreamLoadClient : IDisposable
         CancellationToken cancellationToken
     )
     {
+        // A pinned compatibility level is authoritative and avoids opening a control connection
+        // (which the query port may not even accept in a Stream-Load-only deployment).
+        if (options.ServerCompatibilityLevel is { } level)
+        {
+            return DotRocksServerCapabilities.For(level);
+        }
+
         try
         {
             using DotRocksPhysicalConnection probe = await DotRocksPhysicalConnection

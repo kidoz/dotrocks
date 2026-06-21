@@ -124,6 +124,48 @@ internal readonly struct DotRocksServerVersion
     }
 
     /// <summary>
+    /// Parses a bare <c>major[.minor[.patch]]</c> version such as a user-supplied
+    /// <c>Server Compatibility Level</c> value (for example <c>4.0</c>). Unlike <see cref="Parse"/>
+    /// it does not expect the <c>StarRocks</c> handshake marker. Returns <see langword="false"/> for
+    /// anything that is not a non-negative dotted version.
+    /// </summary>
+    public static bool TryParseLevel(string? value, out DotRocksServerVersion version)
+    {
+        version = Unknown;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        string[] parts = value.Trim().Split('.');
+        if (parts.Length is < 1 or > 3)
+        {
+            return false;
+        }
+
+        Span<int> components = [0, 0, 0];
+        for (int i = 0; i < parts.Length; i++)
+        {
+            if (
+                !int.TryParse(
+                    parts[i],
+                    NumberStyles.None,
+                    CultureInfo.InvariantCulture,
+                    out int component
+                )
+            )
+            {
+                return false;
+            }
+
+            components[i] = component;
+        }
+
+        version = ForStarRocks(components[0], components[1], components[2]);
+        return true;
+    }
+
+    /// <summary>
     /// Creates a recognized StarRocks version from explicit components. Intended for the
     /// capability derivation table's introduced-in / removed-in thresholds, not for parsing.
     /// </summary>

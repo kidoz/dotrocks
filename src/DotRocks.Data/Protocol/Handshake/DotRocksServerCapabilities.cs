@@ -35,6 +35,8 @@ internal sealed class DotRocksServerCapabilities
 
     private DotRocksServerCapabilities(
         DotRocksServerVersion serverVersion,
+        DotRocksServerVersion effectiveVersion,
+        bool isServerVersionOverridden,
         bool supportsHttpSqlApi,
         bool supportsMySqlProtocolTls,
         bool supportsSqlTransactions,
@@ -44,6 +46,8 @@ internal sealed class DotRocksServerCapabilities
     )
     {
         ServerVersion = serverVersion;
+        EffectiveVersion = effectiveVersion;
+        IsServerVersionOverridden = isServerVersionOverridden;
         SupportsHttpSqlApi = supportsHttpSqlApi;
         SupportsMySqlProtocolTls = supportsMySqlProtocolTls;
         SupportsSqlTransactions = supportsSqlTransactions;
@@ -52,8 +56,20 @@ internal sealed class DotRocksServerCapabilities
         SupportsDecimal256 = supportsDecimal256;
     }
 
-    /// <summary>Gets the parsed server version these capabilities were derived from.</summary>
+    /// <summary>Gets the server version detected from the handshake (always the real server version).</summary>
     public DotRocksServerVersion ServerVersion { get; }
+
+    /// <summary>
+    /// Gets the version the capability gates were derived from. Equals <see cref="ServerVersion"/>
+    /// unless a <c>Server Compatibility Level</c> override pinned a different version.
+    /// </summary>
+    public DotRocksServerVersion EffectiveVersion { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether a <c>Server Compatibility Level</c> override, rather than the
+    /// detected handshake version, determined the capability gates.
+    /// </summary>
+    public bool IsServerVersionOverridden { get; }
 
     /// <summary>Gets a value indicating whether the HTTP SQL API is available (StarRocks 3.2+).</summary>
     public bool SupportsHttpSqlApi { get; }
@@ -80,23 +96,32 @@ internal sealed class DotRocksServerCapabilities
     public bool SupportsDecimal256 { get; }
 
     /// <summary>
-    /// Derives the capability set for <paramref name="serverVersion"/>. An unrecognized version
-    /// yields a set with every capability disabled.
+    /// Derives the capability set for <paramref name="detectedVersion"/>. When
+    /// <paramref name="compatibilityOverride"/> is supplied (the <c>Server Compatibility Level</c>
+    /// escape hatch), the gates are derived from it instead, while <see cref="ServerVersion"/> still
+    /// reports the real detected version. An unrecognized effective version yields a set with every
+    /// capability disabled.
     /// </summary>
-    public static DotRocksServerCapabilities For(DotRocksServerVersion serverVersion)
+    public static DotRocksServerCapabilities For(
+        DotRocksServerVersion detectedVersion,
+        DotRocksServerVersion? compatibilityOverride = null
+    )
     {
-        bool recognized = serverVersion.IsStarRocks;
+        DotRocksServerVersion effective = compatibilityOverride ?? detectedVersion;
+        bool recognized = effective.IsStarRocks;
 
         return new DotRocksServerCapabilities(
-            serverVersion,
-            supportsHttpSqlApi: recognized && serverVersion >= HttpSqlApiSince,
-            supportsMySqlProtocolTls: recognized && serverVersion >= MySqlProtocolTlsSince,
-            supportsSqlTransactions: recognized && serverVersion >= SqlTransactionsSince,
+            detectedVersion,
+            effective,
+            isServerVersionOverridden: compatibilityOverride is not null,
+            supportsHttpSqlApi: recognized && effective >= HttpSqlApiSince,
+            supportsMySqlProtocolTls: recognized && effective >= MySqlProtocolTlsSince,
+            supportsSqlTransactions: recognized && effective >= SqlTransactionsSince,
             supportsStreamLoadPreparedTimeout: recognized
-                && serverVersion >= StreamLoadPreparedTimeoutSince,
+                && effective >= StreamLoadPreparedTimeoutSince,
             supportsMultiTableStreamLoadTransaction: recognized
-                && serverVersion >= MultiTableStreamLoadTransactionSince,
-            supportsDecimal256: recognized && serverVersion >= Decimal256Since
+                && effective >= MultiTableStreamLoadTransactionSince,
+            supportsDecimal256: recognized && effective >= Decimal256Since
         );
     }
 }

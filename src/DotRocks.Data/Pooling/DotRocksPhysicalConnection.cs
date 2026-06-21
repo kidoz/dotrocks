@@ -117,7 +117,8 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
             AuthenticationResult.Read(authResultPayload, handshake.ConnectionId);
 
             var capabilities = DotRocksServerCapabilities.For(
-                DotRocksServerVersion.Parse(handshake.ServerVersion)
+                DotRocksServerVersion.Parse(handshake.ServerVersion),
+                options.ServerCompatibilityLevel
             );
             var physical = new DotRocksPhysicalConnection(client, stream, capabilities);
             client = null;

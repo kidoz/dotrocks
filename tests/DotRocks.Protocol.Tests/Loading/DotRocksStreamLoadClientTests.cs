@@ -984,6 +984,83 @@ public sealed class DotRocksStreamLoadClientTests
         Assert.Equal("tx_label", transaction.Label);
     }
 
+    [Fact]
+    public async Task BeginTransactionAsync_MultiTableWithCompatibilityOverride_SkipsProbeAndProceeds()
+    {
+        using var handler = new RecordingHandler(
+            static (_, _) => Task.FromResult(TransactionResponse())
+        );
+        using var httpClient = new HttpClient(handler);
+        // No injected probe: the default probe would open a control connection, but the pinned
+        // compatibility level must short-circuit it (proven by the absence of a real server here).
+        using DotRocksStreamLoadClient client = CreateClientWithCompatibilityLevel(
+            httpClient,
+            "4.0"
+        );
+
+        DotRocksStreamLoadTransaction transaction = await client
+            .BeginTransactionAsync(
+                "warehouse",
+                "events",
+                new DotRocksStreamLoadTransactionOptions
+                {
+                    Label = "tx_label",
+                    IsMultiTable = true,
+                },
+                TestContext.Current.CancellationToken
+            )
+            .ConfigureAwait(true);
+
+        Assert.Equal("tx_label", transaction.Label);
+        Assert.NotNull(handler.Request);
+        AssertHeader(handler.Request!.Headers, "transaction_type", "multi");
+    }
+
+    [Fact]
+    public async Task BeginTransactionAsync_MultiTableWithPre40CompatibilityOverride_Rejects()
+    {
+        using var handler = new RecordingHandler(
+            static (_, _) => Task.FromResult(TransactionResponse())
+        );
+        using var httpClient = new HttpClient(handler);
+        using DotRocksStreamLoadClient client = CreateClientWithCompatibilityLevel(
+            httpClient,
+            "3.3"
+        );
+
+        DotRocksStreamLoadException exception = await Assert
+            .ThrowsAsync<DotRocksStreamLoadException>(async () =>
+                await client
+                    .BeginTransactionAsync(
+                        "warehouse",
+                        "events",
+                        new DotRocksStreamLoadTransactionOptions
+                        {
+                            Label = "tx_label",
+                            IsMultiTable = true,
+                        },
+                        TestContext.Current.CancellationToken
+                    )
+                    .ConfigureAwait(true)
+            )
+            .ConfigureAwait(true);
+
+        Assert.Contains("4.0", exception.Message, StringComparison.Ordinal);
+        Assert.Null(handler.Request);
+    }
+
+    private static DotRocksStreamLoadClient CreateClientWithCompatibilityLevel(
+        HttpClient httpClient,
+        string compatibilityLevel
+    )
+    {
+        DotRocksConnectionOptions options = DotRocksConnectionOptions.Parse(
+            "Server=starrocks.local;User ID=alice;Password=secret;Allow Insecure Stream Load=true;Server Compatibility Level="
+                + compatibilityLevel
+        );
+        return new DotRocksStreamLoadClient(options, httpClient, disposeHttpClient: false);
+    }
+
     private static Func<
         DotRocksConnectionOptions,
         CancellationToken,
