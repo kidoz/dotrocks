@@ -124,4 +124,49 @@ public sealed class DotRocksServerVersionTests
             DotRocksServerVersion.Parse("8.0.33-StarRocks-3.5.4").ToString()
         );
     }
+
+    [Theory]
+    // The form returned by SELECT current_version(): bare version + build-hash suffix, no marker.
+    [InlineData("3.5.5-fd4e51b", 3, 5, 5)]
+    [InlineData("4.0.7-abc1234", 4, 0, 7)]
+    [InlineData("3.3.5", 3, 3, 5)]
+    [InlineData("3.5", 3, 5, 0)]
+    [InlineData("5.0.0-future", 5, 0, 0)]
+    public void ParseCurrentVersion_ParsesBuildString(
+        string currentVersion,
+        int major,
+        int minor,
+        int patch
+    )
+    {
+        DotRocksServerVersion version = DotRocksServerVersion.ParseCurrentVersion(currentVersion);
+
+        Assert.True(version.IsStarRocks);
+        Assert.Equal(major, version.Major);
+        Assert.Equal(minor, version.Minor);
+        Assert.Equal(patch, version.Patch);
+        Assert.Equal(currentVersion, version.Raw);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("unknown")]
+    public void ParseCurrentVersion_UnrecognizedValues_AreUnknown(string? currentVersion)
+    {
+        DotRocksServerVersion version = DotRocksServerVersion.ParseCurrentVersion(currentVersion);
+
+        Assert.False(version.IsStarRocks);
+        Assert.Equal(DotRocksServerVersion.Unknown, version);
+    }
+
+    [Fact]
+    public void ParseCurrentVersion_DoesNotRequireStarRocksMarker()
+    {
+        // Unlike Parse, which is anchored on the "StarRocks" marker and rejects a bare MySQL
+        // version, ParseCurrentVersion accepts the bare build string.
+        Assert.False(DotRocksServerVersion.Parse("8.0.33").IsStarRocks);
+        Assert.True(DotRocksServerVersion.ParseCurrentVersion("3.5.5-fd4e51b").IsStarRocks);
+    }
 }

@@ -5,7 +5,6 @@ using System.Diagnostics.CodeAnalysis;
 using DotRocks.Data.Diagnostics;
 using DotRocks.Data.Loading;
 using DotRocks.Data.Pooling;
-using DotRocks.Data.Protocol.Handshake;
 using DotRocks.Data.Protocol.Results;
 
 namespace DotRocks.Data;
@@ -77,13 +76,6 @@ public sealed class DotRocksConnection : DbConnection
 
     /// <inheritdoc />
     public override string ServerVersion => _serverVersion;
-
-    /// <summary>
-    /// The StarRocks feature gates negotiated from the handshake, or <see langword="null"/> when the
-    /// connection is closed. Used internally to gate version-specific behavior.
-    /// </summary>
-    internal DotRocksServerCapabilities? ServerCapabilities =>
-        _lease?.PhysicalConnection.Capabilities;
 
     /// <inheritdoc />
     public override ConnectionState State => _state;

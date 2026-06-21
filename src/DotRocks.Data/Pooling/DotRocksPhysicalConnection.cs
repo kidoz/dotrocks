@@ -20,21 +20,19 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
     private volatile bool _isDisposed;
     private volatile bool _isBroken;
 
-    private DotRocksPhysicalConnection(
-        TcpClient client,
-        Stream stream,
-        DotRocksServerCapabilities capabilities
-    )
+    private DotRocksPhysicalConnection(TcpClient client, Stream stream, string serverVersion)
     {
         _client = client;
         _stream = stream;
-        Capabilities = capabilities;
+        ServerVersion = serverVersion;
     }
 
-    /// <summary>The StarRocks feature gates negotiated from the handshake server version.</summary>
-    public DotRocksServerCapabilities Capabilities { get; }
-
-    public string ServerVersion => Capabilities.ServerVersion.Raw;
+    /// <summary>
+    /// The MySQL-compatibility version string from the handshake (for example <c>8.0.33</c>). This
+    /// is the honest ADO.NET <c>ServerVersion</c> identity; it is not the StarRocks version and must
+    /// not be used for capability gating — query <see cref="QueryServerVersionAsync"/> for that.
+    /// </summary>
+    public string ServerVersion { get; }
 
     public bool IsReusable => !_isDisposed && !_isBroken && _client.Connected && IsSocketAlive();
 
@@ -116,11 +114,7 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
                 .ConfigureAwait(false);
             AuthenticationResult.Read(authResultPayload, handshake.ConnectionId);
 
-            var capabilities = DotRocksServerCapabilities.For(
-                DotRocksServerVersion.Parse(handshake.ServerVersion),
-                options.ServerCompatibilityLevel
-            );
-            var physical = new DotRocksPhysicalConnection(client, stream, capabilities);
+            var physical = new DotRocksPhysicalConnection(client, stream, handshake.ServerVersion);
             client = null;
             stream = null;
             return physical;
@@ -290,6 +284,38 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
                 innerException: ex
             );
         }
+    }
+
+    /// <summary>
+    /// Queries the authoritative StarRocks version via <c>SELECT current_version()</c>. The MySQL
+    /// handshake only carries a bare compatibility string (e.g. <c>8.0.33</c>), so this is the
+    /// source used for capability gating. Best-effort: any server/protocol failure (an older
+    /// server, a restricted role) yields <see cref="DotRocksServerVersion.Unknown"/> so callers gate
+    /// conservatively rather than failing the operation.
+    /// </summary>
+    public async ValueTask<DotRocksServerVersion> QueryServerVersionAsync(
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            QueryResult result = await ExecuteQueryAsync(
+                    "SELECT current_version()",
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+            if (result.Rows.Count > 0 && result.Rows[0].Length > 0)
+            {
+                return DotRocksServerVersion.ParseCurrentVersion(result.Rows[0][0]?.ToString());
+            }
+        }
+        catch (DotRocksException)
+        {
+            // A server error (e.g. the function is unavailable) leaves the connection usable; gate
+            // conservatively rather than failing.
+        }
+
+        return DotRocksServerVersion.Unknown;
     }
 
     public async ValueTask<StreamingQueryResult> ExecuteQueryStreamingAsync(

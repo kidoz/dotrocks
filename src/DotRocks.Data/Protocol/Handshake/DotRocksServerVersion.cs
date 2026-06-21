@@ -66,28 +66,51 @@ internal readonly struct DotRocksServerVersion
         }
 
         // Anchor the scan after the marker so the MySQL-compatibility prefix (e.g. "8.0.33")
-        // is never mistaken for the StarRocks version. Skip any separator (typically '-').
-        int index = markerIndex + Marker.Length;
-        while (index < serverVersion.Length && !char.IsAsciiDigit(serverVersion[index]))
+        // is never mistaken for the StarRocks version.
+        return ScanComponentsFrom(serverVersion, markerIndex + Marker.Length);
+    }
+
+    /// <summary>
+    /// Parses the StarRocks build string returned by <c>SELECT current_version()</c>, for example
+    /// <c>3.5.5-fd4e51b</c> (a bare <c>major.minor.patch</c> with a trailing build-hash suffix and
+    /// no <c>StarRocks</c> marker). This — not the MySQL handshake <c>server_version</c>, which is a
+    /// bare compatibility string like <c>8.0.33</c> — is the authoritative source for capability
+    /// gating. A null, empty, or unrecognized value yields <see cref="Unknown"/>.
+    /// </summary>
+    public static DotRocksServerVersion ParseCurrentVersion(string? currentVersion)
+    {
+        if (string.IsNullOrWhiteSpace(currentVersion))
+        {
+            return Unknown;
+        }
+
+        return ScanComponentsFrom(currentVersion, 0);
+    }
+
+    // Scans up to three dotted numeric components starting at the first digit at or after
+    // <paramref name="startIndex"/>, stopping at the first non-digit/non-dot (so build-hash and
+    // pre-release suffixes are ignored). Returns a non-StarRocks value if no component is found.
+    private static DotRocksServerVersion ScanComponentsFrom(string raw, int startIndex)
+    {
+        int index = startIndex;
+        while (index < raw.Length && !char.IsAsciiDigit(raw[index]))
         {
             index++;
         }
 
         Span<int> components = [0, 0, 0];
         int parsed = 0;
-        while (
-            parsed < 3 && index < serverVersion.Length && char.IsAsciiDigit(serverVersion[index])
-        )
+        while (parsed < 3 && index < raw.Length && char.IsAsciiDigit(raw[index]))
         {
             int start = index;
-            while (index < serverVersion.Length && char.IsAsciiDigit(serverVersion[index]))
+            while (index < raw.Length && char.IsAsciiDigit(raw[index]))
             {
                 index++;
             }
 
             if (
                 !int.TryParse(
-                    serverVersion.AsSpan(start, index - start),
+                    raw.AsSpan(start, index - start),
                     NumberStyles.None,
                     CultureInfo.InvariantCulture,
                     out int value
@@ -100,7 +123,7 @@ internal readonly struct DotRocksServerVersion
 
             components[parsed++] = value;
 
-            if (index < serverVersion.Length && serverVersion[index] == '.')
+            if (index < raw.Length && raw[index] == '.')
             {
                 index++;
                 continue;
@@ -111,16 +134,10 @@ internal readonly struct DotRocksServerVersion
 
         if (parsed == 0)
         {
-            return new DotRocksServerVersion(false, 0, 0, 0, serverVersion);
+            return new DotRocksServerVersion(false, 0, 0, 0, raw);
         }
 
-        return new DotRocksServerVersion(
-            true,
-            components[0],
-            components[1],
-            components[2],
-            serverVersion
-        );
+        return new DotRocksServerVersion(true, components[0], components[1], components[2], raw);
     }
 
     /// <summary>

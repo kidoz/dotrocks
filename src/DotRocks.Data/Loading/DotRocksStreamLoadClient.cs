@@ -176,7 +176,11 @@ public sealed class DotRocksStreamLoadClient : IDisposable
             using DotRocksPhysicalConnection probe = await DotRocksPhysicalConnection
                 .OpenAsync(options, cancellationToken)
                 .ConfigureAwait(false);
-            return probe.Capabilities;
+            // The StarRocks version is not in the handshake; query it (SELECT current_version()).
+            DotRocksServerVersion version = await probe
+                .QueryServerVersionAsync(cancellationToken)
+                .ConfigureAwait(false);
+            return DotRocksServerCapabilities.For(version);
         }
         catch (DotRocksException)
         {
