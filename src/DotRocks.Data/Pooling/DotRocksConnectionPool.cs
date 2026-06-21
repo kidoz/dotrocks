@@ -11,7 +11,7 @@ internal sealed class DotRocksConnectionPool : IDisposable
         DotRocksConnectionPool
     > Pools = new();
 
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
     private readonly DotRocksConnectionOptions _options;
 
     [SuppressMessage(

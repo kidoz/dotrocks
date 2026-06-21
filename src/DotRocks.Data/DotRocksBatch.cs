@@ -15,7 +15,7 @@ namespace DotRocks.Data;
 /// </remarks>
 public sealed class DotRocksBatch : DbBatch
 {
-    private readonly object _activeBatchGate = new();
+    private readonly Lock _activeBatchGate = new();
     private readonly DotRocksBatchCommandCollection _batchCommands = new();
     private DotRocksConnection? _connection;
     private DbTransaction? _transaction;

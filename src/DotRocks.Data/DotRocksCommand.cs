@@ -13,7 +13,7 @@ namespace DotRocks.Data;
 /// </summary>
 public sealed class DotRocksCommand : DbCommand
 {
-    private readonly object _activeCommandGate = new();
+    private readonly Lock _activeCommandGate = new();
     private readonly DotRocksParameterCollection _parameters = new();
     private CancellationTokenSource? _activeCommandCancellation;
     private DotRocksConnection? _connection;
