@@ -65,7 +65,9 @@ public sealed class DotRocksEfCoreIntegrationTests
             .ExecuteScalarAsync(TestContext.Current.CancellationToken)
             .ConfigureAwait(true);
 
-        Assert.Equal(1, value);
+        // StarRocks infers the type of a bare integer literal per version: 3.3/4.0 return INT,
+        // 3.5 returns BIGINT. The driver faithfully maps the wire type, so compare numerically.
+        Assert.Equal(1L, Convert.ToInt64(value, CultureInfo.InvariantCulture));
     }
 
     [Fact]
