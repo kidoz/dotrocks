@@ -4,6 +4,9 @@
     Keep this aligned with section 29 of DotRocks-AI-Agent-Prompt.md.
   -->
   <PropertyGroup Label="Language and analysis">
+    <!-- Pin the language version to the declared C# 14 baseline so builds do not float with the
+         installed compiler. Applies to net10.0 runtime projects and the netstandard2.0 analyzers. -->
+    <LangVersion>14.0</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AnalysisMode>AllEnabledByDefault</AnalysisMode>
