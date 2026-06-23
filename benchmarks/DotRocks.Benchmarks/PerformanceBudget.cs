@@ -97,10 +97,12 @@ internal static class PerformanceBudgetCatalog
                 ),
                 // Packet framing read path. Budgets are set from measured values with headroom for
                 // slower CI runners; they guard the per-row allocation hot path against regressions.
+                // ~712 B measured with the single-packet fast path; the 1 KB ceiling guards that
+                // path so a regression back to the buffered ArrayBufferWriter copy (~1.25 KB) fails.
                 ["ReadSinglePacketPayload"] = new(
                     "ReadSinglePacketPayload",
                     MaxMeanNanoseconds: 5_000,
-                    MaxAllocatedBytes: 2_048
+                    MaxAllocatedBytes: 1_024
                 ),
                 ["ReadMultiPacketPayload"] = new(
                     "ReadMultiPacketPayload",
