@@ -167,10 +167,7 @@ public sealed class PackageContentTests
         Assert.Equal(packageId, NuspecValue(nuspec, "id"));
         Assert.Equal("README.md", NuspecValue(nuspec, "readme"));
         Assert.Equal("MIT", NuspecValue(nuspec, "license"));
-        Assert.Equal(
-            "https://github.com/kidoz/dotrocks",
-            NuspecValue(nuspec, "repository", "url")
-        );
+        Assert.Equal("https://github.com/kidoz/dotrocks", NuspecValue(nuspec, "repository", "url"));
         if (expectDependencies)
         {
             Assert.Contains(
