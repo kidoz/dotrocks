@@ -109,6 +109,19 @@ internal static class PerformanceBudgetCatalog
                     MaxMeanNanoseconds: 20_000,
                     MaxAllocatedBytes: 16_384
                 ),
+                // Parameter binding for a repeatedly executed command. Budgets set from measured
+                // values with CI headroom; the prepared variant should not regress past the
+                // re-scan variant.
+                ["BindParameterized"] = new(
+                    "BindParameterized",
+                    MaxMeanNanoseconds: 5_000,
+                    MaxAllocatedBytes: 2_048
+                ),
+                ["BindPreparedParameterized"] = new(
+                    "BindPreparedParameterized",
+                    MaxMeanNanoseconds: 5_000,
+                    MaxAllocatedBytes: 2_048
+                ),
             }
         );
 }
