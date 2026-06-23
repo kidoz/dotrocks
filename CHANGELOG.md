@@ -8,6 +8,22 @@ version is derived from the release tag at publish time.
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-06-23
+
+### Added
+- Generic `UseStarRocks<TContext>` overloads for `DbContextOptionsBuilder<TContext>` so the
+  fluent options chain keeps its context type into `.Options`.
+- `DTR0008` analyzer that flags unsupported composite primary keys on EF Core entities, with
+  an `.editorconfig` escalation to an error.
+- EF Core entity mapping guide covering writable single-column-key entities and read-only
+  `HasNoKey()` entities.
+
+### Changed
+- Package `Authors`, `Company`, and `Copyright` metadata set to the project owner.
+- Package and documentation URLs point at the canonical repository.
+
+## [1.0.0] - 2026-06-21
+
 ### Added
 - ADO.NET provider (`DotRocks.Data`) with a native StarRocks/MySQL wire-protocol
   implementation: connections, commands, parameters, transactions, data reader, connection
@@ -26,4 +42,6 @@ version is derived from the release tag at publish time.
 - Stream Load refuses to forward credentials over a downgraded (HTTPS→HTTP) redirect.
 - NuGet vulnerability auditing and CodeQL analysis in CI.
 
-[Unreleased]: https://github.com/kidoz/dotrocks/commits/main
+[Unreleased]: https://github.com/kidoz/dotrocks/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/kidoz/dotrocks/compare/v1.0.0...v1.0.1
+[1.0.0]: https://github.com/kidoz/dotrocks/releases/tag/v1.0.0
