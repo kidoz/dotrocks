@@ -343,6 +343,12 @@ builder.Services.AddOpenTelemetry()
 Pooled connections are liveness-checked on lease, so a connection the server closed while
 idle is discarded rather than handed out.
 
+DotRocks does not yet perform a verified per-lease session reset, so a connection that ran a
+session-mutating statement (`USE` or `SET`) is **discarded on return instead of reused**. This
+keeps session state — the current database and session variables — from leaking into the next
+lease. Pure query and DML workloads pool and reuse connections normally; a verified
+connection-reset path may relax this in a future release.
+
 Connection pooling is **process-global**, keyed by the normalized connection configuration, and is
 not owned by any single `DotRocksConnection` or `DotRocksDataSource`. Disposing a `DotRocksDataSource`
 stops it from opening new connections but does **not** evict that configuration's idle physical

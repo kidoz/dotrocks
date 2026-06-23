@@ -19,6 +19,7 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
     private readonly Stream _stream;
     private volatile bool _isDisposed;
     private volatile bool _isBroken;
+    private volatile bool _sessionMayBeDirty;
 
     private DotRocksPhysicalConnection(TcpClient client, Stream stream, string serverVersion)
     {
@@ -34,7 +35,11 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
     /// </summary>
     public string ServerVersion { get; }
 
-    public bool IsReusable => !_isDisposed && !_isBroken && _client.Connected && IsSocketAlive();
+    // A connection whose session state may have been mutated (USE / SET) is not reused: DotRocks
+    // does not yet perform a verified session reset, so reusing it could leak the current database
+    // or session variables into the next lease. Such connections are discarded on return instead.
+    public bool IsReusable =>
+        !_isDisposed && !_isBroken && !_sessionMayBeDirty && _client.Connected && IsSocketAlive();
 
     // TcpClient.Connected only reflects the last I/O. A correctly drained idle pooled connection
     // has nothing to read, so anything readable means it must not be reused: a readable socket is
@@ -245,6 +250,8 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
             throw new InvalidOperationException("The physical StarRocks connection is closed.");
         }
 
+        MarkSessionDirtyIfMutating(commandText);
+
         try
         {
             byte[] payload = QueryCommandBuilder.Build(commandText);
@@ -339,6 +346,8 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
             throw new InvalidOperationException("The physical StarRocks connection is closed.");
         }
 
+        MarkSessionDirtyIfMutating(commandText);
+
         try
         {
             byte[] payload = QueryCommandBuilder.Build(commandText);
@@ -392,6 +401,96 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
     }
 
     public void MarkBroken() => _isBroken = true;
+
+    // Conservative session-state guard: DotRocks does not yet perform a verified per-lease session
+    // reset, so a connection that ran a statement which can change the current database or session
+    // variables (USE / SET) must not be returned to the pool for reuse.
+    private void MarkSessionDirtyIfMutating(string commandText)
+    {
+        if (IsSessionMutatingStatement(commandText))
+        {
+            _sessionMayBeDirty = true;
+        }
+    }
+
+    // Detection is intentionally conservative (it errs toward discarding): it skips leading
+    // whitespace and SQL comments, then flags a statement whose leading keyword is USE or SET.
+    internal static bool IsSessionMutatingStatement(string commandText)
+    {
+        if (string.IsNullOrEmpty(commandText))
+        {
+            return false;
+        }
+
+        ReadOnlySpan<char> sql = commandText.AsSpan();
+        int index = SkipLeadingTrivia(sql);
+        return MatchesKeyword(sql, index, "USE") || MatchesKeyword(sql, index, "SET");
+    }
+
+    private static int SkipLeadingTrivia(ReadOnlySpan<char> sql)
+    {
+        int index = 0;
+        while (index < sql.Length)
+        {
+            char current = sql[index];
+            if (char.IsWhiteSpace(current))
+            {
+                index++;
+                continue;
+            }
+
+            // Line comments: "-- ..." and "# ..." run to the end of the line.
+            if (
+                current == '#'
+                || (current == '-' && index + 1 < sql.Length && sql[index + 1] == '-')
+            )
+            {
+                while (index < sql.Length && sql[index] != '\n')
+                {
+                    index++;
+                }
+
+                continue;
+            }
+
+            // Block comment: "/* ... */".
+            if (current == '/' && index + 1 < sql.Length && sql[index + 1] == '*')
+            {
+                index += 2;
+                while (index + 1 < sql.Length && !(sql[index] == '*' && sql[index + 1] == '/'))
+                {
+                    index++;
+                }
+
+                index = Math.Min(index + 2, sql.Length);
+                continue;
+            }
+
+            break;
+        }
+
+        return index;
+    }
+
+    private static bool MatchesKeyword(ReadOnlySpan<char> sql, int index, string keyword)
+    {
+        if (index + keyword.Length > sql.Length)
+        {
+            return false;
+        }
+
+        if (!sql.Slice(index, keyword.Length).Equals(keyword, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        // Require a word boundary so identifiers like USER or SETTINGS do not match.
+        int next = index + keyword.Length;
+        return next >= sql.Length || !IsIdentifierPart(sql[next]);
+    }
+
+    private static bool IsIdentifierPart(char value) =>
+        char.IsLetterOrDigit(value) || value is '_' or '$';
 
     public void Dispose()
     {
