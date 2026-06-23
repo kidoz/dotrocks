@@ -341,7 +341,9 @@ builder.Services.AddOpenTelemetry()
 ```
 
 Pooled connections are liveness-checked on lease, so a connection the server closed while
-idle is discarded rather than handed out.
+idle is discarded rather than handed out. Set `Connection Lifetime` (seconds; `0` = unbounded,
+the default) to retire a physical connection once it reaches that age, with a small per-connection
+jitter so connections opened together do not all expire at once.
 
 DotRocks does not yet perform a verified per-lease session reset, so a connection that ran a
 session-mutating statement (`USE` or `SET`) is **discarded on return instead of reused**. This

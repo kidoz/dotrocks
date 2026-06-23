@@ -179,6 +179,31 @@ public sealed class ConnectionStringBuilderTests
     }
 
     [Fact]
+    public void ConnectionLifetime_DefaultsParsesAliasesAndRoundTrips()
+    {
+        var defaults = new DotRocksConnectionStringBuilder();
+        Assert.Equal(0, defaults.ConnectionLifetime);
+        Assert.Equal(TimeSpan.Zero, defaults.BuildOptions().ConnectionLifetime);
+
+        var builder = new DotRocksConnectionStringBuilder("Lifetime=120");
+        Assert.Equal(120, builder.ConnectionLifetime);
+        Assert.Equal(TimeSpan.FromSeconds(120), builder.BuildOptions().ConnectionLifetime);
+
+        DotRocksConnectionOptions roundTripped = DotRocksConnectionOptions.Parse(
+            builder.BuildOptions().ConnectionString
+        );
+        Assert.Equal(TimeSpan.FromSeconds(120), roundTripped.ConnectionLifetime);
+    }
+
+    [Fact]
+    public void NegativeConnectionLifetime_Throws()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            _ = new DotRocksConnectionStringBuilder("Connection Lifetime=-1").BuildOptions()
+        );
+    }
+
+    [Fact]
     public void TrustServerCertificateWithoutTls_Throws()
     {
         Assert.Throws<ArgumentException>(() =>

@@ -25,7 +25,8 @@ internal sealed record DotRocksConnectionOptions(
     int MaxConnectionRetries,
     TimeSpan ConnectionRetryDelay,
     string ConnectionString,
-    DotRocksServerVersion? ServerCompatibilityLevel
+    DotRocksServerVersion? ServerCompatibilityLevel,
+    TimeSpan ConnectionLifetime
 )
 {
     public const string DefaultServer = "127.0.0.1";
@@ -40,6 +41,7 @@ internal sealed record DotRocksConnectionOptions(
     public const X509RevocationMode DefaultSslRevocationMode = X509RevocationMode.Offline;
     public const int DefaultMaxConnectionRetries = 0;
     public const int DefaultConnectionRetryDelayMilliseconds = 200;
+    public const int DefaultConnectionLifetimeSeconds = 0;
 
     public static DotRocksConnectionOptions Default { get; } =
         new(
@@ -61,7 +63,8 @@ internal sealed record DotRocksConnectionOptions(
             DefaultMaxConnectionRetries,
             TimeSpan.FromMilliseconds(DefaultConnectionRetryDelayMilliseconds),
             string.Empty,
-            null
+            null,
+            TimeSpan.FromSeconds(DefaultConnectionLifetimeSeconds)
         );
 
     public static DotRocksConnectionOptions Parse(string? connectionString)
@@ -119,8 +122,14 @@ internal sealed record DotRocksConnectionOptions(
             "Connection Retry Delay",
             DefaultConnectionRetryDelayMilliseconds
         );
+        int connectionLifetimeSeconds = GetInt32(
+            builder,
+            "Connection Lifetime",
+            DefaultConnectionLifetimeSeconds
+        );
         ArgumentOutOfRangeException.ThrowIfNegative(maxConnectionRetries);
         ArgumentOutOfRangeException.ThrowIfNegative(connectionRetryDelayMs);
+        ArgumentOutOfRangeException.ThrowIfNegative(connectionLifetimeSeconds);
         DotRocksServerVersion? serverCompatibilityLevel = GetCompatibilityLevel(builder);
 
         Validate(
@@ -153,7 +162,8 @@ internal sealed record DotRocksConnectionOptions(
             allowInsecureStreamLoad,
             maxConnectionRetries,
             connectionRetryDelayMs,
-            serverCompatibilityLevel
+            serverCompatibilityLevel,
+            connectionLifetimeSeconds
         );
 
         return new DotRocksConnectionOptions(
@@ -175,7 +185,8 @@ internal sealed record DotRocksConnectionOptions(
             maxConnectionRetries,
             TimeSpan.FromMilliseconds(connectionRetryDelayMs),
             canonical,
-            serverCompatibilityLevel
+            serverCompatibilityLevel,
+            TimeSpan.FromSeconds(connectionLifetimeSeconds)
         );
     }
 
@@ -198,7 +209,8 @@ internal sealed record DotRocksConnectionOptions(
             AllowInsecureStreamLoad,
             MaxConnectionRetries,
             (int)ConnectionRetryDelay.TotalMilliseconds,
-            ServerCompatibilityLevel
+            ServerCompatibilityLevel,
+            (int)ConnectionLifetime.TotalSeconds
         );
 
     internal DotRocksConnectionPoolKey CreatePoolKey() =>
@@ -468,6 +480,7 @@ internal sealed record DotRocksConnectionOptions(
                 "ConnectionRetryDelay",
                 "Retry Delay",
             ],
+            "Connection Lifetime" => ["Connection Lifetime", "ConnectionLifetime", "Lifetime"],
             "Server Compatibility Level" =>
             [
                 "Server Compatibility Level",
@@ -495,7 +508,8 @@ internal sealed record DotRocksConnectionOptions(
         bool allowInsecureStreamLoad,
         int maxConnectionRetries,
         int connectionRetryDelayMilliseconds,
-        DotRocksServerVersion? serverCompatibilityLevel
+        DotRocksServerVersion? serverCompatibilityLevel,
+        int connectionLifetimeSeconds
     )
     {
         var builder = new StringBuilder();
@@ -566,6 +580,12 @@ internal sealed record DotRocksConnectionOptions(
         {
             Append(builder, "Server Compatibility Level", level.Raw);
         }
+
+        Append(
+            builder,
+            "Connection Lifetime",
+            connectionLifetimeSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture)
+        );
 
         return builder.ToString();
     }

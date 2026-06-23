@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Net.Security;
 using System.Net.Sockets;
@@ -17,15 +18,24 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
 {
     private readonly TcpClient _client;
     private readonly Stream _stream;
+    private readonly long _createdTimestamp;
+    private readonly TimeSpan _maxLifetime;
     private volatile bool _isDisposed;
     private volatile bool _isBroken;
     private volatile bool _sessionMayBeDirty;
 
-    private DotRocksPhysicalConnection(TcpClient client, Stream stream, string serverVersion)
+    private DotRocksPhysicalConnection(
+        TcpClient client,
+        Stream stream,
+        string serverVersion,
+        TimeSpan maxLifetime
+    )
     {
         _client = client;
         _stream = stream;
         ServerVersion = serverVersion;
+        _maxLifetime = maxLifetime;
+        _createdTimestamp = Stopwatch.GetTimestamp();
     }
 
     /// <summary>
@@ -38,8 +48,17 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
     // A connection whose session state may have been mutated (USE / SET) is not reused: DotRocks
     // does not yet perform a verified session reset, so reusing it could leak the current database
     // or session variables into the next lease. Such connections are discarded on return instead.
+    // A connection past its (jittered) maximum lifetime is likewise retired rather than reused.
     public bool IsReusable =>
-        !_isDisposed && !_isBroken && !_sessionMayBeDirty && _client.Connected && IsSocketAlive();
+        !_isDisposed
+        && !_isBroken
+        && !_sessionMayBeDirty
+        && !HasExceededLifetime
+        && _client.Connected
+        && IsSocketAlive();
+
+    private bool HasExceededLifetime =>
+        _maxLifetime > TimeSpan.Zero && Stopwatch.GetElapsedTime(_createdTimestamp) >= _maxLifetime;
 
     // TcpClient.Connected only reflects the last I/O. A correctly drained idle pooled connection
     // has nothing to read, so anything readable means it must not be reused: a readable socket is
@@ -119,7 +138,12 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
                 .ConfigureAwait(false);
             AuthenticationResult.Read(authResultPayload, handshake.ConnectionId);
 
-            var physical = new DotRocksPhysicalConnection(client, stream, handshake.ServerVersion);
+            var physical = new DotRocksPhysicalConnection(
+                client,
+                stream,
+                handshake.ServerVersion,
+                ComputeJitteredLifetime(options.ConnectionLifetime)
+            );
             client = null;
             stream = null;
             return physical;
@@ -491,6 +515,25 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
 
     private static bool IsIdentifierPart(char value) =>
         char.IsLetterOrDigit(value) || value is '_' or '$';
+
+    // Spread connection retirement so connections opened together do not all expire at the same
+    // instant (a reconnect storm). Each connection lives 90-100% of the configured lifetime; zero
+    // means an unbounded lifetime.
+    [SuppressMessage(
+        "Security",
+        "CA5394:Do not use insecure randomness",
+        Justification = "Lifetime jitter only spreads reconnect timing; it is not used for any security decision."
+    )]
+    private static TimeSpan ComputeJitteredLifetime(TimeSpan lifetime)
+    {
+        if (lifetime <= TimeSpan.Zero)
+        {
+            return TimeSpan.Zero;
+        }
+
+        double jitterMilliseconds = Random.Shared.NextDouble() * lifetime.TotalMilliseconds * 0.1;
+        return lifetime - TimeSpan.FromMilliseconds(jitterMilliseconds);
+    }
 
     public void Dispose()
     {

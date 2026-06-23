@@ -35,6 +35,7 @@ public sealed class DotRocksConnectionStringBuilder
     private const string AllowInsecureStreamLoadKeyword = "Allow Insecure Stream Load";
     private const string ConnectionRetriesKeyword = "Connection Retries";
     private const string ConnectionRetryDelayKeyword = "Connection Retry Delay";
+    private const string ConnectionLifetimeKeyword = "Connection Lifetime";
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DotRocksConnectionStringBuilder"/> class.
@@ -55,6 +56,7 @@ public sealed class DotRocksConnectionStringBuilder
         AllowInsecureStreamLoad = false;
         ConnectionRetries = DotRocksConnectionOptions.DefaultMaxConnectionRetries;
         ConnectionRetryDelay = DotRocksConnectionOptions.DefaultConnectionRetryDelayMilliseconds;
+        ConnectionLifetime = DotRocksConnectionOptions.DefaultConnectionLifetimeSeconds;
     }
 
     /// <summary>
@@ -298,6 +300,26 @@ public sealed class DotRocksConnectionStringBuilder
     }
 
     /// <summary>
+    /// Gets or sets the maximum lifetime of a pooled physical connection, in seconds. A returned
+    /// connection older than this is discarded instead of reused. Zero (the default) keeps
+    /// connections for an unbounded lifetime. A small random jitter is applied per connection so
+    /// connections do not all expire together.
+    /// </summary>
+    public int ConnectionLifetime
+    {
+        get =>
+            GetInt32(
+                ConnectionLifetimeKeyword,
+                DotRocksConnectionOptions.DefaultConnectionLifetimeSeconds
+            );
+        set
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(value);
+            this[ConnectionLifetimeKeyword] = value;
+        }
+    }
+
+    /// <summary>
     /// Gets a sanitized connection-string representation.
     /// </summary>
     /// <returns>A connection string with the password redacted.</returns>
@@ -419,6 +441,12 @@ public sealed class DotRocksConnectionStringBuilder
                 ConnectionRetryDelayKeyword,
                 "ConnectionRetryDelay",
                 "Retry Delay",
+            ],
+            ConnectionLifetimeKeyword =>
+            [
+                ConnectionLifetimeKeyword,
+                "ConnectionLifetime",
+                "Lifetime",
             ],
             StreamLoadEndpointKeyword =>
             [
