@@ -69,6 +69,7 @@ public sealed class DotRocks.Data.DotRocksConnection System.Data.Common.DbConnec
   protected virtual method System.Threading.Tasks.ValueTask<System.Data.Common.DbTransaction> BeginDbTransactionAsync(System.Data.IsolationLevel isolationLevel, System.Threading.CancellationToken cancellationToken)
   protected virtual method System.Void Dispose(System.Boolean disposing)
   public static method System.Void ClearAllPools()
+  public static method System.Void ClearPool(DotRocks.Data.DotRocksConnection connection)
   public virtual method System.Threading.Tasks.Task CloseAsync()
   public virtual method System.Threading.Tasks.Task OpenAsync(System.Threading.CancellationToken cancellationToken)
   public virtual method System.Void ChangeDatabase(System.String databaseName)
@@ -148,6 +149,7 @@ public sealed class DotRocks.Data.DotRocksDataSource System.Data.Common.DbDataSo
   protected virtual method System.Threading.Tasks.ValueTask DisposeAsyncCore()
   protected virtual method System.Threading.Tasks.ValueTask<System.Data.Common.DbConnection> OpenDbConnectionAsync(System.Threading.CancellationToken cancellationToken)
   protected virtual method System.Void Dispose(System.Boolean disposing)
+  public method System.Void ClearPool()
 
 public struct DotRocks.Data.DotRocksDecimal , System.IComparable, System.IComparable<DotRocks.Data.DotRocksDecimal>, System.IEquatable<DotRocks.Data.DotRocksDecimal>
   public DotRocks.Data.DotRocksDecimal(System.Numerics.BigInteger unscaledValue, System.Int32 scale)

@@ -359,7 +359,8 @@ Connection pooling is **process-global**, keyed by the normalized connection con
 not owned by any single `DotRocksConnection` or `DotRocksDataSource`. Disposing a `DotRocksDataSource`
 stops it from opening new connections but does **not** evict that configuration's idle physical
 connections from the shared pools. To release all idle pooled connections process-wide, call
-`DotRocksConnection.ClearAllPools()`.
+`DotRocksConnection.ClearAllPools()`; to release only one configuration's pool, call
+`DotRocksConnection.ClearPool(connection)` or `dataSource.ClearPool()`.
 
 ## Build and test
 

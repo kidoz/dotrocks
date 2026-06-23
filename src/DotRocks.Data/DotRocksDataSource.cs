@@ -1,6 +1,7 @@
 using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
 using DotRocks.Data.Loading;
+using DotRocks.Data.Pooling;
 
 namespace DotRocks.Data;
 
@@ -95,6 +96,12 @@ public sealed class DotRocksDataSource : DbDataSource
         _isDisposed = true;
         return base.DisposeAsyncCore();
     }
+
+    /// <summary>
+    /// Closes and removes idle physical connections from the pool for this data source's
+    /// configuration. Connections currently in use are unaffected.
+    /// </summary>
+    public void ClearPool() => DotRocksConnectionPool.Clear(_options);
 
     private DotRocksConnection CreateDotRocksConnection()
     {

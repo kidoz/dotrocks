@@ -200,6 +200,17 @@ internal sealed class DotRocksConnectionPool : IDisposable
         Pools.Clear();
     }
 
+    // Releases idle connections for a single connection configuration. Outstanding leases are
+    // unaffected and the next lease for these options transparently creates a fresh pool.
+    internal static void Clear(DotRocksConnectionOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        if (Pools.TryRemove(options.CreatePoolKey(), out DotRocksConnectionPool? pool))
+        {
+            pool.Dispose();
+        }
+    }
+
     internal int IdleCount
     {
         get

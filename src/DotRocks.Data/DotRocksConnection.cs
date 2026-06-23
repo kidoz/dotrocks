@@ -50,6 +50,17 @@ public sealed class DotRocksConnection : DbConnection
     /// </summary>
     public static void ClearAllPools() => DotRocksConnectionPool.ClearAll();
 
+    /// <summary>
+    /// Closes and removes idle physical connections from the pool for the given connection's
+    /// configuration. Connections currently in use are unaffected.
+    /// </summary>
+    /// <param name="connection">A connection identifying the pool to clear.</param>
+    public static void ClearPool(DotRocksConnection connection)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        DotRocksConnectionPool.Clear(connection._options);
+    }
+
     /// <inheritdoc />
     [AllowNull]
     public override string ConnectionString
