@@ -17,6 +17,7 @@ StarRocks client protocol and takes no dependency on any MySQL driver.
 ## Documentation
 
 - [Getting started](articles/getting-started.md)
+- [EF Core entity mapping](articles/ef-core-entity-mapping.md)
 - [StarRocks 3.x driver developer notes](starrocks-3x-driver-developer-notes.md)
 - [StarRocks 4.x driver developer notes](starrocks-4x-driver-developer-notes.md)
 - [API reference](xref:DotRocks.Data.DotRocksConnection)
