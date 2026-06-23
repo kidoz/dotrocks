@@ -34,9 +34,9 @@
 
   <PropertyGroup Label="Package metadata defaults">
     <Product>DotRocks</Product>
-    <Company>DotRocks contributors</Company>
-    <Authors>DotRocks contributors</Authors>
-    <Copyright>Copyright (c) DotRocks contributors</Copyright>
+    <Company>Aleksandr Pavlov</Company>
+    <Authors>Aleksandr Pavlov</Authors>
+    <Copyright>Copyright (c) Aleksandr Pavlov</Copyright>
     <PackageProjectUrl>https://github.com/kidoz/dotrocks</PackageProjectUrl>
     <RepositoryUrl>https://github.com/kidoz/dotrocks</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
