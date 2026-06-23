@@ -82,15 +82,95 @@ internal static class PerformanceBudgetCatalog
                     MaxMeanNanoseconds: 2_000,
                     MaxAllocatedBytes: 2_048
                 ),
+                // Eight cached lookups per op. Measured ~278 ns / 0 B (CLR) and ~553 ns / 176 B
+                // (store) on a dev machine; ceilings keep headroom for slower CI runners while
+                // still catching a real regression (e.g., loss of the FrozenDictionary fast path).
+                ["FindClrTypeMapping"] = new(
+                    "FindClrTypeMapping",
+                    MaxMeanNanoseconds: 2_000,
+                    MaxAllocatedBytes: 256
+                ),
+                ["FindStoreTypeMapping"] = new(
+                    "FindStoreTypeMapping",
+                    MaxMeanNanoseconds: 3_000,
+                    MaxAllocatedBytes: 512
+                ),
             }
         );
 }
 
 internal static class PerformanceBudgetValidator
 {
-    public static PerformanceBudgetResult Validate(IEnumerable<Summary> summaries) =>
-        Validate(ExtractMeasurements(summaries), PerformanceBudgetCatalog.Budgets);
+    [SuppressMessage(
+        "Globalization",
+        "CA1303:Do not pass literals as localized parameters",
+        Justification = "Benchmark budget output is developer-facing tooling text."
+    )]
+    public static PerformanceBudgetResult Validate(IEnumerable<Summary> summaries)
+    {
+        ArgumentNullException.ThrowIfNull(summaries);
 
+        List<PerformanceBudgetViolation> reportViolations = [];
+        List<PerformanceBudgetMeasurement> measurements = [];
+        foreach (Summary summary in summaries)
+        {
+            foreach (BenchmarkReport report in summary.Reports)
+            {
+                string benchmarkName = report.BenchmarkCase.Descriptor.WorkloadMethod.Name;
+
+                // Dry jobs only verify that a benchmark compiles and runs once; they carry no
+                // statistically meaningful timing, so they are not counted as measurements.
+                if (string.Equals(report.BenchmarkCase.Job.Id, "Dry", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                // A failed or statistics-less report must surface as a violation rather than be
+                // silently dropped, otherwise a broken benchmark would pass the performance gate.
+                if (!report.Success)
+                {
+                    reportViolations.Add(
+                        new PerformanceBudgetViolation(
+                            benchmarkName,
+                            $"Benchmark '{benchmarkName}' failed to run; no measurement was produced."
+                        )
+                    );
+                    continue;
+                }
+
+                if (report.ResultStatistics is null)
+                {
+                    reportViolations.Add(
+                        new PerformanceBudgetViolation(
+                            benchmarkName,
+                            $"Benchmark '{benchmarkName}' produced no result statistics."
+                        )
+                    );
+                    continue;
+                }
+
+                measurements.Add(
+                    new PerformanceBudgetMeasurement(
+                        benchmarkName,
+                        report.ResultStatistics.Mean,
+                        report.GcStats.GetBytesAllocatedPerOperation(report.BenchmarkCase)
+                    )
+                );
+            }
+        }
+
+        PerformanceBudgetResult budgetResult = Validate(
+            measurements,
+            PerformanceBudgetCatalog.Budgets
+        );
+        return new PerformanceBudgetResult([.. reportViolations, .. budgetResult.Violations]);
+    }
+
+    [SuppressMessage(
+        "Globalization",
+        "CA1303:Do not pass literals as localized parameters",
+        Justification = "Benchmark budget output is developer-facing tooling text."
+    )]
     internal static PerformanceBudgetResult Validate(
         IEnumerable<PerformanceBudgetMeasurement> measurements,
         IReadOnlyDictionary<string, PerformanceBudget> budgets
@@ -100,8 +180,10 @@ internal static class PerformanceBudgetValidator
         ArgumentNullException.ThrowIfNull(budgets);
 
         List<PerformanceBudgetViolation> violations = [];
+        int validatedCount = 0;
         foreach (PerformanceBudgetMeasurement measurement in measurements)
         {
+            validatedCount++;
             if (!budgets.TryGetValue(measurement.BenchmarkName, out PerformanceBudget? budget))
             {
                 violations.Add(
@@ -155,41 +237,18 @@ internal static class PerformanceBudgetValidator
             }
         }
 
-        return new PerformanceBudgetResult(violations);
-    }
-
-    [SuppressMessage(
-        "Globalization",
-        "CA1303:Do not pass literals as localized parameters",
-        Justification = "Benchmark budget output is developer-facing tooling text."
-    )]
-    private static IEnumerable<PerformanceBudgetMeasurement> ExtractMeasurements(
-        IEnumerable<Summary> summaries
-    )
-    {
-        ArgumentNullException.ThrowIfNull(summaries);
-
-        foreach (Summary summary in summaries)
+        // An empty measurement set must never pass: a typoed --filter, a Dry-only run, or
+        // benchmarks that all failed would otherwise bypass the gate with a green result.
+        if (validatedCount == 0)
         {
-            foreach (BenchmarkReport report in summary.Reports)
-            {
-                if (!report.Success || report.ResultStatistics is null)
-                {
-                    continue;
-                }
-
-                if (string.Equals(report.BenchmarkCase.Job.Id, "Dry", StringComparison.Ordinal))
-                {
-                    continue;
-                }
-
-                string benchmarkName = report.BenchmarkCase.Descriptor.WorkloadMethod.Name;
-                yield return new PerformanceBudgetMeasurement(
-                    benchmarkName,
-                    report.ResultStatistics.Mean,
-                    report.GcStats.GetBytesAllocatedPerOperation(report.BenchmarkCase)
-                );
-            }
+            violations.Add(
+                new PerformanceBudgetViolation(
+                    "(none)",
+                    "No benchmark measurements were validated; a typoed --filter, a Dry-only run, or failed benchmarks must not pass the performance gate."
+                )
+            );
         }
+
+        return new PerformanceBudgetResult(violations);
     }
 }

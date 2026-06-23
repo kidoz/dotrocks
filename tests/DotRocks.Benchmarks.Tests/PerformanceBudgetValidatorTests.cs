@@ -108,16 +108,35 @@ public sealed class PerformanceBudgetValidatorTests
     }
 
     [Fact]
-    public void BudgetCatalog_CoversEveryCurrentSerializationBenchmark()
+    public void Validate_WhenNoMeasurements_ReportsViolation()
+    {
+        PerformanceBudgetResult result = PerformanceBudgetValidator.Validate(
+            [],
+            PerformanceBudgetCatalog.Budgets
+        );
+
+        PerformanceBudgetViolation violation = Assert.Single(result.Violations);
+        Assert.False(result.Succeeded);
+        Assert.Contains(
+            "No benchmark measurements were validated",
+            violation.Message,
+            StringComparison.Ordinal
+        );
+    }
+
+    [Fact]
+    public void BudgetCatalog_CoversEveryBenchmarkInTheAssembly()
     {
         string[] benchmarkNames = typeof(SerializationBenchmarks)
-            .GetMethods()
+            .Assembly.GetTypes()
+            .SelectMany(type => type.GetMethods())
             .Where(method =>
                 method
                     .GetCustomAttributes(inherit: false)
                     .Any(attribute => attribute.GetType().Name == "BenchmarkAttribute")
             )
             .Select(method => method.Name)
+            .Distinct(StringComparer.Ordinal)
             .Order(StringComparer.Ordinal)
             .ToArray();
 

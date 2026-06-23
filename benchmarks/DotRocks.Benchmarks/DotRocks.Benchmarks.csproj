@@ -13,9 +13,11 @@
 
   <ItemGroup>
     <PackageReference Include="BenchmarkDotNet" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="../../src/DotRocks.Data/DotRocks.Data.csproj" />
+    <ProjectReference Include="../../src/DotRocks.EntityFrameworkCore/DotRocks.EntityFrameworkCore.csproj" />
   </ItemGroup>
 </Project>
