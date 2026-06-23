@@ -252,8 +252,11 @@ public sealed class DotRocksCommand : DbCommand
             "dotrocks.command.execute",
             ActivityKind.Client
         );
+        DotRocksTelemetryTags.TagCommandStart(activity, commandText);
         long startTimestamp = Stopwatch.GetTimestamp();
         bool succeeded = false;
+        string? errorType = null;
+        string? statusCode = null;
         try
         {
             StreamingQueryResult result = await _connection
@@ -271,12 +274,14 @@ public sealed class DotRocksCommand : DbCommand
         catch (OperationCanceledException ex)
             when (IsCommandTimeout(timeoutCancellation, commandCancellation, cancellationToken))
         {
+            errorType = DotRocksTelemetryTags.ErrorTimeout;
             await _connection.CloseAsync().ConfigureAwait(false);
             throw CreateCommandTimeoutException(ex);
         }
         catch (DotRocksException ex)
             when (IsCommandTimeout(timeoutCancellation, commandCancellation, cancellationToken))
         {
+            errorType = DotRocksTelemetryTags.ErrorTimeout;
             await _connection.CloseAsync().ConfigureAwait(false);
             throw CreateCommandTimeoutException(ex);
         }
@@ -285,6 +290,7 @@ public sealed class DotRocksCommand : DbCommand
                 && !cancellationToken.IsCancellationRequested
             )
         {
+            errorType = DotRocksTelemetryTags.ErrorCanceled;
             await _connection.CloseAsync().ConfigureAwait(false);
             throw new OperationCanceledException(
                 "The DotRocks command was canceled.",
@@ -297,6 +303,7 @@ public sealed class DotRocksCommand : DbCommand
                 && !cancellationToken.IsCancellationRequested
             )
         {
+            errorType = DotRocksTelemetryTags.ErrorCanceled;
             await _connection.CloseAsync().ConfigureAwait(false);
             throw new OperationCanceledException(
                 "The DotRocks command was canceled.",
@@ -306,7 +313,18 @@ public sealed class DotRocksCommand : DbCommand
         }
         catch (OperationCanceledException)
         {
+            errorType = DotRocksTelemetryTags.ErrorCanceled;
             await _connection.CloseAsync().ConfigureAwait(false);
+            throw;
+        }
+        catch (DotRocksException ex)
+        {
+            (errorType, statusCode) = DotRocksTelemetryTags.Classify(ex);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            (errorType, statusCode) = DotRocksTelemetryTags.Classify(ex);
             throw;
         }
         finally
@@ -315,7 +333,15 @@ public sealed class DotRocksCommand : DbCommand
                 "outcome",
                 succeeded ? "success" : "error"
             );
-            activity?.SetStatus(succeeded ? ActivityStatusCode.Ok : ActivityStatusCode.Error);
+            if (succeeded)
+            {
+                activity?.SetStatus(ActivityStatusCode.Ok);
+            }
+            else
+            {
+                DotRocksTelemetryTags.TagError(activity, errorType ?? "OTHER", statusCode);
+            }
+
             DotRocksTelemetry.CommandDuration.Record(
                 Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds,
                 outcome

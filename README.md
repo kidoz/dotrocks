@@ -332,13 +332,24 @@ DotRocks emits OpenTelemetry-compatible tracing and metrics. Subscribe by name v
 
 - Activities: `dotrocks.connection.open`, `dotrocks.command.execute`.
 - Metrics: `dotrocks.connections.opened`, `dotrocks.commands.executed`,
-  and the `dotrocks.command.duration` histogram (ms).
+  the `dotrocks.command.duration` histogram (ms), and the pool instruments
+  (`dotrocks.pool.connections.idle` / `.active`, `dotrocks.pool.lease.wait_time`,
+  `dotrocks.pool.connections.discarded`).
 
 ```csharp
 builder.Services.AddOpenTelemetry()
     .WithTracing(t => t.AddSource(DotRocksTelemetry.ActivitySourceName))
     .WithMetrics(m => m.AddMeter(DotRocksTelemetry.MeterName));
 ```
+
+Spans carry safe attributes aligned with the OpenTelemetry database semantic conventions:
+`db.system.name` (`other_sql`), `db.operation.name` and `db.query.summary` (a low-cardinality
+operation such as `SELECT`/`INSERT`, never literals), `server.port`, `db.namespace` when known, and
+`error.type` / `db.response.status_code` on failure. **By default DotRocks never emits raw SQL
+(`db.query.text`), parameter names or values, connection strings, passwords, usernames, server
+message text, or tenant-bearing host names** — failures record a stable classification, not the
+exception or server message. DotRocks runtime packages require no OpenTelemetry SDK or exporter
+packages; subscribe with `System.Diagnostics` listeners or the OpenTelemetry SDK as shown.
 
 Pooled connections are liveness-checked on lease, so a connection the server closed while
 idle is discarded rather than handed out. Set `Connection Lifetime` (seconds; `0` = unbounded,

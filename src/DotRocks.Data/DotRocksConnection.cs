@@ -164,6 +164,7 @@ public sealed class DotRocksConnection : DbConnection
             "dotrocks.connection.open",
             ActivityKind.Client
         );
+        DotRocksTelemetryTags.TagConnectionOpen(activity, _options);
         try
         {
             _lease = await OpenLeaseWithRetryAsync(linked.Token).ConfigureAwait(false);
@@ -174,7 +175,15 @@ public sealed class DotRocksConnection : DbConnection
         }
         catch (Exception ex)
         {
-            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            // Never attach the raw exception message to the span; classify it instead.
+            bool timedOut =
+                timeout.IsCancellationRequested && !cancellationToken.IsCancellationRequested;
+            (string errorType, string? statusCode) = DotRocksTelemetryTags.Classify(ex);
+            DotRocksTelemetryTags.TagError(
+                activity,
+                timedOut ? DotRocksTelemetryTags.ErrorTimeout : errorType,
+                statusCode
+            );
             CloseCore(reusable: false);
             throw;
         }
