@@ -37,8 +37,8 @@
     <Company>DotRocks contributors</Company>
     <Authors>DotRocks contributors</Authors>
     <Copyright>Copyright (c) DotRocks contributors</Copyright>
-    <PackageProjectUrl>https://github.com/dotrocks/dotrocks</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/dotrocks/dotrocks</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/kidoz/dotrocks</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/kidoz/dotrocks</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>

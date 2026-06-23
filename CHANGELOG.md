@@ -26,4 +26,4 @@ version is derived from the release tag at publish time.
 - Stream Load refuses to forward credentials over a downgraded (HTTPS→HTTP) redirect.
 - NuGet vulnerability auditing and CodeQL analysis in CI.
 
-[Unreleased]: https://github.com/dotrocks/dotrocks/commits/main
+[Unreleased]: https://github.com/kidoz/dotrocks/commits/main

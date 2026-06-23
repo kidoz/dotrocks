@@ -22,5 +22,5 @@ StarRocks client protocol and takes no dependency on any MySQL driver.
 - [StarRocks 4.x driver developer notes](starrocks-4x-driver-developer-notes.md)
 - [API reference](xref:DotRocks.Data.DotRocksConnection)
 
-See the repository [README](https://github.com/dotrocks/dotrocks) for the full feature matrix,
+See the repository [README](https://github.com/kidoz/dotrocks) for the full feature matrix,
 supported EF Core surface, StarRocks compatibility notes, and security posture.

@@ -8,7 +8,7 @@ and `main`.
 ## Reporting a vulnerability
 
 Please report security issues privately via GitHub's
-[private vulnerability reporting](https://github.com/dotrocks/dotrocks/security/advisories/new)
+[private vulnerability reporting](https://github.com/kidoz/dotrocks/security/advisories/new)
 rather than opening a public issue. Include affected version, a description, and reproduction
 steps. We aim to acknowledge reports within a few business days.
 
