@@ -13,6 +13,7 @@ namespace DotRocks.Benchmarks;
 /// <see cref="IRelationalTypeMappingSource"/> the provider exposes at runtime.
 /// </summary>
 [MemoryDiagnoser]
+[BenchmarkCategory(BenchmarkCategories.Local)]
 [SuppressMessage(
     "Design",
     "CA1515:Consider making public types internal",

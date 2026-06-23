@@ -11,6 +11,7 @@ namespace DotRocks.Benchmarks;
 /// tokenized template (<see cref="CommandTextParameterBinder.BindPrepared"/>).
 /// </summary>
 [MemoryDiagnoser]
+[BenchmarkCategory(BenchmarkCategories.Local)]
 [SuppressMessage(
     "Design",
     "CA1515:Consider making public types internal",

@@ -10,6 +10,7 @@ namespace DotRocks.Benchmarks;
 /// the per-row allocation hot path for result streaming.
 /// </summary>
 [MemoryDiagnoser]
+[BenchmarkCategory(BenchmarkCategories.Local)]
 [SuppressMessage(
     "Design",
     "CA1515:Consider making public types internal",

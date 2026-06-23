@@ -111,9 +111,14 @@ starrocks-down:
 harness host=fe_host port=fe_port:
     dotnet run --project tests/DotRocks.CompatibilityHarness --configuration {{config}} -- {{host}} {{port}}
 
-# Run the budgeted BenchmarkDotNet suite (optionally filtered, e.g. `just bench '*Parse*'`).
+# Run the budgeted, server-free BenchmarkDotNet suite (optionally filtered, e.g. `just bench '*Parse*'`).
 bench filter='*':
-    dotnet run --project benchmarks/DotRocks.Benchmarks --configuration Release -- --filter '{{filter}}'
+    dotnet run --project benchmarks/DotRocks.Benchmarks --configuration Release -- --anyCategories Local --filter '{{filter}}'
+
+# Run the server-backed stress benchmarks against a live StarRocks (start it with `just starrocks-up`).
+# These are observational and not budget-gated. Override the target with DOTROCKS_BENCH_CONNECTION_STRING.
+bench-server filter='*' host=fe_host port=fe_port:
+    DOTROCKS_BENCH_CONNECTION_STRING="${DOTROCKS_BENCH_CONNECTION_STRING:-Server={{host}};Port={{port}};User ID=root;Pooling=true}" dotnet run --project benchmarks/DotRocks.Benchmarks --configuration Release -- --anyCategories ServerBacked --filter '{{filter}}'
 
 # Build the DocFX documentation site into artifacts/docfx/_site.
 docs:

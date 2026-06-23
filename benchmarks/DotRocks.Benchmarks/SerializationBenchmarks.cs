@@ -11,6 +11,7 @@ namespace DotRocks.Benchmarks;
 /// Benchmarks the protocol serialization and value-parsing hot paths.
 /// </summary>
 [MemoryDiagnoser]
+[BenchmarkCategory(BenchmarkCategories.Local)]
 [SuppressMessage(
     "Design",
     "CA1515:Consider making public types internal",

@@ -125,8 +125,10 @@ public sealed class PerformanceBudgetValidatorTests
     }
 
     [Fact]
-    public void BudgetCatalog_CoversEveryBenchmarkInTheAssembly()
+    public void BudgetCatalog_CoversEveryBudgetedBenchmarkInTheAssembly()
     {
+        // Server-backed benchmarks are observational and intentionally have no budget, so they are
+        // excluded from the coverage requirement (matching the validator).
         string[] benchmarkNames = typeof(SerializationBenchmarks)
             .Assembly.GetTypes()
             .SelectMany(type => type.GetMethods())
@@ -134,6 +136,7 @@ public sealed class PerformanceBudgetValidatorTests
                 method
                     .GetCustomAttributes(inherit: false)
                     .Any(attribute => attribute.GetType().Name == "BenchmarkAttribute")
+                && !IsServerBacked(method)
             )
             .Select(method => method.Name)
             .Distinct(StringComparer.Ordinal)
@@ -144,5 +147,37 @@ public sealed class PerformanceBudgetValidatorTests
             benchmarkNames,
             PerformanceBudgetCatalog.Budgets.Keys.Order(StringComparer.Ordinal)
         );
+    }
+
+    private static bool IsServerBacked(System.Reflection.MethodInfo method)
+    {
+        // BenchmarkCategory may be declared on the method or on its containing class.
+        return HasServerBackedCategory(method.GetCustomAttributes(inherit: false))
+            || (
+                method.DeclaringType is not null
+                && HasServerBackedCategory(method.DeclaringType.GetCustomAttributes(inherit: false))
+            );
+    }
+
+    private static bool HasServerBackedCategory(object[] attributes)
+    {
+        foreach (object attribute in attributes)
+        {
+            if (attribute.GetType().Name != "BenchmarkCategoryAttribute")
+            {
+                continue;
+            }
+
+            if (
+                attribute.GetType().GetProperty("Categories")?.GetValue(attribute)
+                    is string[] categories
+                && categories.Contains("ServerBacked", StringComparer.Ordinal)
+            )
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

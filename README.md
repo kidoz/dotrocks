@@ -390,14 +390,24 @@ dotnet test --configuration Release --no-build
 dotnet pack --configuration Release --no-build
 ```
 
-Run the BenchmarkDotNet suite with performance budgets when changing protocol hot paths:
+Run the server-free, budgeted BenchmarkDotNet suite when changing protocol hot paths:
 
 ```bash
-dotnet run --project benchmarks/DotRocks.Benchmarks --configuration Release -- --filter '*'
+just bench            # or: dotnet run --project benchmarks/DotRocks.Benchmarks -c Release -- --anyCategories Local
 ```
 
 Benchmark results fail the process if a measured benchmark exceeds its configured mean
-time or allocation budget, or if a new benchmark is added without a budget entry.
+time or allocation budget, if a new budgeted benchmark is added without a budget entry, or if
+no measurements were validated at all (for example a typoed filter or a Dry-only run).
+
+Server-backed stress benchmarks (pool lease latency, lease contention, cancellation discard, and
+large-result streaming) need a live StarRocks server and are observational, so they are excluded
+from the budget gate:
+
+```bash
+just starrocks-up     # start StarRocks
+just bench-server     # runs the ServerBacked category; override with DOTROCKS_BENCH_CONNECTION_STRING
+```
 
 Integration tests run against a real StarRocks server and are documented separately; the
 commands above cover the server-free unit and protocol tests. CI keeps unit/build checks,

@@ -139,11 +139,25 @@ internal static class PerformanceBudgetValidator
 
         List<PerformanceBudgetViolation> reportViolations = [];
         List<PerformanceBudgetMeasurement> measurements = [];
+        bool sawServerBackedReport = false;
         foreach (Summary summary in summaries)
         {
             foreach (BenchmarkReport report in summary.Reports)
             {
                 string benchmarkName = report.BenchmarkCase.Descriptor.WorkloadMethod.Name;
+
+                // Server-backed benchmarks are observational and need a live server, so they are
+                // never gated against the budget catalog.
+                if (
+                    report.BenchmarkCase.Descriptor.Categories.Contains(
+                        BenchmarkCategories.ServerBacked,
+                        StringComparer.Ordinal
+                    )
+                )
+                {
+                    sawServerBackedReport = true;
+                    continue;
+                }
 
                 // Dry jobs only verify that a benchmark compiles and runs once; they carry no
                 // statistically meaningful timing, so they are not counted as measurements.
@@ -184,6 +198,13 @@ internal static class PerformanceBudgetValidator
                     )
                 );
             }
+        }
+
+        // A server-backed-only run (no budgeted measurements, but server benchmarks did run) is
+        // not a gate run, so it must not trip the empty-measurement guard below.
+        if (measurements.Count == 0 && sawServerBackedReport)
+        {
+            return new PerformanceBudgetResult(reportViolations);
         }
 
         PerformanceBudgetResult budgetResult = Validate(

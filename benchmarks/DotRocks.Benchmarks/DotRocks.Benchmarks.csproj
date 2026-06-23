@@ -9,6 +9,8 @@
          tooling project, so relax warnings-as-errors and XML docs here only. -->
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <!-- ConfigureAwait is irrelevant in the BenchmarkDotNet host (no synchronization context). -->
+    <NoWarn>$(NoWarn);CA2007</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
