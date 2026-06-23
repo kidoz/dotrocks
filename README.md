@@ -362,6 +362,11 @@ connections from the shared pools. To release all idle pooled connections proces
 `DotRocksConnection.ClearAllPools()`; to release only one configuration's pool, call
 `DotRocksConnection.ClearPool(connection)` or `dataSource.ClearPool()`.
 
+Data-source-scoped pools are intentionally not provided: pooling stays process-global so the
+default does not silently change socket counts or `Maximum Pool Size` semantics, and
+`ClearPool()` already gives deterministic teardown. This is a deliberate decision, not an
+oversight.
+
 ## Build and test
 
 Common tasks are exposed via [`just`](https://github.com/casey/just) (see `justfile`):
