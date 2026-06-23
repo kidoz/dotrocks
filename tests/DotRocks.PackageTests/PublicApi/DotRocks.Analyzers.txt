@@ -10,6 +10,11 @@ public sealed class DotRocks.Analyzers.Driver.TransactionCompletionAnalyzer Micr
   public property System.Collections.Immutable.ImmutableArray<Microsoft.CodeAnalysis.DiagnosticDescriptor> SupportedDiagnostics { get; }
   public virtual method System.Void Initialize(Microsoft.CodeAnalysis.Diagnostics.AnalysisContext context)
 
+public sealed class DotRocks.Analyzers.EntityFrameworkCore.EfCompositePrimaryKeyAnalyzer Microsoft.CodeAnalysis.Diagnostics.DiagnosticAnalyzer
+  public DotRocks.Analyzers.EntityFrameworkCore.EfCompositePrimaryKeyAnalyzer()
+  public property System.Collections.Immutable.ImmutableArray<Microsoft.CodeAnalysis.DiagnosticDescriptor> SupportedDiagnostics { get; }
+  public virtual method System.Void Initialize(Microsoft.CodeAnalysis.Diagnostics.AnalysisContext context)
+
 public sealed class DotRocks.Analyzers.EntityFrameworkCore.EfValueGeneratedNeverAnalyzer Microsoft.CodeAnalysis.Diagnostics.DiagnosticAnalyzer
   public DotRocks.Analyzers.EntityFrameworkCore.EfValueGeneratedNeverAnalyzer()
   public property System.Collections.Immutable.ImmutableArray<Microsoft.CodeAnalysis.DiagnosticDescriptor> SupportedDiagnostics { get; }
@@ -31,6 +36,7 @@ public sealed class DotRocks.Analyzers.EntityFrameworkCore.UnsupportedEfApiAnaly
   public virtual method System.Void Initialize(Microsoft.CodeAnalysis.Diagnostics.AnalysisContext context)
 
 public static class DotRocks.Analyzers.Infrastructure.DotRocksDiagnosticDescriptors
+  public static field System.String CompositePrimaryKeyDiagnosticId
   public static field System.String InsecureStreamLoadEndpointDiagnosticId
   public static field System.String MissingValueGeneratedNeverDiagnosticId
   public static field System.String MultiRowSaveChangesDiagnosticId

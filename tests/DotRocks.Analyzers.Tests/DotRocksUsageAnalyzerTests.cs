@@ -319,6 +319,72 @@ public sealed class DotRocksUsageAnalyzerTests
         );
     }
 
+    [Fact]
+    public async Task EfEntityWithCompositeKey_ReportsDiagnostic()
+    {
+        Diagnostic[] diagnostics = await AnalyzeAsync(
+                EfStubs
+                    + """
+
+                    internal sealed class Widget
+                    {
+                        public int Id { get; set; }
+                        public int Category { get; set; }
+                    }
+
+                    internal sealed class SampleContext : Microsoft.EntityFrameworkCore.DbContext
+                    {
+                        protected override void OnModelCreating(Microsoft.EntityFrameworkCore.ModelBuilder modelBuilder)
+                        {
+                            modelBuilder.Entity<Widget>().HasKey(widget => new { widget.Id, widget.Category });
+                        }
+                    }
+                    """
+            )
+            .ConfigureAwait(true);
+
+        Diagnostic diagnostic = Assert.Single(
+            diagnostics,
+            diagnostic =>
+                diagnostic.Id == DotRocksDiagnosticDescriptors.CompositePrimaryKeyDiagnosticId
+        );
+        Assert.Contains(
+            "Widget",
+            diagnostic.GetMessage(CultureInfo.InvariantCulture),
+            StringComparison.Ordinal
+        );
+    }
+
+    [Fact]
+    public async Task EfEntityWithSingleColumnKey_DoesNotReportCompositeKeyDiagnostic()
+    {
+        Diagnostic[] diagnostics = await AnalyzeAsync(
+                EfStubs
+                    + """
+
+                    internal sealed class Widget
+                    {
+                        public int Id { get; set; }
+                    }
+
+                    internal sealed class SampleContext : Microsoft.EntityFrameworkCore.DbContext
+                    {
+                        protected override void OnModelCreating(Microsoft.EntityFrameworkCore.ModelBuilder modelBuilder)
+                        {
+                            modelBuilder.Entity<Widget>().HasKey(widget => widget.Id);
+                        }
+                    }
+                    """
+            )
+            .ConfigureAwait(true);
+
+        Assert.DoesNotContain(
+            diagnostics,
+            diagnostic =>
+                diagnostic.Id == DotRocksDiagnosticDescriptors.CompositePrimaryKeyDiagnosticId
+        );
+    }
+
     [Theory]
     [InlineData("binary")]
     [InlineData("varbinary")]
@@ -917,6 +983,7 @@ public sealed class DotRocksUsageAnalyzerTests
             new TransactionCompletionAnalyzer(),
             new UnsupportedEfApiAnalyzer(),
             new MultiRowSaveChangesAnalyzer(),
+            new EfCompositePrimaryKeyAnalyzer(),
         ];
         CompilationWithAnalyzers compilationWithAnalyzers = compilation.WithAnalyzers(
             ImmutableArray.Create(analyzers)

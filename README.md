@@ -242,6 +242,7 @@ Current diagnostics:
 | `DTR0005` | Warning | EF Core `EnsureCreated` / `EnsureDeleted` calls. | Use migrations for conservative StarRocks DDL; these database creator APIs are intentionally unsupported. |
 | `DTR0006` | Warning | EF Core `ExecuteUpdate` / `ExecuteDelete` calls. | Use tracked single-row `SaveChanges` or raw SQL with explicit parameters; bulk LINQ DML is not translated. |
 | `DTR0007` | Warning | Source-visible `AddRange` / `UpdateRange` / `RemoveRange` followed by one `SaveChanges` call. | Save one row per `SaveChanges`, or use Stream Load for bulk ingestion. |
+| `DTR0008` | Warning | EF Core entities configured with a composite primary key (`HasKey(e => new { ... })`) in `OnModelCreating`. | Use a single-column primary key for writable entities, or `HasNoKey()` for read-only entities. Escalate to a build error with `dotnet_diagnostic.DTR0008.severity = error`. No automatic fix is provided. |
 
 Analyzer limits: diagnostics currently inspect source-visible constants, local string
 assignments, `DotRocksConnectionStringBuilder` initializers, and local method bodies.

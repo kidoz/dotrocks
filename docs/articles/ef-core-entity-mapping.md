@@ -224,18 +224,25 @@ Every message below is thrown by `DotRocksModelValidator` at model-build time. T
 
 ## Related analyzer diagnostics
 
-`DotRocks.Analyzers` flags many of these at **build time**, before the runtime throw. Treat
-them as the early-warning version of the catalog above (codes per the implementation brief;
-verify the active set in your installed analyzer release):
+`DotRocks.Analyzers` flags several of these mapping mistakes at **build time**, before the
+runtime throw — treat them as the early-warning version of the catalog above:
 
-| Code | Flags |
-|---|---|
-| `DTR2003` | Unsupported generated-value / identity configuration |
-| `DTR2004` | Writable entity lacks an explicit StarRocks table model |
-| `DTR2005` | StarRocks table model lacks required distribution configuration |
-| `DTR2006` | Unsupported row-version / concurrency-token configuration |
-| `DTR2007` | Unsupported foreign-key / cascade assumption |
-| `DTR2008` | `SaveChanges` against a statically known read-only table model |
+| Code | Severity | Flags |
+|---|---|---|
+| `DTR0002` | Warning | EF writable key without `ValueGeneratedNever()` |
+| `DTR0003` | Warning | Unsupported `binary` / `varbinary` mapping |
+| `DTR0008` | Warning | Composite primary key (`HasKey(e => new { ... })`) — the exact mistake this guide opens with |
+
+All EF analyzers default to **Warning** so they surface early without breaking multi-provider
+builds. To turn the composite-key rule into a hard build error for a project, add to
+`.editorconfig`:
+
+```ini
+dotnet_diagnostic.DTR0008.severity = error
+```
+
+The runtime `DotRocksModelValidator` always rejects these configurations regardless of analyzer
+severity.
 
 ## AI-agent checklist
 
