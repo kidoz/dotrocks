@@ -95,6 +95,18 @@ internal static class PerformanceBudgetCatalog
                     MaxMeanNanoseconds: 3_000,
                     MaxAllocatedBytes: 512
                 ),
+                // Packet framing read path. Budgets are set from measured values with headroom for
+                // slower CI runners; they guard the per-row allocation hot path against regressions.
+                ["ReadSinglePacketPayload"] = new(
+                    "ReadSinglePacketPayload",
+                    MaxMeanNanoseconds: 5_000,
+                    MaxAllocatedBytes: 2_048
+                ),
+                ["ReadMultiPacketPayload"] = new(
+                    "ReadMultiPacketPayload",
+                    MaxMeanNanoseconds: 20_000,
+                    MaxAllocatedBytes: 16_384
+                ),
             }
         );
 }
