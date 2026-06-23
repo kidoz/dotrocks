@@ -36,4 +36,17 @@ public static class DotRocksTelemetry
         unit: "ms",
         description: "Duration of StarRocks command execution in milliseconds."
     );
+
+    internal static readonly Histogram<double> PoolLeaseWaitDuration =
+        Meter.CreateHistogram<double>(
+            "dotrocks.pool.lease.wait_time",
+            unit: "ms",
+            description: "Time spent waiting to acquire a pooled StarRocks connection lease in milliseconds."
+        );
+
+    internal static readonly Counter<long> PoolConnectionsDiscarded = Meter.CreateCounter<long>(
+        "dotrocks.pool.connections.discarded",
+        unit: "{connection}",
+        description: "Number of pooled StarRocks connections discarded on return instead of reused."
+    );
 }

@@ -349,6 +349,10 @@ keeps session state — the current database and session variables — from leak
 lease. Pure query and DML workloads pool and reuse connections normally; a verified
 connection-reset path may relax this in a future release.
 
+Pool activity is observable through the `DotRocks.Data` `Meter`: `dotrocks.pool.connections.idle`
+and `dotrocks.pool.connections.active` (gauges), `dotrocks.pool.lease.wait_time` (histogram), and
+`dotrocks.pool.connections.discarded` (counter).
+
 Connection pooling is **process-global**, keyed by the normalized connection configuration, and is
 not owned by any single `DotRocksConnection` or `DotRocksDataSource`. Disposing a `DotRocksDataSource`
 stops it from opening new connections but does **not** evict that configuration's idle physical

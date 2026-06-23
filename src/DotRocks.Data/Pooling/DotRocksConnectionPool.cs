@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using DotRocks.Data.Diagnostics;
 using DotRocks.Data.Loading;
 
 namespace DotRocks.Data.Pooling;
@@ -10,6 +12,27 @@ internal sealed class DotRocksConnectionPool : IDisposable
         DotRocksConnectionPoolKey,
         DotRocksConnectionPool
     > Pools = new();
+
+    [SuppressMessage(
+        "Performance",
+        "CA1810:Initialize reference type static fields inline",
+        Justification = "Observable gauges must be registered exactly once with the shared meter."
+    )]
+    static DotRocksConnectionPool()
+    {
+        DotRocksTelemetry.Meter.CreateObservableGauge(
+            "dotrocks.pool.connections.idle",
+            ObserveIdleConnections,
+            unit: "{connection}",
+            description: "Idle pooled StarRocks connections across all pools."
+        );
+        DotRocksTelemetry.Meter.CreateObservableGauge(
+            "dotrocks.pool.connections.active",
+            ObserveActiveLeases,
+            unit: "{connection}",
+            description: "Leased (in-use) pooled StarRocks connections across all pools."
+        );
+    }
 
     private readonly Lock _gate = new();
     private readonly DotRocksConnectionOptions _options;
@@ -95,7 +118,11 @@ internal sealed class DotRocksConnectionPool : IDisposable
     )
     {
         ObjectDisposedException.ThrowIf(_isDisposed, this);
+        long waitStart = Stopwatch.GetTimestamp();
         await _leaseGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        DotRocksTelemetry.PoolLeaseWaitDuration.Record(
+            Stopwatch.GetElapsedTime(waitStart).TotalMilliseconds
+        );
         try
         {
             ObjectDisposedException.ThrowIf(_isDisposed, this);
@@ -140,6 +167,7 @@ internal sealed class DotRocksConnectionPool : IDisposable
             if (!enqueued)
             {
                 physicalConnection.Dispose();
+                DotRocksTelemetry.PoolConnectionsDiscarded.Add(1);
             }
         }
         finally
@@ -181,6 +209,31 @@ internal sealed class DotRocksConnectionPool : IDisposable
                 return _idleConnections.Count;
             }
         }
+    }
+
+    // Permits taken from the lease gate equal the number of leased (in-use) connections.
+    internal int ActiveLeaseCount => _options.MaximumPoolSize - _leaseGate.CurrentCount;
+
+    private static int ObserveIdleConnections()
+    {
+        int total = 0;
+        foreach (DotRocksConnectionPool pool in Pools.Values)
+        {
+            total += pool.IdleCount;
+        }
+
+        return total;
+    }
+
+    private static int ObserveActiveLeases()
+    {
+        int total = 0;
+        foreach (DotRocksConnectionPool pool in Pools.Values)
+        {
+            total += pool.ActiveLeaseCount;
+        }
+
+        return total;
     }
 
     private void EvictExpiredIdleConnections()
