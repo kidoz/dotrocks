@@ -12,6 +12,8 @@ public enum DotRocks.EntityFrameworkCore.Metadata.DotRocksTableKeyModel
   public static field DotRocks.EntityFrameworkCore.Metadata.DotRocksTableKeyModel UniqueKey
 
 public static class Microsoft.EntityFrameworkCore.DotRocksDbContextOptionsBuilderExtensions
+  public static method DbContextOptionsBuilder<TContext> UseStarRocks<TContext>(DbContextOptionsBuilder<TContext> optionsBuilder, System.Data.Common.DbConnection connection, System.Boolean contextOwnsConnection, System.Action<DotRocks.EntityFrameworkCore.Infrastructure.DotRocksDbContextOptionsBuilder> dotRocksOptionsAction)
+  public static method DbContextOptionsBuilder<TContext> UseStarRocks<TContext>(DbContextOptionsBuilder<TContext> optionsBuilder, System.String connectionString, System.Action<DotRocks.EntityFrameworkCore.Infrastructure.DotRocksDbContextOptionsBuilder> dotRocksOptionsAction)
   public static method Microsoft.EntityFrameworkCore.DbContextOptionsBuilder UseStarRocks(Microsoft.EntityFrameworkCore.DbContextOptionsBuilder optionsBuilder, System.Data.Common.DbConnection connection, System.Boolean contextOwnsConnection, System.Action<DotRocks.EntityFrameworkCore.Infrastructure.DotRocksDbContextOptionsBuilder> dotRocksOptionsAction)
   public static method Microsoft.EntityFrameworkCore.DbContextOptionsBuilder UseStarRocks(Microsoft.EntityFrameworkCore.DbContextOptionsBuilder optionsBuilder, System.String connectionString, System.Action<DotRocks.EntityFrameworkCore.Infrastructure.DotRocksDbContextOptionsBuilder> dotRocksOptionsAction)
 
