@@ -403,18 +403,17 @@ public sealed class DotRocksCommand : DbCommand
 
     private string BindCommandText()
     {
-        if (_preparedCommand is not null)
+        // A prepared command whose text still matches binds from the cached tokenized template,
+        // avoiding a re-scan of the command text on every execution.
+        if (
+            _preparedCommand is not null
+            && string.Equals(_preparedCommand.CommandText, CommandText, StringComparison.Ordinal)
+        )
         {
-            if (!string.Equals(_preparedCommand.CommandText, CommandText, StringComparison.Ordinal))
-            {
-                _preparedCommand = null;
-            }
-            else
-            {
-                CommandTextParameterBinder.Prepare(CommandText, _parameters);
-            }
+            return CommandTextParameterBinder.BindPrepared(_preparedCommand, _parameters);
         }
 
+        _preparedCommand = null;
         return CommandTextParameterBinder.Bind(CommandText, _parameters);
     }
 

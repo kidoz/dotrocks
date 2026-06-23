@@ -219,6 +219,62 @@ public sealed class CommandTextParameterBinderTests
         );
     }
 
+    [Theory]
+    [InlineData("SELECT @id, @name", "@id", 42, "name", "O'Reilly")]
+    [InlineData("SELECT @value + @value FROM t", "value", 5, null, null)]
+    [InlineData(
+        "SELECT @id /* @ignored */, '@ignored', `@ignored`, @@version WHERE x = @id",
+        "id",
+        7,
+        null,
+        null
+    )]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Security",
+        "CA2100:Review SQL queries for security vulnerabilities",
+        Justification = "Test command text comes from inline test data, not user input."
+    )]
+    public void BindPrepared_MatchesBind(
+        string sql,
+        string firstName,
+        object firstValue,
+        string? secondName,
+        object? secondValue
+    )
+    {
+        using var command = new DotRocksCommand { CommandText = sql };
+        Add(command, firstName, firstValue);
+        if (secondName is not null)
+        {
+            Add(command, secondName, secondValue);
+        }
+
+        PreparedCommandText prepared = CommandTextParameterBinder.Prepare(sql, command.Parameters);
+        string bound = CommandTextParameterBinder.Bind(sql, command.Parameters);
+        string boundPrepared = CommandTextParameterBinder.BindPrepared(prepared, command.Parameters);
+
+        Assert.Equal(bound, boundPrepared);
+    }
+
+    [Fact]
+    public void BindPrepared_RejectsMissingParameterAtBindTime()
+    {
+        using var command = new DotRocksCommand { CommandText = "SELECT @id" };
+        Add(command, "id", 1);
+        PreparedCommandText prepared = CommandTextParameterBinder.Prepare(
+            command.CommandText,
+            command.Parameters
+        );
+
+        using var rebound = new DotRocksCommand { CommandText = "SELECT @id" };
+        Add(rebound, "other", 2);
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            CommandTextParameterBinder.BindPrepared(prepared, rebound.Parameters)
+        );
+        Assert.Contains("@id", exception.Message, StringComparison.Ordinal);
+    }
+
     private static void Add(DbCommand command, string name, object? value)
     {
         command.Parameters.Add(new DotRocksParameter { ParameterName = name, Value = value });

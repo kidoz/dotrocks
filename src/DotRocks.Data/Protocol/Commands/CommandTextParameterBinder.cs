@@ -129,7 +129,9 @@ internal static class CommandTextParameterBinder
 
         Dictionary<string, DbParameter> parameterMap = BuildParameterMap(parameters);
         var referencedParameters = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var segments = new List<CommandTextSegment>();
         bool hasPlaceholders = false;
+        int literalStart = 0;
 
         for (int index = 0; index < commandText.Length; index++)
         {
@@ -210,10 +212,26 @@ internal static class CommandTextParameterBinder
                     );
                 }
 
+                // Flush the literal run preceding the placeholder, then record the parameter so a
+                // later BindPrepared can substitute it without re-scanning the command text.
+                if (index > literalStart)
+                {
+                    segments.Add(new CommandTextSegment(literalStart, index - literalStart, null));
+                }
+
+                segments.Add(new CommandTextSegment(0, 0, parameterName));
                 referencedParameters.Add(parameterName);
                 hasPlaceholders = true;
+                literalStart = nameEnd;
                 index = nameEnd - 1;
             }
+        }
+
+        if (literalStart < commandText.Length)
+        {
+            segments.Add(
+                new CommandTextSegment(literalStart, commandText.Length - literalStart, null)
+            );
         }
 
         foreach (string parameterName in parameterMap.Keys)
@@ -226,7 +244,78 @@ internal static class CommandTextParameterBinder
             }
         }
 
-        return new PreparedCommandText(commandText, [.. referencedParameters], hasPlaceholders);
+        return new PreparedCommandText(
+            commandText,
+            [.. referencedParameters],
+            hasPlaceholders,
+            segments
+        );
+    }
+
+    /// <summary>
+    /// Binds parameters using a previously prepared template, substituting values without
+    /// re-scanning the command text. Produces output identical to <see cref="Bind"/> for the same
+    /// command text and parameters.
+    /// </summary>
+    public static string BindPrepared(
+        PreparedCommandText prepared,
+        DbParameterCollection parameters
+    )
+    {
+        ArgumentNullException.ThrowIfNull(prepared);
+        ArgumentNullException.ThrowIfNull(parameters);
+
+        if (parameters.Count == 0)
+        {
+            return prepared.CommandText;
+        }
+
+        Dictionary<string, DbParameter> parameterMap = BuildParameterMap(parameters);
+        var builder = new StringBuilder(prepared.CommandText.Length);
+        foreach (CommandTextSegment segment in prepared.Segments)
+        {
+            if (segment.ParameterName is null)
+            {
+                builder.Append(
+                    prepared.CommandText.AsSpan(segment.LiteralStart, segment.LiteralLength)
+                );
+                continue;
+            }
+
+            if (!parameterMap.TryGetValue(segment.ParameterName, out DbParameter? parameter))
+            {
+                throw new InvalidOperationException(
+                    $"Command text references parameter '@{segment.ParameterName}', but it was not provided."
+                );
+            }
+
+            builder.Append(SqlLiteralFormatter.Format(parameter.Value));
+        }
+
+        foreach (string providedName in parameterMap.Keys)
+        {
+            if (!ContainsOrdinalIgnoreCase(prepared.ParameterNames, providedName))
+            {
+                throw new InvalidOperationException(
+                    $"Parameter '@{providedName}' was provided but is not referenced by the command text."
+                );
+            }
+        }
+
+        return builder.ToString();
+    }
+
+    private static bool ContainsOrdinalIgnoreCase(IReadOnlyList<string> names, string value)
+    {
+        for (int i = 0; i < names.Count; i++)
+        {
+            if (string.Equals(names[i], value, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static Dictionary<string, DbParameter> BuildParameterMap(
@@ -439,5 +528,16 @@ internal static class CommandTextParameterBinder
 internal sealed record PreparedCommandText(
     string CommandText,
     IReadOnlyList<string> ParameterNames,
-    bool HasPlaceholders
+    bool HasPlaceholders,
+    IReadOnlyList<CommandTextSegment> Segments
+);
+
+/// <summary>
+/// A compiled fragment of a command text: either a literal slice of the original command text
+/// (<see cref="ParameterName"/> is null) or a named parameter placeholder to substitute.
+/// </summary>
+internal readonly record struct CommandTextSegment(
+    int LiteralStart,
+    int LiteralLength,
+    string? ParameterName
 );
