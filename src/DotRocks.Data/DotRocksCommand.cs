@@ -329,10 +329,6 @@ public sealed class DotRocksCommand : DbCommand
         }
         finally
         {
-            var outcome = new KeyValuePair<string, object?>(
-                "outcome",
-                succeeded ? "success" : "error"
-            );
             if (succeeded)
             {
                 activity?.SetStatus(ActivityStatusCode.Ok);
@@ -342,11 +338,18 @@ public sealed class DotRocksCommand : DbCommand
                 DotRocksTelemetryTags.TagError(activity, errorType ?? "OTHER", statusCode);
             }
 
+            // Bounded metric labels only: outcome in {success, error, canceled, timeout} and a
+            // low-cardinality operation name. Never SQL text, parameters, or identifiers.
+            var tags = new TagList
+            {
+                { "outcome", DotRocksTelemetryTags.OutcomeFor(succeeded, errorType) },
+                { "operation", DotRocksTelemetryTags.ClassifyOperation(commandText) },
+            };
             DotRocksTelemetry.CommandDuration.Record(
                 Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds,
-                outcome
+                tags
             );
-            DotRocksTelemetry.CommandsExecuted.Add(1, outcome);
+            DotRocksTelemetry.CommandsExecuted.Add(1, tags);
             ClearActiveCommandCancellation(commandCancellation);
         }
     }

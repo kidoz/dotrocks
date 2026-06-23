@@ -342,6 +342,13 @@ builder.Services.AddOpenTelemetry()
     .WithMetrics(m => m.AddMeter(DotRocksTelemetry.MeterName));
 ```
 
+The command metrics carry only bounded labels: `outcome` (`success`, `error`, `canceled`,
+`timeout`) and `operation` (a low-cardinality operation name such as `SELECT`/`INSERT`). SQL text,
+parameter values, connection strings, user names, host names, and database names are never used as
+metric labels. DotRocks keeps its native metric names (`dotrocks.command.duration` in ms); a stable
+`db.client.operation.duration` (seconds) is intentionally not emitted in parallel to avoid duplicate
+dashboards, and could be added in a future major version.
+
 Spans carry safe attributes aligned with the OpenTelemetry database semantic conventions:
 `db.system.name` (`other_sql`), `db.operation.name` and `db.query.summary` (a low-cardinality
 operation such as `SELECT`/`INSERT`, never literals), `server.port`, `db.namespace` when known, and

@@ -24,9 +24,35 @@ internal static class DotRocksTelemetryTags
     // db.system.name value: 'other_sql' until a stable 'starrocks' registry value exists.
     public const string DbSystemValue = "other_sql";
 
-    // Stable, low-cardinality error classifications.
+    // Stable, low-cardinality error classifications (also used as metric outcome values).
     public const string ErrorTimeout = "timeout";
     public const string ErrorCanceled = "canceled";
+
+    // Bounded metric outcome label values.
+    public const string OutcomeSuccess = "success";
+    public const string OutcomeError = "error";
+
+    private static readonly string[] KnownOperations =
+    [
+        "SELECT",
+        "INSERT",
+        "UPDATE",
+        "DELETE",
+        "SET",
+        "USE",
+        "CREATE",
+        "DROP",
+        "ALTER",
+        "SHOW",
+        "WITH",
+        "EXPLAIN",
+        "TRUNCATE",
+        "GRANT",
+        "REVOKE",
+        "BEGIN",
+        "COMMIT",
+        "ROLLBACK",
+    ];
 
     /// <summary>Tags a connection-open span with safe, non-tenant-bearing attributes.</summary>
     public static void TagConnectionOpen(Activity? activity, DotRocksConnectionOptions options)
@@ -107,7 +133,11 @@ internal static class DotRocksTelemetryTags
         }
     }
 
-    private static string ClassifyOperation(string commandText)
+    /// <summary>
+    /// Maps a command's leading keyword to a bounded, low-cardinality operation name (or
+    /// <c>OTHER</c>). Allocation-free: it is also used for the always-on metric label.
+    /// </summary>
+    public static string ClassifyOperation(string commandText)
     {
         int index = 0;
         while (index < commandText.Length && char.IsWhiteSpace(commandText[index]))
@@ -121,33 +151,25 @@ internal static class DotRocksTelemetryTags
             index++;
         }
 
-        if (index == start)
+        ReadOnlySpan<char> verb = commandText.AsSpan(start, index - start);
+        foreach (string operation in KnownOperations)
         {
-            return "OTHER";
+            if (verb.Equals(operation, StringComparison.OrdinalIgnoreCase))
+            {
+                return operation;
+            }
         }
 
-        // Restrict to a known set so the attribute stays low-cardinality for arbitrary input.
-        return commandText[start..index].ToUpperInvariant() switch
-        {
-            "SELECT" => "SELECT",
-            "INSERT" => "INSERT",
-            "UPDATE" => "UPDATE",
-            "DELETE" => "DELETE",
-            "SET" => "SET",
-            "USE" => "USE",
-            "CREATE" => "CREATE",
-            "DROP" => "DROP",
-            "ALTER" => "ALTER",
-            "SHOW" => "SHOW",
-            "WITH" => "WITH",
-            "EXPLAIN" => "EXPLAIN",
-            "TRUNCATE" => "TRUNCATE",
-            "GRANT" => "GRANT",
-            "REVOKE" => "REVOKE",
-            "BEGIN" => "BEGIN",
-            "COMMIT" => "COMMIT",
-            "ROLLBACK" => "ROLLBACK",
-            _ => "OTHER",
-        };
+        return "OTHER";
     }
+
+    /// <summary>Maps an execution result to a bounded metric outcome label value.</summary>
+    public static string OutcomeFor(bool succeeded, string? errorType) =>
+        succeeded ? OutcomeSuccess
+        : errorType switch
+        {
+            ErrorTimeout => ErrorTimeout,
+            ErrorCanceled => ErrorCanceled,
+            _ => OutcomeError,
+        };
 }

@@ -48,6 +48,27 @@ public sealed class TelemetryTagsTests
         AssertNoSecretLeak(activity, "secret");
     }
 
+    [Theory]
+    [InlineData("", "OTHER")]
+    [InlineData("   ", "OTHER")]
+    [InlineData("   select 1", "SELECT")]
+    [InlineData("WITH cte AS (SELECT 1) SELECT * FROM cte", "WITH")]
+    [InlineData("vacuum analyze", "OTHER")]
+    public void ClassifyOperation_ReturnsBoundedValues(string sql, string expected) =>
+        Assert.Equal(expected, DotRocksTelemetryTags.ClassifyOperation(sql));
+
+    [Theory]
+    [InlineData(true, null, "success")]
+    [InlineData(false, "timeout", "timeout")]
+    [InlineData(false, "canceled", "canceled")]
+    [InlineData(false, "42000", "error")]
+    [InlineData(false, null, "error")]
+    public void OutcomeFor_MapsToBoundedValues(
+        bool succeeded,
+        string? errorType,
+        string expected
+    ) => Assert.Equal(expected, DotRocksTelemetryTags.OutcomeFor(succeeded, errorType));
+
     [Fact]
     public void TagError_SetsClassificationWithoutMessageText()
     {
