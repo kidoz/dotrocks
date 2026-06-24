@@ -40,7 +40,7 @@ internal static class ResultPacket
             sqlState = Encoding.ASCII.GetString(reader.ReadBytes(5));
         }
 
-        string message = Encoding.UTF8.GetString(reader.ReadToEnd());
+        string message = SanitizeServerMessage(Encoding.UTF8.GetString(reader.ReadToEnd()));
         return new DotRocksException(
             string.IsNullOrWhiteSpace(message) ? "StarRocks returned an error." : message,
             errorCode,
@@ -48,6 +48,39 @@ internal static class ResultPacket
             isTransient: false,
             connectionId
         );
+    }
+
+    // The server error message is untrusted text that flows into DotRocksException.Message and, from
+    // there, into whatever logging a consumer wires up. Replace control characters (CR, LF, escape,
+    // etc.) with spaces so a hostile or buggy server cannot forge log lines or smuggle terminal
+    // escape sequences through the message.
+    private static string SanitizeServerMessage(string message)
+    {
+        int controlIndex = -1;
+        for (int i = 0; i < message.Length; i++)
+        {
+            if (char.IsControl(message[i]))
+            {
+                controlIndex = i;
+                break;
+            }
+        }
+
+        if (controlIndex < 0)
+        {
+            return message;
+        }
+
+        char[] sanitized = message.ToCharArray();
+        for (int i = controlIndex; i < sanitized.Length; i++)
+        {
+            if (char.IsControl(sanitized[i]))
+            {
+                sanitized[i] = ' ';
+            }
+        }
+
+        return new string(sanitized);
     }
 
     public static OkResult ReadOk(ReadOnlySpan<byte> payload)

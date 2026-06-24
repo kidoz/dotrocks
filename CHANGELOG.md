@@ -16,6 +16,10 @@ version is derived from the release tag at publish time.
 ### Security
 - Redacted the password and cleartext connection string from `DotRocksConnectionOptions`'s
   `ToString()` output.
+- Capped the server-advertised result-set column count before pre-allocation to prevent an
+  out-of-memory denial of service from a hostile or corrupt server.
+- Stripped control characters from server-provided error text surfaced through
+  `DotRocksException.Message` to prevent log forging.
 
 ## [1.0.1] - 2026-06-23
 

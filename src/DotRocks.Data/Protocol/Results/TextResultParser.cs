@@ -6,6 +6,12 @@ namespace DotRocks.Data.Protocol.Results;
 
 internal static class TextResultParser
 {
+    // Upper bound on the column count accepted from the server before any column packet is read.
+    // The count is a length-encoded integer that drives a list pre-allocation, so an unbounded
+    // value would let a hostile or corrupt server force a multi-gigabyte allocation (OOM) up front.
+    // 65535 is far above any realistic result-set width while keeping the pre-allocation small.
+    private const int MaxColumnCount = 65535;
+
     public static async ValueTask<QueryResult> ReadAsync(
         byte[] firstPayload,
         PacketReader reader,
@@ -161,9 +167,11 @@ internal static class TextResultParser
     {
         var reader = new ProtocolReader(payload);
         ulong value = reader.ReadLengthEncodedInteger();
-        if (value > int.MaxValue)
+        if (value > MaxColumnCount)
         {
-            throw new MalformedPacketException("Result-set column count exceeds Int32.MaxValue.");
+            throw new MalformedPacketException(
+                $"Result-set column count {value} exceeds the supported maximum of {MaxColumnCount}."
+            );
         }
 
         return (int)value;

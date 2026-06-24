@@ -211,6 +211,36 @@ public sealed class TextResultParserTests
     }
 
     [Fact]
+    public void ReadColumnCount_WhenCountExceedsSupportedMaximum_ThrowsMalformedPacketException()
+    {
+        using var writer = new ProtocolWriter();
+        writer.WriteLengthEncodedInteger(65_536);
+
+        MalformedPacketException exception = Assert.Throws<MalformedPacketException>(() =>
+            TextResultParser.ReadColumnCount(writer.WrittenSpan)
+        );
+
+        // A hostile column count must be rejected before the parser pre-allocates a per-column list.
+        Assert.Contains("maximum", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ReadError_StripsControlCharactersFromServerMessage()
+    {
+        DotRocksException exception = ResultPacket.ReadError(
+            BuildErrorPayload("line1\r\nFAKE LOG ENTRY\tcol"),
+            connectionId: null
+        );
+
+        // Untrusted server text must not be able to forge log lines via embedded CR/LF.
+        Assert.DoesNotContain('\r', exception.Message);
+        Assert.DoesNotContain('\n', exception.Message);
+        Assert.DoesNotContain('\t', exception.Message);
+        Assert.Contains("line1", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("FAKE LOG ENTRY", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ReadTextRow_WhenValueLengthClaimExceedsPayload_ThrowsMalformedPacketException()
     {
         ColumnDefinition[] columns = [Column("value")];
@@ -438,14 +468,14 @@ public sealed class TextResultParserTests
         return writer.ToArray();
     }
 
-    private static byte[] BuildErrorPayload()
+    private static byte[] BuildErrorPayload(string message = "syntax error")
     {
         using var writer = new ProtocolWriter();
         writer.WriteByte(ProtocolConstants.ErrorPacketHeader);
         writer.WriteFixedInteger(1064, 2);
         writer.WriteByte((byte)'#');
         writer.WriteBytes(Encoding.ASCII.GetBytes("42000"));
-        writer.WriteBytes(Encoding.UTF8.GetBytes("syntax error"));
+        writer.WriteBytes(Encoding.UTF8.GetBytes(message));
         return writer.ToArray();
     }
 }
