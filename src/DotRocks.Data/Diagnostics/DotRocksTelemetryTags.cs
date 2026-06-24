@@ -165,11 +165,12 @@ internal static class DotRocksTelemetryTags
 
     /// <summary>Maps an execution result to a bounded metric outcome label value.</summary>
     public static string OutcomeFor(bool succeeded, string? errorType) =>
-        succeeded ? OutcomeSuccess
-        : errorType switch
-        {
-            ErrorTimeout => ErrorTimeout,
-            ErrorCanceled => ErrorCanceled,
-            _ => OutcomeError,
-        };
+        succeeded
+            ? OutcomeSuccess
+            : errorType switch
+            {
+                ErrorTimeout => ErrorTimeout,
+                ErrorCanceled => ErrorCanceled,
+                _ => OutcomeError,
+            };
 }

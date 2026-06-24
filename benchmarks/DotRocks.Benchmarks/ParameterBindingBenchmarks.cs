@@ -44,8 +44,7 @@ public class ParameterBindingBenchmarks
     public void Cleanup() => _command.Dispose();
 
     [Benchmark(Baseline = true)]
-    public string BindParameterized() =>
-        CommandTextParameterBinder.Bind(Sql, _command.Parameters);
+    public string BindParameterized() => CommandTextParameterBinder.Bind(Sql, _command.Parameters);
 
     [Benchmark]
     public string BindPreparedParameterized() =>

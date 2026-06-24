@@ -111,7 +111,9 @@ internal sealed class PacketReader
     }
 
     private MalformedPacketException LogicalPayloadTooLarge() =>
-        new($"Logical packet payload exceeded the configured maximum of {_maxLogicalPayloadLength} byte(s).");
+        new(
+            $"Logical packet payload exceeded the configured maximum of {_maxLogicalPayloadLength} byte(s)."
+        );
 
     private async ValueTask<PacketHeader> ReadHeaderAsync(CancellationToken cancellationToken)
     {

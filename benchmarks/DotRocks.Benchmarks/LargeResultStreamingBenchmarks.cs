@@ -72,8 +72,7 @@ public class LargeResultStreamingBenchmarks
         command.CommandText = "SELECT id, value, amount FROM large_rows";
 
         long checksum = 0;
-        await using System.Data.Common.DbDataReader reader =
-            await command.ExecuteReaderAsync();
+        await using System.Data.Common.DbDataReader reader = await command.ExecuteReaderAsync();
         while (await reader.ReadAsync())
         {
             checksum += reader.GetInt64(0);
