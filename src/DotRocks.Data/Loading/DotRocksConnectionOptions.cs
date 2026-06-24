@@ -224,7 +224,12 @@ internal sealed record DotRocksConnectionOptions(
             SslMode,
             TrustServerCertificate,
             SslRevocationMode,
-            ServerCompatibilityLevel
+            ServerCompatibilityLevel,
+            Pooling,
+            MinimumPoolSize,
+            MaximumPoolSize,
+            (int)ConnectionIdleTimeout.TotalSeconds,
+            (int)ConnectionLifetime.TotalSeconds
         );
 
     private static void Validate(
@@ -613,7 +618,12 @@ internal sealed record DotRocksConnectionPoolKey(
     DotRocksSslMode SslMode,
     bool TrustServerCertificate,
     X509RevocationMode SslRevocationMode,
-    DotRocksServerVersion? ServerCompatibilityLevel
+    DotRocksServerVersion? ServerCompatibilityLevel,
+    bool Pooling,
+    int MinimumPoolSize,
+    int MaximumPoolSize,
+    int ConnectionIdleTimeoutSeconds,
+    int ConnectionLifetimeSeconds
 )
 {
     // Equality/hash still use the real Password (pool identity), but the default record ToString
@@ -625,5 +635,9 @@ internal sealed record DotRocksConnectionPoolKey(
         + $"Password = ***, Database = {Database}, ConnectionTimeoutSeconds = {ConnectionTimeoutSeconds}, "
         + $"SslMode = {SslMode}, TrustServerCertificate = {TrustServerCertificate}, "
         + $"SslRevocationMode = {SslRevocationMode}, "
-        + $"ServerCompatibilityLevel = {ServerCompatibilityLevel?.Raw ?? "(auto)"} }}";
+        + $"ServerCompatibilityLevel = {ServerCompatibilityLevel?.Raw ?? "(auto)"}, "
+        + $"Pooling = {Pooling}, MinimumPoolSize = {MinimumPoolSize}, "
+        + $"MaximumPoolSize = {MaximumPoolSize}, "
+        + $"ConnectionIdleTimeoutSeconds = {ConnectionIdleTimeoutSeconds}, "
+        + $"ConnectionLifetimeSeconds = {ConnectionLifetimeSeconds} }}";
 }
