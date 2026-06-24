@@ -8,6 +8,8 @@ version is derived from the release tag at publish time.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-06-24
+
 ### Changed
 - `Ssl Mode` now defaults to the new `Preferred` value (opportunistic TLS: upgrade when the
   server advertises support, otherwise plaintext) instead of `Disabled`. Set `Ssl Mode=Required`
@@ -57,6 +59,7 @@ version is derived from the release tag at publish time.
 - Stream Load refuses to forward credentials over a downgraded (HTTPS→HTTP) redirect.
 - NuGet vulnerability auditing and CodeQL analysis in CI.
 
-[Unreleased]: https://github.com/kidoz/dotrocks/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/kidoz/dotrocks/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/kidoz/dotrocks/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/kidoz/dotrocks/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/kidoz/dotrocks/releases/tag/v1.0.0
