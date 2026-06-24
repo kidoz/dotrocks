@@ -230,15 +230,15 @@ public sealed class ConnectionStringBuilderTests
     }
 
     [Fact]
-    public void TrustServerCertificateWithPreferredSsl_IsAllowed()
+    public void TrustServerCertificateWithPreferredSsl_Throws()
     {
-        // Preferred can upgrade to TLS, so trusting the certificate is a valid combination.
-        DotRocksConnectionOptions options = new DotRocksConnectionStringBuilder(
-            "Ssl Mode=Preferred;Trust Server Certificate=true"
-        ).BuildOptions();
-
-        Assert.Equal(DotRocksSslMode.Preferred, options.SslMode);
-        Assert.True(options.TrustServerCertificate);
+        // Under Preferred the trust flag would be a silent no-op on plaintext fallback, so bypassing
+        // certificate validation must commit to TLS via Ssl Mode=Required.
+        Assert.Throws<ArgumentException>(() =>
+            _ = new DotRocksConnectionStringBuilder(
+                "Ssl Mode=Preferred;Trust Server Certificate=true"
+            ).BuildOptions()
+        );
     }
 
     [Fact]

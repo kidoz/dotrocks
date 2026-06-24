@@ -282,10 +282,13 @@ internal sealed record DotRocksConnectionOptions(
             );
         }
 
-        if (trustServerCertificate && sslMode == DotRocksSslMode.Disabled)
+        if (trustServerCertificate && sslMode != DotRocksSslMode.Required)
         {
+            // Bypassing certificate validation is only coherent when TLS is guaranteed. Under
+            // Preferred it would be a silent no-op whenever the connection falls back to plaintext,
+            // so require an explicit Ssl Mode=Required.
             throw new ArgumentException(
-                "Trust Server Certificate requires TLS (Ssl Mode=Preferred or Required).",
+                "Trust Server Certificate requires Ssl Mode=Required.",
                 nameof(trustServerCertificate)
             );
         }

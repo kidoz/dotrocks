@@ -416,19 +416,29 @@ public sealed class DotRocksConnectionCancellationTests
     }
 
     [Fact]
-    public async Task OpenAsync_SslModePreferredWithServerSupport_UpgradesToTls()
+    public async Task OpenAsync_SslModePreferredWithServerSupport_NegotiatesTlsAndValidatesCertificate()
     {
-        using var server = FakeStarRocksServer.Start(HandleTlsOpenOnlyConnectionAsync);
+        using var server = FakeStarRocksServer.Start(HandleTlsRejectingConnectionAsync);
 
-        // Preferred upgrades when the server advertises TLS. Trust the self-signed test cert.
+        // Preferred upgrades when the server advertises TLS and then enforces certificate
+        // validation; the self-signed cert is rejected (proving it negotiated TLS rather than
+        // silently falling back to plaintext). Trust Server Certificate is not allowed under
+        // Preferred, so this is the only way to exercise the upgrade path here.
         string connectionString =
-            BuildFakeServerConnectionString(server.Port)
-            + ";Ssl Mode=Preferred;Trust Server Certificate=True";
+            BuildFakeServerConnectionString(server.Port) + ";Ssl Mode=Preferred";
         using var connection = new DotRocksConnection(connectionString);
 
-        await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+        DotRocksException exception = await Assert
+            .ThrowsAsync<DotRocksException>(async () =>
+                await connection
+                    .OpenAsync(TestContext.Current.CancellationToken)
+                    .ConfigureAwait(true)
+            )
+            .ConfigureAwait(true);
 
-        Assert.Equal(ConnectionState.Open, connection.State);
+        Assert.IsType<AuthenticationException>(exception.InnerException);
+        Assert.Equal(ConnectionState.Closed, connection.State);
+        AssertSanitized(exception, connectionString);
     }
 
     [Fact]

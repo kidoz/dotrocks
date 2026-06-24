@@ -199,7 +199,9 @@ public sealed class DotRocksConnectionStringBuilder
     }
 
     /// <summary>
-    /// Gets or sets a value indicating whether TLS certificate validation is bypassed.
+    /// Gets or sets a value indicating whether TLS certificate validation is bypassed. Requires
+    /// <see cref="SslMode"/> to be <see cref="DotRocksSslMode.Required"/>; otherwise opening the
+    /// connection throws, since the setting would be a silent no-op on a plaintext fallback.
     /// </summary>
     public bool TrustServerCertificate
     {

@@ -89,7 +89,8 @@ downgrade attacker), or `Disabled` to never request TLS.
 DotRocks uses platform certificate validation (chain and host name) by default and checks
 revocation in offline mode to avoid a blocking OCSP/CRL fetch during the handshake;
 `Trust Server Certificate=true` disables validation and is intended only for controlled
-local test environments with self-signed certificates.
+local test environments with self-signed certificates; it requires `Ssl Mode=Required` so it
+is never silently ignored on a plaintext fallback.
 
 DotRocks gates version-specific behavior on the StarRocks version, which it reads with
 `SELECT current_version()` (the MySQL-protocol handshake only reports a compatibility version
