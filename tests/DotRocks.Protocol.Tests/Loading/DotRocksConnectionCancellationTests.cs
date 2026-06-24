@@ -399,6 +399,39 @@ public sealed class DotRocksConnectionCancellationTests
     }
 
     [Fact]
+    public async Task OpenAsync_SslModePreferredWithoutServerSupport_ConnectsInPlaintext()
+    {
+        using var server = FakeStarRocksServer.Start(HandleOpenOnlyConnectionAsync);
+
+        // Preferred is opportunistic: a server that does not advertise TLS continues in plaintext
+        // rather than failing the connection.
+        string connectionString =
+            BuildFakeServerConnectionString(server.Port) + ";Ssl Mode=Preferred";
+        using var connection = new DotRocksConnection(connectionString);
+
+        await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        Assert.Equal(ConnectionState.Open, connection.State);
+        await connection.CloseAsync().ConfigureAwait(true);
+    }
+
+    [Fact]
+    public async Task OpenAsync_SslModePreferredWithServerSupport_UpgradesToTls()
+    {
+        using var server = FakeStarRocksServer.Start(HandleTlsOpenOnlyConnectionAsync);
+
+        // Preferred upgrades when the server advertises TLS. Trust the self-signed test cert.
+        string connectionString =
+            BuildFakeServerConnectionString(server.Port)
+            + ";Ssl Mode=Preferred;Trust Server Certificate=True";
+        using var connection = new DotRocksConnection(connectionString);
+
+        await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        Assert.Equal(ConnectionState.Open, connection.State);
+    }
+
+    [Fact]
     public async Task ExecuteScalarAsync_MalformedQueryResult_ThrowsSanitizedExceptionAndDiscardsPooledConnection()
     {
         using var server = FakeStarRocksServer.Start(

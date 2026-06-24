@@ -48,7 +48,7 @@ public sealed class ConnectionStringBuilderTests
         Assert.Equal(0, builder.MinimumPoolSize);
         Assert.Equal(100, builder.MaximumPoolSize);
         Assert.Equal(300, builder.ConnectionIdleTimeout);
-        Assert.Equal(DotRocksSslMode.Disabled, builder.SslMode);
+        Assert.Equal(DotRocksSslMode.Preferred, builder.SslMode);
         Assert.False(builder.TrustServerCertificate);
         Assert.False(builder.AllowInsecureStreamLoad);
         Assert.Equal("http://starrocks.local:8030/", builder.StreamLoadEndpoint);
@@ -204,11 +204,26 @@ public sealed class ConnectionStringBuilderTests
     }
 
     [Fact]
-    public void TrustServerCertificateWithoutTls_Throws()
+    public void TrustServerCertificateWithSslDisabled_Throws()
     {
+        // Trusting a certificate is meaningless when TLS is disabled; it must be rejected.
         Assert.Throws<ArgumentException>(() =>
-            _ = new DotRocksConnectionStringBuilder("Trust Server Certificate=true").BuildOptions()
+            _ = new DotRocksConnectionStringBuilder(
+                "Ssl Mode=Disabled;Trust Server Certificate=true"
+            ).BuildOptions()
         );
+    }
+
+    [Fact]
+    public void TrustServerCertificateWithPreferredSsl_IsAllowed()
+    {
+        // Preferred can upgrade to TLS, so trusting the certificate is a valid combination.
+        DotRocksConnectionOptions options = new DotRocksConnectionStringBuilder(
+            "Ssl Mode=Preferred;Trust Server Certificate=true"
+        ).BuildOptions();
+
+        Assert.Equal(DotRocksSslMode.Preferred, options.SslMode);
+        Assert.True(options.TrustServerCertificate);
     }
 
     [Fact]

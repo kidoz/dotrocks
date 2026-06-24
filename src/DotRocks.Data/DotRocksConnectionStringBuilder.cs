@@ -50,7 +50,7 @@ public sealed class DotRocksConnectionStringBuilder
         MinimumPoolSize = DotRocksConnectionOptions.DefaultMinimumPoolSize;
         MaximumPoolSize = DotRocksConnectionOptions.DefaultMaximumPoolSize;
         ConnectionIdleTimeout = DotRocksConnectionOptions.DefaultConnectionIdleTimeoutSeconds;
-        SslMode = DotRocksSslMode.Disabled;
+        SslMode = DotRocksSslMode.Preferred;
         TrustServerCertificate = false;
         SslRevocationCheck = DotRocksConnectionOptions.DefaultSslRevocationMode;
         AllowInsecureStreamLoad = false;
@@ -194,7 +194,7 @@ public sealed class DotRocksConnectionStringBuilder
     /// </summary>
     public DotRocksSslMode SslMode
     {
-        get => GetEnum(SslModeKeyword, DotRocksSslMode.Disabled);
+        get => GetEnum(SslModeKeyword, DotRocksSslMode.Preferred);
         set => this[SslModeKeyword] = value;
     }
 

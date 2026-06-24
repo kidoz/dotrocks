@@ -109,7 +109,7 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
                 .ConfigureAwait(false);
             ServerHandshake handshake = ServerHandshake.Parse(handshakePayload);
 
-            if (options.SslMode == DotRocksSslMode.Required)
+            if (ShouldNegotiateTls(options, handshake))
             {
                 var sslRequestWriter = new PacketWriter(stream);
                 sslRequestWriter.ResetSequence(reader.SequenceId);
@@ -214,6 +214,20 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
             client?.Dispose();
         }
     }
+
+    // Decide whether to perform the TLS upgrade for this handshake. Required always upgrades and
+    // lets BuildSslRequest fail loudly when the server cannot negotiate TLS. Preferred upgrades
+    // only when the server advertises TLS, otherwise it continues in plaintext (opportunistic).
+    private static bool ShouldNegotiateTls(
+        DotRocksConnectionOptions options,
+        ServerHandshake handshake
+    ) =>
+        options.SslMode switch
+        {
+            DotRocksSslMode.Required => true,
+            DotRocksSslMode.Preferred => handshake.Capabilities.HasFlag(CapabilityFlags.Ssl),
+            _ => false,
+        };
 
     [SuppressMessage(
         "Security",

@@ -203,6 +203,7 @@ public sealed class DotRocks.Data.DotRocksPrecisionLossException DotRocks.Data.D
 
 public enum DotRocks.Data.DotRocksSslMode
   public static field DotRocks.Data.DotRocksSslMode Disabled
+  public static field DotRocks.Data.DotRocksSslMode Preferred
   public static field DotRocks.Data.DotRocksSslMode Required
 
 public sealed class DotRocks.Data.DotRocksTransaction System.Data.Common.DbTransaction

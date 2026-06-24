@@ -17,8 +17,10 @@ steps. We aim to acknowledge reports within a few business days.
 - DotRocks parses untrusted server bytes with bounds-checked readers and a logical-payload
   cap to resist malformed/oversized packets.
 - Credentials and connection strings are redacted from exceptions and diagnostics.
-- SQL protocol TLS is available via `Ssl Mode=Required` with platform certificate and host
-  validation; `Ssl Mode` defaults to `Disabled` (plaintext), so set it for non-local servers.
+- SQL protocol TLS uses platform certificate and host validation; `Ssl Mode` defaults to
+  `Preferred` (opportunistic: TLS when the server advertises it, plaintext otherwise). Use
+  `Required` for non-local servers to reject a connection that cannot negotiate TLS and resist
+  active downgrade.
 - HTTP Stream Load rejects plaintext credentials and refuses HTTPS→HTTP redirect downgrades.
 - CI runs CodeQL and NuGet vulnerability auditing; dependencies are pinned with lock files.
 - Assemblies are unsigned (no strong-name/Authenticode); packages are published with build

@@ -8,6 +8,11 @@ version is derived from the release tag at publish time.
 
 ## [Unreleased]
 
+### Changed
+- `Ssl Mode` now defaults to the new `Preferred` value (opportunistic TLS: upgrade when the
+  server advertises support, otherwise plaintext) instead of `Disabled`. Set `Ssl Mode=Required`
+  to fail when TLS cannot be negotiated, or `Ssl Mode=Disabled` to restore the previous default.
+
 ## [1.0.1] - 2026-06-23
 
 ### Added

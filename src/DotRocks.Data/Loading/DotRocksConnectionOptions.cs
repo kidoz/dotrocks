@@ -55,7 +55,7 @@ internal sealed record DotRocksConnectionOptions(
             DefaultMinimumPoolSize,
             DefaultMaximumPoolSize,
             TimeSpan.FromSeconds(DefaultConnectionIdleTimeoutSeconds),
-            DotRocksSslMode.Disabled,
+            DotRocksSslMode.Preferred,
             false,
             DefaultSslRevocationMode,
             BuildDefaultStreamLoadEndpoint(DefaultServer),
@@ -99,7 +99,7 @@ internal sealed record DotRocksConnectionOptions(
             "Connection Idle Timeout",
             DefaultConnectionIdleTimeoutSeconds
         );
-        DotRocksSslMode sslMode = GetEnum(builder, "Ssl Mode", DotRocksSslMode.Disabled);
+        DotRocksSslMode sslMode = GetEnum(builder, "Ssl Mode", DotRocksSslMode.Preferred);
         bool trustServerCertificate = GetBoolean(builder, "Trust Server Certificate", false);
         X509RevocationMode sslRevocationMode = GetEnum(
             builder,
@@ -280,7 +280,7 @@ internal sealed record DotRocksConnectionOptions(
         if (trustServerCertificate && sslMode == DotRocksSslMode.Disabled)
         {
             throw new ArgumentException(
-                "Trust Server Certificate requires Ssl Mode=Required.",
+                "Trust Server Certificate requires TLS (Ssl Mode=Preferred or Required).",
                 nameof(trustServerCertificate)
             );
         }

@@ -82,8 +82,10 @@ await using DbDataSource dataSource = factory.CreateDataSource(builder.Connectio
 await using DbConnection connection = await dataSource.OpenConnectionAsync();
 ```
 
-For SQL protocol TLS, set `Ssl Mode=Required`. `Ssl Mode` defaults to `Disabled`, which
-sends credentials without transport encryption — set `Required` for any non-local server.
+For SQL protocol TLS, `Ssl Mode` defaults to `Preferred`: the connection upgrades to TLS
+when the server advertises support and falls back to plaintext otherwise. Set `Required` to
+fail the connection when TLS cannot be negotiated (the only mode that resists an active
+downgrade attacker), or `Disabled` to never request TLS.
 DotRocks uses platform certificate validation (chain and host name) by default and checks
 revocation in offline mode to avoid a blocking OCSP/CRL fetch during the handshake;
 `Trust Server Certificate=true` disables validation and is intended only for controlled
