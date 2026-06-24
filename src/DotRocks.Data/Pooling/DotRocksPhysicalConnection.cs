@@ -195,11 +195,14 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
         }
         catch (AuthenticationException ex)
         {
+            // TLS negotiation failures are dominated by certificate name/chain/revocation problems,
+            // which are configuration or security faults, not transient FE outages. Classify them
+            // non-transient so the connection-open retry loop does not re-handshake on a setup error.
             throw new DotRocksException(
                 "TLS negotiation failed while opening the StarRocks connection.",
                 serverErrorCode: null,
                 sqlState: null,
-                isTransient: true,
+                isTransient: false,
                 connectionId: null,
                 innerException: ex
             );

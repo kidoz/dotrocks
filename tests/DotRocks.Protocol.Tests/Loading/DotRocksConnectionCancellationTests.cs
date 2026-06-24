@@ -437,6 +437,7 @@ public sealed class DotRocksConnectionCancellationTests
             .ConfigureAwait(true);
 
         Assert.IsType<AuthenticationException>(exception.InnerException);
+        Assert.False(exception.IsTransient);
         Assert.Equal(ConnectionState.Closed, connection.State);
         AssertSanitized(exception, connectionString);
     }
