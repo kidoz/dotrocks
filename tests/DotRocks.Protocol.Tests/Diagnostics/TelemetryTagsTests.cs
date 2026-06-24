@@ -106,6 +106,27 @@ public sealed class TelemetryTagsTests
     }
 
     [Fact]
+    public void Classify_IgnoresMalformedServerSqlState()
+    {
+        // A hostile server could send arbitrary high-cardinality SQLSTATE text; it must not flow
+        // into the error.type / db.response.status_code labels. Fall back to the numeric code.
+        var serverError = new DotRocksException(
+            "boom",
+            serverErrorCode: 1064,
+            sqlState: "not-a-valid-sqlstate",
+            isTransient: false,
+            connectionId: null
+        );
+
+        (string ErrorType, string? StatusCode) classified = DotRocksTelemetryTags.Classify(
+            serverError
+        );
+
+        Assert.Equal("1064", classified.ErrorType);
+        Assert.Equal("1064", classified.StatusCode);
+    }
+
+    [Fact]
     public async Task ConnectionOpenFailure_SpanCarriesNoSecrets()
     {
         // The listener is process-wide and other test classes run in parallel, so capture into a

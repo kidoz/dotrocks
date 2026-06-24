@@ -20,6 +20,8 @@ version is derived from the release tag at publish time.
   out-of-memory denial of service from a hostile or corrupt server.
 - Stripped control characters from server-provided error text surfaced through
   `DotRocksException.Message` to prevent log forging.
+- Bounded the server-provided SQLSTATE used in telemetry `error.type` /
+  `db.response.status_code` to a well-formed value.
 
 ## [1.0.1] - 2026-06-23
 

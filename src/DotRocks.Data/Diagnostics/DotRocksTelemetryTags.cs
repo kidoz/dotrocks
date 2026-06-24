@@ -126,8 +126,14 @@ internal static class DotRocksTelemetryTags
                 return (ErrorCanceled, null);
             case DotRocksException dotRocks:
                 string? code = dotRocks.ServerErrorCode?.ToString(CultureInfo.InvariantCulture);
-                string? statusCode = code ?? dotRocks.SqlState;
-                return (dotRocks.SqlState ?? code ?? nameof(DotRocksException), statusCode);
+                // SQLSTATE is server-controlled. Only use it as a label when it is a well-formed
+                // 5-character ANSI SQLSTATE so a hostile server cannot inflate label cardinality
+                // (or smuggle arbitrary text) through error.type / db.response.status_code.
+                string? sqlState = IsWellFormedSqlState(dotRocks.SqlState)
+                    ? dotRocks.SqlState
+                    : null;
+                string? statusCode = code ?? sqlState;
+                return (sqlState ?? code ?? nameof(DotRocksException), statusCode);
             default:
                 return (exception.GetType().Name, null);
         }
@@ -161,6 +167,24 @@ internal static class DotRocksTelemetryTags
         }
 
         return "OTHER";
+    }
+
+    private static bool IsWellFormedSqlState(string? value)
+    {
+        if (value is not { Length: 5 })
+        {
+            return false;
+        }
+
+        foreach (char character in value)
+        {
+            if (!char.IsAsciiLetterOrDigit(character))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /// <summary>Maps an execution result to a bounded metric outcome label value.</summary>
