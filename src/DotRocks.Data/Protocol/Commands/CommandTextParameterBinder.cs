@@ -265,7 +265,10 @@ internal static class CommandTextParameterBinder
         ArgumentNullException.ThrowIfNull(prepared);
         ArgumentNullException.ThrowIfNull(parameters);
 
-        if (parameters.Count == 0)
+        // Only fast-return when the template has no placeholders. If it does and no parameters are
+        // provided (for example the caller cleared them after Prepare), fall through so the missing
+        // parameter is reported client-side instead of sending a raw placeholder to StarRocks.
+        if (parameters.Count == 0 && !prepared.HasPlaceholders)
         {
             return prepared.CommandText;
         }

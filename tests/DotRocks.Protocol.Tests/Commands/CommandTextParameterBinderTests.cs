@@ -251,7 +251,10 @@ public sealed class CommandTextParameterBinderTests
 
         PreparedCommandText prepared = CommandTextParameterBinder.Prepare(sql, command.Parameters);
         string bound = CommandTextParameterBinder.Bind(sql, command.Parameters);
-        string boundPrepared = CommandTextParameterBinder.BindPrepared(prepared, command.Parameters);
+        string boundPrepared = CommandTextParameterBinder.BindPrepared(
+            prepared,
+            command.Parameters
+        );
 
         Assert.Equal(bound, boundPrepared);
     }
@@ -273,6 +276,38 @@ public sealed class CommandTextParameterBinderTests
             CommandTextParameterBinder.BindPrepared(prepared, rebound.Parameters)
         );
         Assert.Contains("@id", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BindPrepared_WithClearedParameters_ThrowsInsteadOfEmittingRawPlaceholder()
+    {
+        using var command = new DotRocksCommand { CommandText = "SELECT @id" };
+        Add(command, "id", 1);
+        PreparedCommandText prepared = CommandTextParameterBinder.Prepare(
+            command.CommandText,
+            command.Parameters
+        );
+        command.Parameters.Clear();
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            CommandTextParameterBinder.BindPrepared(prepared, command.Parameters)
+        );
+        Assert.Contains("@id", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BindPrepared_WithNoPlaceholdersAndNoParameters_ReturnsCommandText()
+    {
+        using var command = new DotRocksCommand { CommandText = "SELECT 1" };
+        PreparedCommandText prepared = CommandTextParameterBinder.Prepare(
+            command.CommandText,
+            command.Parameters
+        );
+
+        Assert.Equal(
+            "SELECT 1",
+            CommandTextParameterBinder.BindPrepared(prepared, command.Parameters)
+        );
     }
 
     private static void Add(DbCommand command, string name, object? value)
