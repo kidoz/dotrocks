@@ -190,6 +190,11 @@ internal sealed record DotRocksConnectionOptions(
         );
     }
 
+    // The compiler-generated record ToString would print Password and the full cleartext
+    // ConnectionString. Override it so neither can leak through interpolation, logging, or a
+    // debugger; the sanitized form redacts the password.
+    public override string ToString() => ToSanitizedString();
+
     public string ToSanitizedString() =>
         BuildConnectionString(
             Server,

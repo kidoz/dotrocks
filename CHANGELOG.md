@@ -13,6 +13,10 @@ version is derived from the release tag at publish time.
   server advertises support, otherwise plaintext) instead of `Disabled`. Set `Ssl Mode=Required`
   to fail when TLS cannot be negotiated, or `Ssl Mode=Disabled` to restore the previous default.
 
+### Security
+- Redacted the password and cleartext connection string from `DotRocksConnectionOptions`'s
+  `ToString()` output.
+
 ## [1.0.1] - 2026-06-23
 
 ### Added

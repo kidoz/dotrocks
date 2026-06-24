@@ -29,6 +29,21 @@ public sealed class ConnectionStringBuilderTests
     }
 
     [Fact]
+    public void ConnectionOptions_ToString_RedactsPasswordAndConnectionString()
+    {
+        DotRocksConnectionOptions options = DotRocksConnectionOptions.Parse(
+            "Server=h;User ID=alice;Password=topsecret;Database=db"
+        );
+
+        // The default record ToString would print Password and the cleartext ConnectionString;
+        // the override must redact so neither leaks through interpolation, logging, or a debugger.
+        string text = options.ToString();
+
+        Assert.DoesNotContain("topsecret", text, StringComparison.Ordinal);
+        Assert.Contains("Password=***", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ToString_RedactsPassword()
     {
         var builder = new DotRocksConnectionStringBuilder(
