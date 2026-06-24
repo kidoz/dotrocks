@@ -75,10 +75,12 @@ public class PoolStressBenchmarks
         await using var connection = new DotRocksConnection(_connectionString);
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT 1";
 
-        using var cancellation = new CancellationTokenSource();
-        await cancellation.CancelAsync();
+        // Cancel an in-flight command so cancellation lands after dispatch (a pre-dispatch cancel
+        // would throw before the connection is registered and would not exercise the discard path).
+        command.CommandText = "SELECT SLEEP(2)";
+        command.CommandTimeout = 0;
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
         try
         {
             await command.ExecuteScalarAsync(cancellation.Token);

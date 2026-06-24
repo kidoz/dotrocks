@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using DotRocks.Data;
 
 namespace DotRocks.Benchmarks;
@@ -24,6 +25,11 @@ internal static class BenchmarkServer
         return BaseConnectionString + ";Database=" + Database;
     }
 
+    [SuppressMessage(
+        "Security",
+        "CA2100:Review SQL queries for security vulnerabilities",
+        Justification = "Benchmark setup SQL is fixed, benchmark-controlled text, not user input."
+    )]
     public static void Execute(string connectionString, string sql)
     {
         using var connection = new DotRocksConnection(connectionString);
