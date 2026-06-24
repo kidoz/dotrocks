@@ -192,12 +192,17 @@ internal sealed class DotRocksConnectionPool : IDisposable
 
     internal static void ClearAll()
     {
-        foreach (DotRocksConnectionPool pool in Pools.Values)
+        // Remove and dispose each pool atomically. Disposing a snapshot and then calling Clear()
+        // would let a pool added by a concurrent GetPool() between the two steps be dropped from
+        // the registry without disposal, stranding its leased/idle sockets. A pool created after
+        // this enumeration simply stays registered for the next caller — never removed undisposed.
+        foreach (DotRocksConnectionPoolKey key in Pools.Keys)
         {
-            pool.Dispose();
+            if (Pools.TryRemove(key, out DotRocksConnectionPool? pool))
+            {
+                pool.Dispose();
+            }
         }
-
-        Pools.Clear();
     }
 
     // Releases idle connections for a single connection configuration. Outstanding leases are
