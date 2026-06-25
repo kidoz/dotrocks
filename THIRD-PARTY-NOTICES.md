@@ -12,6 +12,7 @@ dependencies.
 | `Microsoft.CodeAnalysis.CSharp` | Analyzer implementation and analyzer unit tests. |
 | `Microsoft.CodeAnalysis.CSharp.Workspaces` | Code-fix implementation and tests. |
 | `Microsoft.CodeAnalysis.PublicApiAnalyzers` | Build-time public API surface tracking for shipping packages. |
+| `Microsoft.Extensions.DependencyInjection` | Dependency-injection sample wiring. |
 | `Microsoft.EntityFrameworkCore` | EF Core provider implementation and tests. |
 | `Microsoft.EntityFrameworkCore.Design` | EF Core design-time migrations services. |
 | `Microsoft.EntityFrameworkCore.Relational` | EF Core relational provider services. |

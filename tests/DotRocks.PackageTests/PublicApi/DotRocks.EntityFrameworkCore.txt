@@ -1,10 +1,31 @@
 # DotRocks.EntityFrameworkCore
 
-public sealed class DotRocks.EntityFrameworkCore.Infrastructure.DotRocksDbContextOptionsBuilder
-  public DotRocks.EntityFrameworkCore.Infrastructure.DotRocksDbContextOptionsBuilder()
+public sealed class DotRocks.EntityFrameworkCore.Infrastructure.DotRocksDbContextOptionsBuilder Microsoft.EntityFrameworkCore.Infrastructure.RelationalDbContextOptionsBuilder<DotRocks.EntityFrameworkCore.Infrastructure.DotRocksDbContextOptionsBuilder, DotRocks.EntityFrameworkCore.Infrastructure.DotRocksOptionsExtension>
+  public DotRocks.EntityFrameworkCore.Infrastructure.DotRocksDbContextOptionsBuilder(Microsoft.EntityFrameworkCore.DbContextOptionsBuilder optionsBuilder)
+  public method DotRocks.EntityFrameworkCore.Infrastructure.DotRocksDbContextOptionsBuilder ServerVersion(DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion serverVersion)
+
+public sealed class DotRocks.EntityFrameworkCore.Infrastructure.DotRocksOptionsExtension Microsoft.EntityFrameworkCore.Infrastructure.RelationalOptionsExtension
+  public DotRocks.EntityFrameworkCore.Infrastructure.DotRocksOptionsExtension()
+  public property Microsoft.EntityFrameworkCore.Infrastructure.DbContextOptionsExtensionInfo Info { get; }
+  public property DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion ServerVersion { get; }
+  protected virtual method Microsoft.EntityFrameworkCore.Infrastructure.RelationalOptionsExtension Clone()
+  public method DotRocks.EntityFrameworkCore.Infrastructure.DotRocksOptionsExtension WithServerVersion(DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion serverVersion)
+  public virtual method System.Void ApplyServices(Microsoft.Extensions.DependencyInjection.IServiceCollection services)
 
 public static class DotRocks.EntityFrameworkCore.Infrastructure.DotRocksServiceCollectionExtensions
   public static method Microsoft.Extensions.DependencyInjection.IServiceCollection AddEntityFrameworkDotRocks(Microsoft.Extensions.DependencyInjection.IServiceCollection services)
+
+public sealed class DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion System.IEquatable<DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion>
+  public DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion(System.Int32 major, System.Int32 minor, System.Int32 patch)
+  public property System.Int32 Major { get; }
+  public property System.Int32 Minor { get; }
+  public property System.Int32 Patch { get; }
+  public static method DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion Parse(System.String version)
+  public static method System.Threading.Tasks.Task<DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion> DetectAsync(System.String connectionString, System.Threading.CancellationToken cancellationToken)
+  public virtual method System.Boolean Equals(DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion other)
+  public virtual method System.Boolean Equals(System.Object obj)
+  public virtual method System.Int32 GetHashCode()
+  public virtual method System.String ToString()
 
 public enum DotRocks.EntityFrameworkCore.Metadata.DotRocksTableKeyModel
   public static field DotRocks.EntityFrameworkCore.Metadata.DotRocksTableKeyModel DuplicateKey
