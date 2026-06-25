@@ -6,6 +6,9 @@
     <Title>DotRocks.Data</Title>
     <Description>A native .NET ADO.NET provider for StarRocks, with its own managed StarRocks client protocol implementation. DotRocks for StarRocks.</Description>
     <PackageTags>starrocks;ado.net;database;driver;dotrocks;data</PackageTags>
+    <!-- Validate package surface area on pack. Set PackageValidationBaselineVersion to the
+         last published version once DotRocks.Data is on a feed to diff against it. -->
+    <EnablePackageValidation>true</EnablePackageValidation>
   </PropertyGroup>
 
   <ItemGroup>
@@ -15,6 +18,12 @@
       PackagePath="\"
       Visible="false"
     />
+  </ItemGroup>
+
+  <ItemGroup Label="Public API tracking">
+    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
+    <AdditionalFiles Include="PublicAPI.Shipped.txt" />
+    <AdditionalFiles Include="PublicAPI.Unshipped.txt" />
   </ItemGroup>
 
   <ItemGroup Label="Internal test access">

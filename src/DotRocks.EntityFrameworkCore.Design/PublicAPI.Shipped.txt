@@ -1,0 +1,7 @@
+#nullable enable
+DotRocks.EntityFrameworkCore.Design.DotRocksAnnotationCodeGenerator
+DotRocks.EntityFrameworkCore.Design.DotRocksAnnotationCodeGenerator.DotRocksAnnotationCodeGenerator(Microsoft.EntityFrameworkCore.Design.AnnotationCodeGeneratorDependencies! dependencies) -> void
+DotRocks.EntityFrameworkCore.Design.DotRocksDesignTimeServices
+DotRocks.EntityFrameworkCore.Design.DotRocksDesignTimeServices.ConfigureDesignTimeServices(Microsoft.Extensions.DependencyInjection.IServiceCollection! serviceCollection) -> void
+DotRocks.EntityFrameworkCore.Design.DotRocksDesignTimeServices.DotRocksDesignTimeServices() -> void
+override DotRocks.EntityFrameworkCore.Design.DotRocksAnnotationCodeGenerator.GenerateFluentApiCalls(Microsoft.EntityFrameworkCore.Metadata.IEntityType! entityType, System.Collections.Generic.IDictionary<string!, Microsoft.EntityFrameworkCore.Infrastructure.IAnnotation!>! annotations) -> System.Collections.Generic.IReadOnlyList<Microsoft.EntityFrameworkCore.Design.MethodCallCodeFragment!>!

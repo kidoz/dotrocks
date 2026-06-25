@@ -6,6 +6,7 @@
     <Title>DotRocks.EntityFrameworkCore</Title>
     <Description>Entity Framework Core provider skeleton for StarRocks built on DotRocks.Data. DotRocks for StarRocks.</Description>
     <PackageTags>starrocks;entity-framework-core;ef-core;database;provider;dotrocks</PackageTags>
+    <EnablePackageValidation>true</EnablePackageValidation>
   </PropertyGroup>
 
   <ItemGroup>
@@ -20,5 +21,11 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
     <ProjectReference Include="../DotRocks.Data/DotRocks.Data.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Label="Public API tracking">
+    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
+    <AdditionalFiles Include="PublicAPI.Shipped.txt" />
+    <AdditionalFiles Include="PublicAPI.Unshipped.txt" />
   </ItemGroup>
 </Project>
