@@ -47,6 +47,28 @@ public static class DotRocksDiagnosticDescriptors
     /// </summary>
     public const string CompositePrimaryKeyDiagnosticId = "DTR0008";
 
+    /// <summary>
+    /// Diagnostic id for SQL built with string concatenation or interpolation assigned to
+    /// a DotRocks command's CommandText.
+    /// </summary>
+    public const string UnsafeCommandTextDiagnosticId = "DTR0009";
+
+    /// <summary>
+    /// Diagnostic id for an asynchronous DotRocks call that does not propagate an available
+    /// CancellationToken.
+    /// </summary>
+    public const string MissingCancellationTokenDiagnosticId = "DTR0010";
+
+    /// <summary>
+    /// Diagnostic id for blocking on an asynchronous DotRocks operation.
+    /// </summary>
+    public const string SyncOverAsyncDiagnosticId = "DTR0011";
+
+    /// <summary>
+    /// Diagnostic id for a hard-coded password embedded in a DotRocks connection string.
+    /// </summary>
+    public const string LiteralPasswordDiagnosticId = "DTR0012";
+
     internal static readonly DiagnosticDescriptor InsecureStreamLoadEndpoint = new(
         InsecureStreamLoadEndpointDiagnosticId,
         "Avoid insecure Stream Load endpoints with credentials",
@@ -125,5 +147,45 @@ public static class DotRocksDiagnosticDescriptors
         DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
         description: "DotRocks EF Core rejects composite primary keys at model validation. Configure a single-column primary key for writable entities, or HasNoKey() for read-only entities. To fail the build on this configuration, set dotnet_diagnostic.DTR0008.severity = error in .editorconfig."
+    );
+
+    internal static readonly DiagnosticDescriptor UnsafeCommandText = new(
+        UnsafeCommandTextDiagnosticId,
+        "Avoid building DotRocks SQL with string concatenation",
+        "Interpolated or concatenated SQL is assigned to DotRocksCommand.CommandText; use parameter placeholders instead",
+        "Security",
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "Inline string interpolation or concatenation in CommandText is an SQL injection risk. Use parameter placeholders (for example @id) with DotRocksParameter values. To fail the build on this pattern, set dotnet_diagnostic.DTR0009.severity = error in .editorconfig."
+    );
+
+    internal static readonly DiagnosticDescriptor MissingCancellationToken = new(
+        MissingCancellationTokenDiagnosticId,
+        "Pass an available CancellationToken to DotRocks async calls",
+        "Async DotRocks call '{0}' does not pass the CancellationToken available in scope",
+        "Usage",
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "The asynchronous DotRocks operation accepts a CancellationToken and one is available in the enclosing method; pass it so the call observes cancellation."
+    );
+
+    internal static readonly DiagnosticDescriptor SyncOverAsync = new(
+        SyncOverAsyncDiagnosticId,
+        "Avoid blocking on DotRocks async operations",
+        "Blocking on async DotRocks call '{0}' with '{1}' can deadlock; await it instead",
+        "Usage",
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "Blocking on DotRocks async APIs with .Result, .Wait(), or .GetAwaiter().GetResult() can exhaust the thread pool and deadlock. Await the operation instead."
+    );
+
+    internal static readonly DiagnosticDescriptor LiteralPassword = new(
+        LiteralPasswordDiagnosticId,
+        "Avoid embedding a literal password in a DotRocks connection string",
+        "DotRocks connection string contains a hard-coded password; load credentials from configuration or a secret store",
+        "Security",
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "Hard-coded passwords in source are a credential-leak risk. Provide the password from configuration, environment, or a secret store instead of a string literal."
     );
 }

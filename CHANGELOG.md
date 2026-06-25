@@ -14,6 +14,11 @@ version is derived from the release tag at publish time.
   predicates and aggregate functions, instead of throwing `NotSupportedException`.
   Navigation-based joins and `Include` remain unsupported because relationships are still
   rejected at model validation.
+- Four driver-usage analyzers: `DTR0009` (interpolated/concatenated SQL in
+  `DotRocksCommand.CommandText`), `DTR0010` (async DotRocks call missing an available
+  `CancellationToken`), `DTR0011` (blocking on a DotRocks async call), and `DTR0012`
+  (hard-coded password in a connection string). Disposal is intentionally left to the
+  built-in `CA2000` analyzer.
 - Public API surface tracking via `Microsoft.CodeAnalysis.PublicApiAnalyzers` with
   `PublicAPI.Shipped.txt` / `PublicAPI.Unshipped.txt` baselines for `DotRocks.Data`,
   `DotRocks.EntityFrameworkCore`, and `DotRocks.EntityFrameworkCore.Design`, so accidental
