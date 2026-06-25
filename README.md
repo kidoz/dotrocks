@@ -53,17 +53,27 @@ command.CommandText = "SELECT 1";
 object? value = await command.ExecuteScalarAsync();
 ```
 
-`DotRocksCommand.Prepare()` / `PrepareAsync()` currently perform conservative
-client-side preparation for text commands: named placeholders and parameter metadata are
-validated up front, and execution still sends StarRocks text SQL with safely formatted
-current parameter values. The driver does not use the MySQL binary prepared-statement
-protocol yet.
+`DotRocksCommand.ParameterMode` selects the binding mechanism:
 
-`DotRocksCommand.ParameterMode` selects the binding mechanism. `Auto` (the default) and
-`TextProtocol` use the verified client-side text path above. `ServerPrepared` requests the
-StarRocks server-side prepared (binary) protocol, which is not yet characterized against a
-live server; selecting it fails fast with a `DotRocksUnsupportedFeatureException` rather than
-silently using a different mechanism. The exception derives from `DotRocksException`.
+- `Auto` (the default) and `TextProtocol` perform conservative client-side preparation for text
+  commands — named `@` placeholders and parameter metadata are validated up front, and execution
+  sends StarRocks text SQL with safely formatted parameter values. `Prepare()` / `PrepareAsync()`
+  validate the command and parameter shape for these modes.
+- `ServerPrepared` uses the StarRocks server-side prepared (binary) protocol —
+  `COM_STMT_PREPARE` / `COM_STMT_EXECUTE` / `COM_STMT_CLOSE`, verified against StarRocks 4.0.7. Use
+  positional `?` placeholders and add parameters in order; values are sent with the binary
+  parameter encoding and results are decoded from binary rows. A value type the binary encoder does
+  not support fails with a `DotRocksUnsupportedFeatureException` (which derives from
+  `DotRocksException`).
+
+```csharp
+await using var command = (DotRocksCommand)connection.CreateCommand();
+command.CommandText = "SELECT event_name FROM events WHERE tenant_id = ? AND active = ?";
+command.ParameterMode = DotRocksParameterMode.ServerPrepared;
+command.Parameters.Add(new DotRocksParameter { Value = tenantId });
+command.Parameters.Add(new DotRocksParameter { Value = true });
+await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+```
 
 Use `DotRocksDataSource` when one normalized configuration should create many logical
 connections and participate in DotRocks pooling:

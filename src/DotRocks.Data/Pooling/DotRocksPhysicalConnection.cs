@@ -424,6 +424,105 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
         }
     }
 
+    /// <summary>
+    /// Sends <c>COM_STMT_EXECUTE</c> for a prepared statement with the given positional parameter
+    /// values and reads the binary result set into a buffered <see cref="QueryResult"/>. The whole
+    /// result is buffered so the statement can be closed immediately after.
+    /// </summary>
+    public async ValueTask<QueryResult> ExecutePreparedAsync(
+        uint statementId,
+        IReadOnlyList<object?> parameterValues,
+        CancellationToken cancellationToken
+    )
+    {
+        if (_isDisposed)
+        {
+            throw new InvalidOperationException("The physical StarRocks connection is closed.");
+        }
+
+        try
+        {
+            byte[] payload = BinaryParameterEncoder.BuildExecute(statementId, parameterValues);
+            var writer = new PacketWriter(_stream);
+            writer.ResetSequence();
+            await writer.WritePayloadAsync(payload, cancellationToken).ConfigureAwait(false);
+
+            var reader = new PacketReader(_stream);
+            reader.ResetSequence(1);
+            byte[] firstPayload = await reader
+                .ReadPayloadAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            if (ResultPacket.IsError(firstPayload))
+            {
+                throw ResultPacket.ReadError(firstPayload, connectionId: null);
+            }
+
+            if (ResultPacket.IsOk(firstPayload))
+            {
+                return QueryResult.FromOk(ResultPacket.ReadOk(firstPayload));
+            }
+
+            int columnCount = TextResultParser.ReadColumnCount(firstPayload);
+            var columns = new List<ColumnDefinition>(columnCount);
+            for (int i = 0; i < columnCount; i++)
+            {
+                byte[] columnPayload = await reader
+                    .ReadPayloadAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                columns.Add(TextResultParser.ReadColumnDefinition(columnPayload));
+            }
+
+            byte[] columnTerminator = await reader
+                .ReadPayloadAsync(cancellationToken)
+                .ConfigureAwait(false);
+            if (!ResultPacket.IsEndOfResultSet(columnTerminator))
+            {
+                throw new MalformedPacketException(
+                    "Expected an EOF packet after the prepared-statement column definitions."
+                );
+            }
+
+            var rows = new List<object?[]>();
+            while (true)
+            {
+                byte[] rowPayload = await reader
+                    .ReadPayloadAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                if (ResultPacket.IsEndOfResultSet(rowPayload))
+                {
+                    break;
+                }
+
+                rows.Add(BinaryResultRowDecoder.Decode(rowPayload, columns));
+            }
+
+            return QueryResult.FromRows(columns, rows);
+        }
+        catch (OperationCanceledException)
+        {
+            MarkBroken();
+            throw;
+        }
+        catch (MalformedPacketException ex)
+        {
+            MarkBroken();
+            throw new DotRocksException("StarRocks returned malformed protocol bytes.", ex);
+        }
+        catch (IOException ex)
+        {
+            MarkBroken();
+            throw new DotRocksException(
+                "I/O failed while executing the prepared StarRocks statement.",
+                serverErrorCode: null,
+                sqlState: null,
+                isTransient: true,
+                connectionId: null,
+                innerException: ex
+            );
+        }
+    }
+
     /// <summary>Sends <c>COM_STMT_CLOSE</c> for the given statement id. The server sends no reply.</summary>
     public async ValueTask ClosePreparedStatementAsync(
         uint statementId,

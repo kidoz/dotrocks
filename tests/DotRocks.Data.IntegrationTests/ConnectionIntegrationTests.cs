@@ -30,6 +30,45 @@ public sealed class ConnectionIntegrationTests
         Assert.False(string.IsNullOrWhiteSpace(connection.ServerVersion));
     }
 
+    [Fact]
+    public async Task ServerPrepared_ExecutesParameterizedQueryWithBinaryProtocol()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
+        }
+
+        using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
+        await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+        using var command = (DotRocksCommand)connection.CreateCommand();
+        command.CommandText = "SELECT ? + ? AS total, ? AS label";
+        command.ParameterMode = DotRocksParameterMode.ServerPrepared;
+        AddValue(command, 2);
+        AddValue(command, 3);
+        AddValue(command, "hello");
+
+        using System.Data.Common.DbDataReader reader = await command
+            .ExecuteReaderAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+        Assert.True(
+            await reader.ReadAsync(TestContext.Current.CancellationToken).ConfigureAwait(true)
+        );
+        Assert.Equal(5L, Convert.ToInt64(reader.GetValue(0), CultureInfo.InvariantCulture));
+        Assert.Equal("hello", reader.GetString(1));
+        Assert.False(
+            await reader.ReadAsync(TestContext.Current.CancellationToken).ConfigureAwait(true)
+        );
+
+        static void AddValue(DotRocksCommand command, object value)
+        {
+            System.Data.Common.DbParameter parameter = command.CreateParameter();
+            parameter.Value = value;
+            command.Parameters.Add(parameter);
+        }
+    }
+
     [Theory]
     [InlineData("SELECT to_bitmap(1) AS v")]
     [InlineData("SELECT hll_hash(1) AS v")]

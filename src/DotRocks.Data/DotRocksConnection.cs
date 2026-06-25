@@ -288,6 +288,58 @@ public sealed class DotRocksConnection : DbConnection
         }
     }
 
+    internal async ValueTask<QueryResult> ExecutePreparedQueryAsync(
+        string commandText,
+        IReadOnlyList<object?> parameterValues,
+        CancellationToken cancellationToken
+    )
+    {
+        DotRocksConnectionPoolLease? lease = _lease;
+        if (_state != ConnectionState.Open || lease is null)
+        {
+            throw new InvalidOperationException("The connection is not open.");
+        }
+
+        ValidateNoActiveReader();
+
+        try
+        {
+            DotRocksPhysicalConnection physical = lease.PhysicalConnection;
+            StatementPrepareResult prepared = await physical
+                .PrepareAsync(commandText, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (prepared.ParameterCount != parameterValues.Count)
+            {
+                throw new DotRocksException(
+                    $"The prepared statement expects {prepared.ParameterCount} parameter(s) but {parameterValues.Count} were supplied."
+                );
+            }
+
+            try
+            {
+                return await physical
+                    .ExecutePreparedAsync(prepared.StatementId, parameterValues, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            finally
+            {
+                await physical
+                    .ClosePreparedStatementAsync(prepared.StatementId, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+        }
+        catch
+        {
+            if (!lease.PhysicalConnection.IsReusable)
+            {
+                CloseCore(reusable: false);
+            }
+
+            throw;
+        }
+    }
+
     internal async ValueTask<StreamingQueryResult> ExecuteStreamingQueryAsync(
         string commandText,
         CancellationToken cancellationToken
