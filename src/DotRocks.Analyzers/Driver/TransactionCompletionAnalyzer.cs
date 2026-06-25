@@ -82,9 +82,7 @@ public sealed class TransactionCompletionAnalyzer : DiagnosticAnalyzer
         }
     }
 
+    // Constant string patterns match ordinally, preserving the previous StringComparison.Ordinal.
     private static bool IsCompletionMethod(string methodName) =>
-        string.Equals(methodName, "Commit", StringComparison.Ordinal)
-        || string.Equals(methodName, "CommitAsync", StringComparison.Ordinal)
-        || string.Equals(methodName, "Rollback", StringComparison.Ordinal)
-        || string.Equals(methodName, "RollbackAsync", StringComparison.Ordinal);
+        methodName is "Commit" or "CommitAsync" or "Rollback" or "RollbackAsync";
 }
