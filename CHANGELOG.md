@@ -13,8 +13,11 @@ version is derived from the release tag at publish time.
   `reader.GetFieldValue<DotRocksJson>(ordinal)`. It preserves the server's exact bytes and offers
   `Parse()` for a caller-owned `JsonDocument`. Verified against StarRocks 4.0.7, which returns JSON
   over the text protocol typed as `STRING` (so JSON is opt-in typed access, not an automatic map).
-  `ARRAY` / `MAP` / `STRUCT` are also returned as JSON-formatted text (typed `VAR_STRING`) and read
-  losslessly through `DotRocksJson`.
+  For the cases exercised by the integration suite (including nested values, `null` elements,
+  escaped strings, and decimal/date values), `ARRAY` / `MAP` / `STRUCT` are returned as
+  JSON-formatted text (typed `VAR_STRING`) and read losslessly through `DotRocksJson`. The
+  aggregate-state types `BITMAP` / `HLL` / `PERCENTILE` are opaque (a direct select yields `NULL`);
+  read them through StarRocks accessor functions such as `bitmap_to_string(...)`.
 - A protocol fuzz harness with a regression corpus that feeds random and adversarial bytes to the
   handshake, OK/error packet, and length-encoded readers, asserting they fail only with a
   controlled `MalformedPacketException`/`DotRocksException` and never an uncontrolled crash.
