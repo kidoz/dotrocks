@@ -45,6 +45,7 @@ public static class DotRocksServiceCollectionExtensions
         builder.TryAdd<IRelationalAnnotationProvider, DotRocksRelationalAnnotationProvider>();
         builder.TryAdd<IRelationalTypeMappingSource, DotRocksTypeMappingSource>();
         builder.TryAdd<IMethodCallTranslatorProvider, DotRocksMethodCallTranslatorProvider>();
+        builder.TryAdd<IMemberTranslatorProvider, DotRocksMemberTranslatorProvider>();
         builder.TryAdd<
             IRelationalParameterBasedSqlProcessorFactory,
             DotRocksParameterBasedSqlProcessorFactory
