@@ -291,11 +291,15 @@ internal sealed class DotRocksConnectionPool : IDisposable
             return;
         }
 
+        // Examine each currently-idle connection exactly once: dequeue from the front and re-enqueue
+        // survivors to the back of the same queue (bounded by the starting count so survivors are not
+        // re-examined). This preserves FIFO/age order without allocating a second queue per prune.
         int retained = _idleConnections.Count;
-        var retainedConnections = new Queue<PooledPhysicalConnection>(_idleConnections.Count);
+        int toExamine = _idleConnections.Count;
         DateTimeOffset now = DateTimeOffset.UtcNow;
-        while (_idleConnections.TryDequeue(out PooledPhysicalConnection? pooled))
+        for (int i = 0; i < toExamine; i++)
         {
+            PooledPhysicalConnection pooled = _idleConnections.Dequeue();
             bool expired =
                 retained > _options.MinimumPoolSize
                 && now - pooled.ReturnedAt >= _options.ConnectionIdleTimeout;
@@ -306,11 +310,6 @@ internal sealed class DotRocksConnectionPool : IDisposable
                 continue;
             }
 
-            retainedConnections.Enqueue(pooled);
-        }
-
-        while (retainedConnections.TryDequeue(out PooledPhysicalConnection? pooled))
-        {
             _idleConnections.Enqueue(pooled);
         }
     }
