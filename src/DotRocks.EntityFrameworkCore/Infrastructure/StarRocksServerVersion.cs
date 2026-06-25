@@ -11,7 +11,10 @@ namespace DotRocks.EntityFrameworkCore.Infrastructure;
 /// once at startup, call <see cref="DetectAsync(string, System.Threading.CancellationToken)"/> and
 /// cache the result.
 /// </summary>
-public sealed class StarRocksServerVersion : IEquatable<StarRocksServerVersion>
+public sealed class StarRocksServerVersion
+    : IEquatable<StarRocksServerVersion>,
+        IComparable<StarRocksServerVersion>,
+        IComparable
 {
     /// <summary>Initializes a new instance of the <see cref="StarRocksServerVersion"/> class.</summary>
     /// <param name="major">The major version component (for example the <c>4</c> in <c>4.0.7</c>).</param>
@@ -115,6 +118,73 @@ public sealed class StarRocksServerVersion : IEquatable<StarRocksServerVersion>
 
     /// <inheritdoc />
     public override int GetHashCode() => HashCode.Combine(Major, Minor, Patch);
+
+    /// <summary>
+    /// Compares this version to <paramref name="other"/> by major, then minor, then patch component.
+    /// A <see langword="null"/> version sorts before any actual version.
+    /// </summary>
+    public int CompareTo(StarRocksServerVersion? other)
+    {
+        if (other is null)
+        {
+            return 1;
+        }
+
+        int major = Major.CompareTo(other.Major);
+        if (major != 0)
+        {
+            return major;
+        }
+
+        int minor = Minor.CompareTo(other.Minor);
+        return minor != 0 ? minor : Patch.CompareTo(other.Patch);
+    }
+
+    /// <inheritdoc />
+    public int CompareTo(object? obj) =>
+        obj switch
+        {
+            null => 1,
+            StarRocksServerVersion other => CompareTo(other),
+            _ => throw new ArgumentException(
+                $"Object must be of type {nameof(StarRocksServerVersion)}.",
+                nameof(obj)
+            ),
+        };
+
+    /// <summary>Indicates whether two versions are equal.</summary>
+    public static bool operator ==(StarRocksServerVersion? left, StarRocksServerVersion? right) =>
+        left is null ? right is null : left.Equals(right);
+
+    /// <summary>Indicates whether two versions differ.</summary>
+    public static bool operator !=(StarRocksServerVersion? left, StarRocksServerVersion? right) =>
+        !(left == right);
+
+    /// <summary>Indicates whether <paramref name="left"/> is earlier than <paramref name="right"/>.</summary>
+    public static bool operator <(StarRocksServerVersion? left, StarRocksServerVersion? right) =>
+        Compare(left, right) < 0;
+
+    /// <summary>Indicates whether <paramref name="left"/> is earlier than or equal to <paramref name="right"/>.</summary>
+    public static bool operator <=(StarRocksServerVersion? left, StarRocksServerVersion? right) =>
+        Compare(left, right) <= 0;
+
+    /// <summary>Indicates whether <paramref name="left"/> is later than <paramref name="right"/>.</summary>
+    public static bool operator >(StarRocksServerVersion? left, StarRocksServerVersion? right) =>
+        Compare(left, right) > 0;
+
+    /// <summary>Indicates whether <paramref name="left"/> is later than or equal to <paramref name="right"/>.</summary>
+    public static bool operator >=(StarRocksServerVersion? left, StarRocksServerVersion? right) =>
+        Compare(left, right) >= 0;
+
+    private static int Compare(StarRocksServerVersion? left, StarRocksServerVersion? right)
+    {
+        if (ReferenceEquals(left, right))
+        {
+            return 0;
+        }
+
+        return left is null ? -1 : left.CompareTo(right);
+    }
 
     /// <inheritdoc />
     public override string ToString() =>

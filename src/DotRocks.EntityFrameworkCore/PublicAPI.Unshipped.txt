@@ -7,6 +7,8 @@ DotRocks.EntityFrameworkCore.Infrastructure.DotRocksOptionsExtension.DotRocksOpt
 DotRocks.EntityFrameworkCore.Infrastructure.DotRocksOptionsExtension.ServerVersion.get -> DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion?
 DotRocks.EntityFrameworkCore.Infrastructure.DotRocksOptionsExtension.WithServerVersion(DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion! serverVersion) -> DotRocks.EntityFrameworkCore.Infrastructure.DotRocksOptionsExtension!
 DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion
+DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion.CompareTo(DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion? other) -> int
+DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion.CompareTo(object? obj) -> int
 DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion.Equals(DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion? other) -> bool
 DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion.Major.get -> int
 DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion.Minor.get -> int
@@ -18,6 +20,12 @@ override DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion.Equa
 override DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion.GetHashCode() -> int
 override DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion.ToString() -> string!
 static DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion.DetectAsync(string! connectionString, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion!>!
+static DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion.operator !=(DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion? left, DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion? right) -> bool
+static DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion.operator <(DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion? left, DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion? right) -> bool
+static DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion.operator <=(DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion? left, DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion? right) -> bool
+static DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion.operator ==(DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion? left, DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion? right) -> bool
+static DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion.operator >(DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion? left, DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion? right) -> bool
+static DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion.operator >=(DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion? left, DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion? right) -> bool
 static DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion.Parse(string! version) -> DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion!
 static Microsoft.EntityFrameworkCore.DotRocksEntityTypeBuilderExtensions.DistributedRandomly(this Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder! entityTypeBuilder, int buckets) -> Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder!
 static Microsoft.EntityFrameworkCore.DotRocksEntityTypeBuilderExtensions.HasSortKey(this Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder! entityTypeBuilder, params string![]! columns) -> Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder!
