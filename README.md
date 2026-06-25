@@ -103,12 +103,18 @@ specific capability set. When unset, DotRocks detects the version per connection
 `DotRocks.EntityFrameworkCore` provides the current EF Core provider surface for
 StarRocks: `UseStarRocks`, EF-managed relational connections, raw SQL commands,
 `FromSqlRaw`, and a deliberately small LINQ query subset verified against StarRocks.
+Pin the target server with `starRocks => starRocks.ServerVersion(new StarRocksServerVersion(4, 0, 7))`;
+building the options never contacts the server. To discover the version once at startup, call
+`await StarRocksServerVersion.DetectAsync(connectionString)` and cache the result.
 
 ```csharp
+using DotRocks.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 
 DbContextOptions<AppDbContext> options = new DbContextOptionsBuilder<AppDbContext>()
-    .UseStarRocks("Server=127.0.0.1;Port=9030;User ID=root")
+    .UseStarRocks(
+        "Server=127.0.0.1;Port=9030;User ID=root",
+        starRocks => starRocks.ServerVersion(new StarRocksServerVersion(4, 0, 7)))
     .Options;
 
 await using var context = new AppDbContext(options);

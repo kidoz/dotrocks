@@ -8,7 +8,16 @@ version is derived from the release tag at publish time.
 
 ## [Unreleased]
 
+### Changed
+- `DotRocksDbContextOptionsBuilder` is now a relational options builder bound to the
+  `DbContextOptionsBuilder`; its previously non-functional public parameterless constructor was
+  removed. Application code configures it only through the `UseStarRocks(...)` options action.
+
 ### Added
+- `StarRocksServerVersion` and `DotRocksDbContextOptionsBuilder.ServerVersion(...)` to pin the
+  target StarRocks version when configuring the EF Core provider, plus an opt-in
+  `StarRocksServerVersion.DetectAsync(connectionString)` that reads `SELECT current_version()`.
+  Building `DbContextOptions` never contacts the server.
 - EF Core query translation now emits SQL for explicit relational joins (`Join`,
   `GroupJoin`/`SelectMany`+`DefaultIfEmpty`, cross joins) and for `GroupBy` with `HAVING`
   predicates and aggregate functions, instead of throwing `NotSupportedException`.

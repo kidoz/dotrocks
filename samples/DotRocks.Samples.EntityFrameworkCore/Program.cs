@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using DotRocks.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Migrations;
 
@@ -7,7 +8,12 @@ string connectionString =
     ?? "Server=127.0.0.1;Port=9030;User ID=root;Database=dotrocks_sample";
 
 var optionsBuilder = new DbContextOptionsBuilder<SampleContext>();
-optionsBuilder.UseStarRocks(connectionString);
+optionsBuilder.UseStarRocks(
+    connectionString,
+    // Pin the target StarRocks version. Building the options never contacts the server;
+    // use StarRocksServerVersion.DetectAsync(connectionString) to discover it once at startup.
+    starRocks => starRocks.ServerVersion(new StarRocksServerVersion(4, 0, 7))
+);
 DbContextOptions<SampleContext> options = optionsBuilder.Options;
 
 using var context = new SampleContext(options);
