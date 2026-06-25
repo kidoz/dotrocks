@@ -21,6 +21,9 @@ DotRocks.Data.Loading.DotRocksStreamLoadOptions.Compression.get -> DotRocks.Data
 DotRocks.Data.Loading.DotRocksStreamLoadOptions.Compression.set -> void
 DotRocks.Data.Loading.DotRocksStreamLoadOptions.Partitions.get -> System.Collections.Generic.IReadOnlyList<string!>?
 DotRocks.Data.Loading.DotRocksStreamLoadOptions.Partitions.set -> void
+override DotRocks.Data.DotRocksConnection.GetSchema() -> System.Data.DataTable!
+override DotRocks.Data.DotRocksConnection.GetSchema(string! collectionName) -> System.Data.DataTable!
+override DotRocks.Data.DotRocksConnection.GetSchema(string! collectionName, string?[]! restrictionValues) -> System.Data.DataTable!
 override DotRocks.Data.DotRocksJson.Equals(object? obj) -> bool
 override DotRocks.Data.DotRocksJson.GetHashCode() -> int
 override DotRocks.Data.DotRocksJson.ToString() -> string!
