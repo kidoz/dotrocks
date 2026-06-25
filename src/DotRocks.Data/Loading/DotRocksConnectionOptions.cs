@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Data.Common;
+using System.Globalization;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using DotRocks.Data;
@@ -355,7 +356,7 @@ internal sealed record DotRocksConnectionOptions(
         {
             if (builder.TryGetValue(keyword, out object? value))
             {
-                return Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture)
+                return Convert.ToString(value, CultureInfo.InvariantCulture)
                     ?? string.Empty;
             }
         }
@@ -369,7 +370,7 @@ internal sealed record DotRocksConnectionOptions(
         {
             if (builder.TryGetValue(keyword, out object? value))
             {
-                return Convert.ToInt32(value, System.Globalization.CultureInfo.InvariantCulture);
+                return Convert.ToInt32(value, CultureInfo.InvariantCulture);
             }
         }
 
@@ -386,7 +387,7 @@ internal sealed record DotRocksConnectionOptions(
         {
             if (builder.TryGetValue(keyword, out object? value))
             {
-                return Convert.ToBoolean(value, System.Globalization.CultureInfo.InvariantCulture);
+                return Convert.ToBoolean(value, CultureInfo.InvariantCulture);
             }
         }
 
@@ -410,7 +411,7 @@ internal sealed record DotRocksConnectionOptions(
                 }
 
                 string text =
-                    Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture)
+                    Convert.ToString(value, CultureInfo.InvariantCulture)
                     ?? string.Empty;
                 if (Enum.TryParse(text, ignoreCase: true, out TEnum parsed))
                 {
@@ -434,7 +435,7 @@ internal sealed record DotRocksConnectionOptions(
             if (builder.TryGetValue(keyword, out object? value))
             {
                 string text =
-                    Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture)
+                    Convert.ToString(value, CultureInfo.InvariantCulture)
                     ?? string.Empty;
                 return new Uri(text, UriKind.Absolute);
             }
@@ -450,7 +451,7 @@ internal sealed record DotRocksConnectionOptions(
             if (builder.TryGetValue(keyword, out object? value))
             {
                 string text =
-                    Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture)
+                    Convert.ToString(value, CultureInfo.InvariantCulture)
                     ?? string.Empty;
                 if (string.IsNullOrWhiteSpace(text))
                 {
@@ -502,7 +503,7 @@ internal sealed record DotRocksConnectionOptions(
     {
         var builder = new StringBuilder();
         Append(builder, "Server", server);
-        Append(builder, "Port", port.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        Append(builder, "Port", port.ToString(CultureInfo.InvariantCulture));
         Append(builder, "User ID", userId);
         if (password.Length > 0)
         {
@@ -517,51 +518,51 @@ internal sealed record DotRocksConnectionOptions(
         Append(
             builder,
             "Connection Timeout",
-            timeoutSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            timeoutSeconds.ToString(CultureInfo.InvariantCulture)
         );
         Append(
             builder,
             "Pooling",
-            pooling.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            pooling.ToString(CultureInfo.InvariantCulture)
         );
         Append(
             builder,
             "Minimum Pool Size",
-            minimumPoolSize.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            minimumPoolSize.ToString(CultureInfo.InvariantCulture)
         );
         Append(
             builder,
             "Maximum Pool Size",
-            maximumPoolSize.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            maximumPoolSize.ToString(CultureInfo.InvariantCulture)
         );
         Append(
             builder,
             "Connection Idle Timeout",
-            idleTimeoutSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            idleTimeoutSeconds.ToString(CultureInfo.InvariantCulture)
         );
         Append(builder, "Ssl Mode", sslMode.ToString());
         Append(
             builder,
             "Trust Server Certificate",
-            trustServerCertificate.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            trustServerCertificate.ToString(CultureInfo.InvariantCulture)
         );
         Append(builder, "Ssl Revocation Check", sslRevocationMode.ToString());
         Append(builder, "Stream Load Endpoint", streamLoadEndpoint.AbsoluteUri);
         Append(
             builder,
             "Allow Insecure Stream Load",
-            allowInsecureStreamLoad.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            allowInsecureStreamLoad.ToString(CultureInfo.InvariantCulture)
         );
         Append(
             builder,
             "Connection Retries",
-            maxConnectionRetries.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            maxConnectionRetries.ToString(CultureInfo.InvariantCulture)
         );
         Append(
             builder,
             "Connection Retry Delay",
             connectionRetryDelayMilliseconds.ToString(
-                System.Globalization.CultureInfo.InvariantCulture
+                CultureInfo.InvariantCulture
             )
         );
         if (serverCompatibilityLevel is { } level)
@@ -572,7 +573,7 @@ internal sealed record DotRocksConnectionOptions(
         Append(
             builder,
             "Connection Lifetime",
-            connectionLifetimeSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            connectionLifetimeSeconds.ToString(CultureInfo.InvariantCulture)
         );
 
         return builder.ToString();

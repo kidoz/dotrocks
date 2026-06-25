@@ -83,7 +83,7 @@ internal sealed class DotRocksMathMethodTranslator(ISqlExpressionFactory sqlExpr
             name,
             arguments,
             nullable: true,
-            argumentsPropagateNullability: arguments.Select(_ => true).ToArray(),
+            argumentsPropagateNullability: Enumerable.Repeat(true, arguments.Count),
             returnType
         );
 }

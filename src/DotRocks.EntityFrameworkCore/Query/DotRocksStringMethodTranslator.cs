@@ -83,7 +83,7 @@ internal sealed class DotRocksStringMethodTranslator(ISqlExpressionFactory sqlEx
             "CONCAT",
             arguments,
             nullable: true,
-            argumentsPropagateNullability: arguments.Select(_ => true),
+            argumentsPropagateNullability: Enumerable.Repeat(true, arguments.Length),
             typeof(string)
         );
 
