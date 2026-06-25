@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -14,19 +15,18 @@ internal sealed class DotRocksMathMethodTranslator(ISqlExpressionFactory sqlExpr
     : IMethodCallTranslator
 {
     // Single-argument Math methods mapped to a StarRocks function of the same arity.
-    private static readonly Dictionary<string, string> SingleArgumentFunctions = new(
-        StringComparer.Ordinal
-    )
-    {
-        [nameof(Math.Abs)] = "abs",
-        [nameof(Math.Ceiling)] = "ceil",
-        [nameof(Math.Floor)] = "floor",
-        [nameof(Math.Round)] = "round",
-        [nameof(Math.Sqrt)] = "sqrt",
-        [nameof(Math.Exp)] = "exp",
-        [nameof(Math.Log)] = "ln",
-        [nameof(Math.Sign)] = "sign",
-    };
+    private static readonly FrozenDictionary<string, string> SingleArgumentFunctions =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [nameof(Math.Abs)] = "abs",
+            [nameof(Math.Ceiling)] = "ceil",
+            [nameof(Math.Floor)] = "floor",
+            [nameof(Math.Round)] = "round",
+            [nameof(Math.Sqrt)] = "sqrt",
+            [nameof(Math.Exp)] = "exp",
+            [nameof(Math.Log)] = "ln",
+            [nameof(Math.Sign)] = "sign",
+        }.ToFrozenDictionary(StringComparer.Ordinal);
 
     public SqlExpression? Translate(
         SqlExpression? instance,
