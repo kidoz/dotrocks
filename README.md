@@ -310,9 +310,16 @@ DotRocksStreamLoadResult result = await client.LoadCsvAsync(
         Columns = "id,name,created_at",
         ColumnSeparator = ",",
         RowDelimiter = "\\n",
+        Partitions = ["p20260601"],
+        Compression = DotRocksStreamLoadCompression.Gzip,
     }
 );
 ```
+
+Set `Partitions` to restrict a load to specific StarRocks partitions, and `Compression =
+DotRocksStreamLoadCompression.Gzip` to gzip the payload on the fly. DotRocks streams the
+compressed bytes (the upload is never buffered in memory) and sets the StarRocks `compression`
+header; only gzip is supported today.
 
 Transactional Stream Load uses the StarRocks begin/load/prepare/commit HTTP flow. The
 transaction object is single-use; after commit, rollback, or a failed remote call it rejects

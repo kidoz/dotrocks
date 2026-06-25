@@ -57,6 +57,20 @@ public sealed class DotRocksStreamLoadOptions
     /// </summary>
     public string? JsonPaths { get; set; }
 
+    /// <summary>
+    /// Gets or sets the target StarRocks partitions for the load. When set, only these partitions
+    /// are loaded; rows outside them are rejected by the server.
+    /// </summary>
+    public IReadOnlyList<string>? Partitions { get; set; }
+
+    /// <summary>
+    /// Gets or sets the compression applied to the payload before upload. DotRocks compresses the
+    /// stream on the fly and sets the StarRocks <c>compression</c> header. Defaults to
+    /// <see cref="DotRocksStreamLoadCompression.None"/>.
+    /// </summary>
+    public DotRocksStreamLoadCompression Compression { get; set; } =
+        DotRocksStreamLoadCompression.None;
+
     internal IReadOnlyDictionary<string, string> BuildHeaders(DotRocksStreamLoadFormat format)
     {
         Validate();
@@ -72,6 +86,16 @@ public sealed class DotRocksStreamLoadOptions
         AddHeader(headers, "where", Where);
         AddHeader(headers, "column_separator", ColumnSeparator);
         AddHeader(headers, "row_delimiter", RowDelimiter);
+        if (Partitions is { Count: > 0 })
+        {
+            headers["partitions"] = string.Join(",", Partitions);
+        }
+
+        if (Compression == DotRocksStreamLoadCompression.Gzip)
+        {
+            headers["compression"] = "gzip";
+        }
+
         if (StrictMode is not null)
         {
             headers["strict_mode"] = FormatBoolean(StrictMode.Value);
@@ -112,6 +136,7 @@ public sealed class DotRocksStreamLoadOptions
         ValidateHeaderValue(ColumnSeparator);
         ValidateHeaderValue(RowDelimiter);
         ValidateHeaderValue(JsonPaths);
+        ValidatePartitions();
 
         if (
             MaxFilterRatio is not null
@@ -128,6 +153,29 @@ public sealed class DotRocksStreamLoadOptions
         if (Timeout is not null)
         {
             ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(Timeout.Value, TimeSpan.Zero);
+        }
+    }
+
+    private void ValidatePartitions()
+    {
+        if (Partitions is null)
+        {
+            return;
+        }
+
+        foreach (string partition in Partitions)
+        {
+            if (string.IsNullOrWhiteSpace(partition))
+            {
+                throw new ArgumentException("Stream Load partition names must not be empty.");
+            }
+
+            if (partition.Contains(',', StringComparison.Ordinal))
+            {
+                throw new ArgumentException("Stream Load partition names must not contain ','.");
+            }
+
+            ValidateHeaderValue(partition);
         }
     }
 
@@ -164,4 +212,19 @@ internal enum DotRocksStreamLoadFormat
 {
     Csv,
     Json,
+}
+
+/// <summary>
+/// Selects the compression DotRocks applies to a Stream Load payload before upload.
+/// </summary>
+public enum DotRocksStreamLoadCompression
+{
+    /// <summary>No compression; the payload is uploaded as-is.</summary>
+    None = 0,
+
+    /// <summary>
+    /// The payload is gzip-compressed on the fly (streamed, not buffered) and the StarRocks
+    /// <c>compression</c> header is set to <c>gzip</c>.
+    /// </summary>
+    Gzip = 1,
 }

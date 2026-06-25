@@ -17,7 +17,14 @@ DotRocksStreamLoadResult result = await client.LoadCsvAsync(
     databaseName: "dotrocks_sample",
     tableName: "events",
     payload: payload,
-    options: new DotRocksStreamLoadOptions { Columns = "id,event_name" }
+    options: new DotRocksStreamLoadOptions
+    {
+        Columns = "id,event_name",
+        // DotRocks gzip-compresses the payload on the fly (still streamed, never buffered)
+        // and can target specific partitions.
+        Compression = DotRocksStreamLoadCompression.Gzip,
+        Partitions = ["p20240101"],
+    }
 );
 
 Console.WriteLine(

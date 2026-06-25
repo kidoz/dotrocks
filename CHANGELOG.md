@@ -9,6 +9,9 @@ version is derived from the release tag at publish time.
 ## [Unreleased]
 
 ### Added
+- Stream Load partition targeting (`DotRocksStreamLoadOptions.Partitions`) and on-the-fly gzip
+  payload compression (`DotRocksStreamLoadOptions.Compression = DotRocksStreamLoadCompression.Gzip`).
+  Compression is streamed, so the upload is never buffered in memory.
 - `DotRocksParameterMode` (`Auto` / `TextProtocol` / `ServerPrepared`) and
   `DotRocksCommand.ParameterMode`. `Auto`/`TextProtocol` use the verified client-side text path;
   `ServerPrepared` fails fast with the new public `DotRocksUnsupportedFeatureException` because the

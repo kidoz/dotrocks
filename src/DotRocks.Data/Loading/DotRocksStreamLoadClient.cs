@@ -1,4 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
+using System.IO.Compression;
+using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using DotRocks.Data.Pooling;
@@ -387,8 +389,19 @@ public sealed class DotRocksStreamLoadClient : IDisposable
 
         if (payload is not null && mediaType is not null)
         {
-            request.Content = new StreamContent(new NonDisposingStream(payload));
-            request.Content.Headers.ContentType = new MediaTypeHeaderValue(mediaType);
+            // The body is never disposed here: it is the caller's stream and is reused across
+            // redirect retries. When the request carries the StarRocks compression header, the
+            // payload is gzip-compressed on the fly so the upload is never buffered in memory.
+            var bodyStream = new NonDisposingStream(payload);
+            bool gzip =
+                headers.TryGetValue("compression", out string? codec)
+                && string.Equals(codec, "gzip", StringComparison.OrdinalIgnoreCase);
+            request.Content = gzip
+                ? new GzipStreamContent(bodyStream, mediaType)
+                : new StreamContent(bodyStream)
+                {
+                    Headers = { ContentType = new MediaTypeHeaderValue(mediaType) },
+                };
         }
 
         return request;
@@ -535,6 +548,52 @@ public sealed class DotRocksStreamLoadClient : IDisposable
         if (value.Contains('/', StringComparison.Ordinal))
         {
             throw new ArgumentException("Value must not contain path separators.", parameterName);
+        }
+    }
+
+    // Streams the payload through a GZipStream into the request body. Length is unknown ahead of
+    // time, so the request uses chunked transfer encoding; the upload is never buffered in memory.
+    private sealed class GzipStreamContent : HttpContent
+    {
+        private readonly Stream _source;
+
+        public GzipStreamContent(Stream source, string mediaType)
+        {
+            _source = source;
+            Headers.ContentType = new MediaTypeHeaderValue(mediaType);
+        }
+
+        protected override async Task SerializeToStreamAsync(
+            Stream stream,
+            TransportContext? context,
+            CancellationToken cancellationToken
+        )
+        {
+            var gzip = new GZipStream(stream, CompressionLevel.Fastest, leaveOpen: true);
+            await using (gzip.ConfigureAwait(false))
+            {
+                await _source.CopyToAsync(gzip, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        protected override Task SerializeToStreamAsync(Stream stream, TransportContext? context) =>
+            SerializeToStreamAsync(stream, context, CancellationToken.None);
+
+        protected override bool TryComputeLength(out long length)
+        {
+            length = 0;
+            return false;
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            // _source is a NonDisposingStream wrapper, so this does not close the caller's payload.
+            if (disposing)
+            {
+                _source.Dispose();
+            }
+
+            base.Dispose(disposing);
         }
     }
 
