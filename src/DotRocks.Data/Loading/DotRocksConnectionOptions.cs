@@ -356,8 +356,7 @@ internal sealed record DotRocksConnectionOptions(
         {
             if (builder.TryGetValue(keyword, out object? value))
             {
-                return Convert.ToString(value, CultureInfo.InvariantCulture)
-                    ?? string.Empty;
+                return Convert.ToString(value, CultureInfo.InvariantCulture) ?? string.Empty;
             }
         }
 
@@ -410,9 +409,7 @@ internal sealed record DotRocksConnectionOptions(
                     return typed;
                 }
 
-                string text =
-                    Convert.ToString(value, CultureInfo.InvariantCulture)
-                    ?? string.Empty;
+                string text = Convert.ToString(value, CultureInfo.InvariantCulture) ?? string.Empty;
                 if (Enum.TryParse(text, ignoreCase: true, out TEnum parsed))
                 {
                     return parsed;
@@ -434,9 +431,7 @@ internal sealed record DotRocksConnectionOptions(
         {
             if (builder.TryGetValue(keyword, out object? value))
             {
-                string text =
-                    Convert.ToString(value, CultureInfo.InvariantCulture)
-                    ?? string.Empty;
+                string text = Convert.ToString(value, CultureInfo.InvariantCulture) ?? string.Empty;
                 return new Uri(text, UriKind.Absolute);
             }
         }
@@ -450,9 +445,7 @@ internal sealed record DotRocksConnectionOptions(
         {
             if (builder.TryGetValue(keyword, out object? value))
             {
-                string text =
-                    Convert.ToString(value, CultureInfo.InvariantCulture)
-                    ?? string.Empty;
+                string text = Convert.ToString(value, CultureInfo.InvariantCulture) ?? string.Empty;
                 if (string.IsNullOrWhiteSpace(text))
                 {
                     return null;
@@ -520,11 +513,7 @@ internal sealed record DotRocksConnectionOptions(
             "Connection Timeout",
             timeoutSeconds.ToString(CultureInfo.InvariantCulture)
         );
-        Append(
-            builder,
-            "Pooling",
-            pooling.ToString(CultureInfo.InvariantCulture)
-        );
+        Append(builder, "Pooling", pooling.ToString(CultureInfo.InvariantCulture));
         Append(
             builder,
             "Minimum Pool Size",
@@ -561,9 +550,7 @@ internal sealed record DotRocksConnectionOptions(
         Append(
             builder,
             "Connection Retry Delay",
-            connectionRetryDelayMilliseconds.ToString(
-                CultureInfo.InvariantCulture
-            )
+            connectionRetryDelayMilliseconds.ToString(CultureInfo.InvariantCulture)
         );
         if (serverCompatibilityLevel is { } level)
         {
