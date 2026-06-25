@@ -231,11 +231,14 @@ EF Core type mapping:
 | `CHAR(36)` | `Guid` |
 | `CHAR`, `VARCHAR`, `STRING`, `TEXT` | `string` |
 | `JSON` | raw `string`, or `DotRocksJson` via `GetFieldValue<DotRocksJson>` |
+| `ARRAY`, `MAP`, `STRUCT` | raw JSON-text `string`, or `DotRocksJson` |
 
-StarRocks 4.0.7 returns `JSON` over the text protocol typed as `STRING`, so a JSON value is not
-distinguishable from a string by wire type. By default it reads as a raw `string`; for lossless,
-opt-in typed access call `reader.GetFieldValue<DotRocksJson>(ordinal)`. `DotRocksJson` preserves the
-server's exact bytes and offers `Parse()` for a caller-owned `System.Text.Json.JsonDocument`.
+StarRocks 4.0.7 returns `JSON` over the text protocol typed as `STRING`, and `ARRAY` / `MAP` /
+`STRUCT` typed as `VAR_STRING`, each serialized as JSON-formatted text (for example `[1,2,3]`,
+`{"k1":1}`, `{"x":1,"y":"two"}`). None are distinguishable from a plain string by wire type, so they
+read as a raw `string` by default. For lossless, opt-in typed access call
+`reader.GetFieldValue<DotRocksJson>(ordinal)`: `DotRocksJson` preserves the server's exact bytes and
+offers `Parse()` for a caller-owned `System.Text.Json.JsonDocument`.
 
 Projecting high-precision StarRocks decimals to `decimal` can throw
 `DotRocksPrecisionLossException`; use `DotRocksDecimal` for lossless values.

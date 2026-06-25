@@ -30,6 +30,54 @@ public sealed class ConnectionIntegrationTests
         Assert.False(string.IsNullOrWhiteSpace(connection.ServerVersion));
     }
 
+    [Theory]
+    [InlineData("SELECT [1, 2, 3] AS v", "[1,2,3]")]
+    [InlineData("SELECT ['a', 'b'] AS v", """["a","b"]""")]
+    [InlineData("SELECT map{'k1': 1, 'k2': 2} AS v", """{"k1":1,"k2":2}""")]
+    [InlineData("SELECT named_struct('x', 1, 'y', 'two') AS v", """{"x":1,"y":"two"}""")]
+    [SuppressMessage(
+        "Security",
+        "CA2100:Review SQL queries for security vulnerabilities",
+        Justification = "The queries are fixed inline test literals, not user input."
+    )]
+    public async Task ExecuteReaderAsync_ReadsArrayMapStructAsLosslessText(
+        string query,
+        string expectedRawText
+    )
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
+        }
+
+        ArgumentNullException.ThrowIfNull(query);
+        ArgumentNullException.ThrowIfNull(expectedRawText);
+
+        using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
+        await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+        using System.Data.Common.DbCommand command = connection.CreateCommand();
+        command.CommandText = query;
+
+        using System.Data.Common.DbDataReader reader = await command
+            .ExecuteReaderAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+        Assert.True(
+            await reader.ReadAsync(TestContext.Current.CancellationToken).ConfigureAwait(true)
+        );
+
+        // ARRAY/MAP/STRUCT return over the text protocol typed as VAR_STRING (JSON returns as
+        // STRING) and are serialized as JSON-formatted text, so DotRocksJson reads them losslessly.
+        Assert.Equal("VAR_STRING", reader.GetDataTypeName(0), StringComparer.OrdinalIgnoreCase);
+        DotRocksJson value = await reader
+            .GetFieldValueAsync<DotRocksJson>(0, TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+        Assert.Equal(expectedRawText, value.RawText);
+        using System.Text.Json.JsonDocument document = value.Parse();
+        Assert.NotEqual(System.Text.Json.JsonValueKind.Undefined, document.RootElement.ValueKind);
+    }
+
     [Fact]
     public async Task ExecuteReaderAsync_ReadsJsonColumnAsLosslessDotRocksJson()
     {
@@ -52,8 +100,10 @@ public sealed class ConnectionIntegrationTests
             await reader.ReadAsync(TestContext.Current.CancellationToken).ConfigureAwait(true)
         );
 
-        // Characterize the wire type, then read the value losslessly as DotRocksJson.
-        Assert.Equal("JSON", reader.GetDataTypeName(0), StringComparer.OrdinalIgnoreCase);
+        // Characterization: StarRocks 4.0.7 returns a JSON value over the text protocol typed as
+        // STRING, so it is not distinguishable from a string by wire type. DotRocksJson is therefore
+        // an opt-in lossless accessor rather than an automatic mapping.
+        Assert.Equal("STRING", reader.GetDataTypeName(0), StringComparer.OrdinalIgnoreCase);
         DotRocksJson json = await reader
             .GetFieldValueAsync<DotRocksJson>(0, TestContext.Current.CancellationToken)
             .ConfigureAwait(true);
