@@ -1,8 +1,12 @@
 using System.Globalization;
 using System.Net.Sockets;
 using System.Text.Json;
+using DotRocks.Data;
+using DotRocks.Data.Loading;
+using DotRocks.Data.Pooling;
 using DotRocks.Data.Protocol.Framing;
 using DotRocks.Data.Protocol.Handshake;
+using DotRocks.Data.Protocol.Results;
 using DotRocks.Data.Protocol.Serialization;
 
 namespace DotRocks.CompatibilityHarness;
@@ -34,6 +38,14 @@ internal static class Program
         );
         string reportPath =
             Environment.GetEnvironmentVariable("DOTROCKS_REPORT") ?? "handshake-report.json";
+
+        // Phase-Zero characterization for the binary prepared-statement protocol. Opt in with
+        // `--prepare-probe` and a DOTROCKS_CONNECTION_STRING; it opens an authenticated physical
+        // connection and reports the COM_STMT_PREPARE response (or the server error).
+        if (Array.IndexOf(args, "--prepare-probe") >= 0)
+        {
+            return await ProbePrepareAsync(timeoutSeconds).ConfigureAwait(false);
+        }
 
         await Console
             .Out.WriteLineAsync(
@@ -93,6 +105,51 @@ internal static class Program
                 .ConfigureAwait(false);
             return 2;
         }
+    }
+
+    private static async Task<int> ProbePrepareAsync(int timeoutSeconds)
+    {
+        string? connectionString = Environment.GetEnvironmentVariable("DOTROCKS_CONNECTION_STRING");
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            await Console
+                .Error.WriteLineAsync("Set DOTROCKS_CONNECTION_STRING for the prepare probe.")
+                .ConfigureAwait(false);
+            return 2;
+        }
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds));
+        DotRocksConnectionOptions options = DotRocksConnectionOptions.Parse(connectionString);
+        using DotRocksPhysicalConnection connection = await DotRocksPhysicalConnection
+            .OpenAsync(options, cts.Token)
+            .ConfigureAwait(false);
+
+        foreach (string sql in (string[])["SELECT 1 AS one", "SELECT ? + ? AS total"])
+        {
+            try
+            {
+                StatementPrepareResult result = await connection
+                    .PrepareAsync(sql, cts.Token)
+                    .ConfigureAwait(false);
+                await Console
+                    .Out.WriteLineAsync(
+                        $"PREPARE OK '{sql}': statementId={result.StatementId}, params={result.ParameterCount}, columns={result.ColumnCount}"
+                    )
+                    .ConfigureAwait(false);
+                await connection
+                    .ClosePreparedStatementAsync(result.StatementId, cts.Token)
+                    .ConfigureAwait(false);
+            }
+            catch (DotRocksException ex)
+            {
+                await Console
+                    .Out.WriteLineAsync($"PREPARE FAILED '{sql}': {ex.Message}")
+                    .ConfigureAwait(false);
+                return 1;
+            }
+        }
+
+        return 0;
     }
 
     private static HandshakeReport BuildReport(
