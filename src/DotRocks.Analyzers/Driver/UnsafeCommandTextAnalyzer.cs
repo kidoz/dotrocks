@@ -75,10 +75,10 @@ public sealed class UnsafeCommandTextAnalyzer : DiagnosticAnalyzer
             return;
         }
 
-        ArgumentSyntax? firstArgument =
-            objectCreation.ArgumentList is { Arguments: { Count: > 0 } arguments }
-                ? arguments[0]
-                : null;
+        ArgumentSyntax? firstArgument = objectCreation.ArgumentList
+            is { Arguments: { Count: > 0 } arguments }
+            ? arguments[0]
+            : null;
         if (firstArgument is not null && IsUnsafeSqlExpression(context, firstArgument.Expression))
         {
             Report(context, firstArgument.Expression);

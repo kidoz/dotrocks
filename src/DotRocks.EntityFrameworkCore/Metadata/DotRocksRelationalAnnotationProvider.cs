@@ -54,7 +54,10 @@ internal sealed class DotRocksRelationalAnnotationProvider(
                 continue;
             }
 
-            if (result is not null && !DotRocksAnnotationValues.AreEqual(result.Value, annotation.Value))
+            if (
+                result is not null
+                && !DotRocksAnnotationValues.AreEqual(result.Value, annotation.Value)
+            )
             {
                 throw new NotSupportedException(
                     $"DotRocks EF Core migrations do not support conflicting '{annotationName}' table-shape annotations on shared table '{table.SchemaQualifiedName}'."

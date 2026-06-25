@@ -20,25 +20,16 @@ internal static class DotRocksTableKeyModels
             case DotRocksTableKeyModel model:
                 keyModel = model;
                 return true;
-            case string text when string.Equals(
-                text,
-                "DUPLICATE KEY",
-                StringComparison.OrdinalIgnoreCase
-            ):
+            case string text
+                when string.Equals(text, "DUPLICATE KEY", StringComparison.OrdinalIgnoreCase):
                 keyModel = DotRocksTableKeyModel.DuplicateKey;
                 return true;
-            case string text when string.Equals(
-                text,
-                "PRIMARY KEY",
-                StringComparison.OrdinalIgnoreCase
-            ):
+            case string text
+                when string.Equals(text, "PRIMARY KEY", StringComparison.OrdinalIgnoreCase):
                 keyModel = DotRocksTableKeyModel.PrimaryKey;
                 return true;
-            case string text when string.Equals(
-                text,
-                "UNIQUE KEY",
-                StringComparison.OrdinalIgnoreCase
-            ):
+            case string text
+                when string.Equals(text, "UNIQUE KEY", StringComparison.OrdinalIgnoreCase):
                 keyModel = DotRocksTableKeyModel.UniqueKey;
                 return true;
             default:
