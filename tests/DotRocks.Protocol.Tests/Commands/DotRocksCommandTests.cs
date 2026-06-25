@@ -119,19 +119,20 @@ public sealed class DotRocksCommandTests
     }
 
     [Fact]
-    public void ServerPreparedMode_Prepare_ThrowsUnsupportedFeature()
+    public void ServerPreparedMode_Prepare_DoesNotThrow()
     {
+        // Server-side preparation happens at execution; Prepare() is a no-op for this mode.
         using var command = new DotRocksCommand
         {
-            CommandText = "SELECT 1",
+            CommandText = "SELECT ?",
             ParameterMode = DotRocksParameterMode.ServerPrepared,
         };
 
-        Assert.Throws<DotRocksUnsupportedFeatureException>(command.Prepare);
+        command.Prepare();
     }
 
     [Fact]
-    public async Task ServerPreparedMode_ExecuteScalarAsync_ThrowsUnsupportedFeature()
+    public async Task ServerPreparedMode_ExecuteScalarAsync_RequiresConnection()
     {
         using var command = new DotRocksCommand
         {
@@ -139,8 +140,10 @@ public sealed class DotRocksCommandTests
             ParameterMode = DotRocksParameterMode.ServerPrepared,
         };
 
+        // Without a live connection the mode cannot execute; behavior is verified end-to-end by the
+        // ServerPrepared integration test against a real StarRocks server.
         await Assert
-            .ThrowsAsync<DotRocksUnsupportedFeatureException>(async () =>
+            .ThrowsAsync<InvalidOperationException>(async () =>
                 await command
                     .ExecuteScalarAsync(TestContext.Current.CancellationToken)
                     .ConfigureAwait(true)

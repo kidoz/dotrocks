@@ -189,7 +189,12 @@ public sealed class DotRocksCommand : DbCommand
     public override void Prepare()
     {
         EnsureTextCommand();
-        EnsureParameterModeSupported();
+        if (_parameterMode == DotRocksParameterMode.ServerPrepared)
+        {
+            // Server-side preparation happens at execution against the live connection.
+            return;
+        }
+
         _preparedCommand = CommandTextParameterBinder.Prepare(CommandText, _parameters);
     }
 
@@ -245,14 +250,18 @@ public sealed class DotRocksCommand : DbCommand
     )
     {
         cancellationToken.ThrowIfCancellationRequested();
-        EnsureParameterModeSupported();
         if (_connection is null)
         {
             throw new InvalidOperationException("Command requires a DotRocksConnection.");
         }
 
         _connection.ValidateCommandTransaction((DotRocksTransaction?)_transaction);
-        string commandText = BindCommandText();
+        bool serverPrepared = _parameterMode == DotRocksParameterMode.ServerPrepared;
+
+        // Server-prepared statements use positional `?` placeholders, so the raw command text is
+        // sent to COM_STMT_PREPARE and values are bound positionally. The text path tokenizes
+        // named `@` parameters and inlines safely-formatted literals.
+        string commandText = serverPrepared ? CommandText : BindCommandText();
         using var commandCancellation = new CancellationTokenSource();
         using CancellationTokenSource? timeoutCancellation = CreateTimeoutCancellation();
         using CancellationTokenSource linkedCancellation = CreateLinkedCancellation(
@@ -273,11 +282,30 @@ public sealed class DotRocksCommand : DbCommand
         string? statusCode = null;
         try
         {
-            StreamingQueryResult result = await _connection
-                .ExecuteStreamingQueryAsync(commandText, linkedCancellation.Token)
-                .ConfigureAwait(false);
-            var reader = new DotRocksDataReader(result, _connection, behavior);
-            if (result.HasResultSet)
+            DotRocksDataReader reader;
+            bool hasResultSet;
+            if (serverPrepared)
+            {
+                QueryResult preparedResult = await _connection
+                    .ExecutePreparedQueryAsync(
+                        commandText,
+                        ExtractServerPreparedValues(),
+                        linkedCancellation.Token
+                    )
+                    .ConfigureAwait(false);
+                reader = new DotRocksDataReader(preparedResult, _connection, behavior);
+                hasResultSet = preparedResult.HasResultSet;
+            }
+            else
+            {
+                StreamingQueryResult result = await _connection
+                    .ExecuteStreamingQueryAsync(commandText, linkedCancellation.Token)
+                    .ConfigureAwait(false);
+                reader = new DotRocksDataReader(result, _connection, behavior);
+                hasResultSet = result.HasResultSet;
+            }
+
+            if (hasResultSet)
             {
                 _connection.SetActiveReader(reader);
             }
@@ -468,18 +496,15 @@ public sealed class DotRocksCommand : DbCommand
         }
     }
 
-    private void EnsureParameterModeSupported()
+    // Positional parameter values for a server-prepared statement, in collection order.
+    private object?[] ExtractServerPreparedValues()
     {
-        // Auto resolves to the verified text protocol; only an explicit ServerPrepared request
-        // fails. StarRocks' server-side prepared-statement protocol is not yet characterized
-        // against a live server, so DotRocks fails clearly instead of silently using another path.
-        if (_parameterMode == DotRocksParameterMode.ServerPrepared)
+        object?[] values = new object?[_parameters.Count];
+        for (int i = 0; i < _parameters.Count; i++)
         {
-            throw new DotRocksUnsupportedFeatureException(
-                "DotRocksParameterMode.ServerPrepared is not supported yet: the StarRocks "
-                    + "server-side prepared-statement (binary) protocol is unverified. Use "
-                    + "DotRocksParameterMode.Auto or TextProtocol."
-            );
+            values[i] = ((DotRocksParameter)_parameters[i]).Value;
         }
+
+        return values;
     }
 }

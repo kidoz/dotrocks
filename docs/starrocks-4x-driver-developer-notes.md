@@ -92,9 +92,11 @@ Characterized on StarRocks 4.0.7 (compatibility harness `--prepare-probe`):
 `SELECT ? + ? AS total` returns 2 params / 1 column with a non-zero statement id.
 DotRocks does not negotiate `CLIENT_DEPRECATE_EOF`, so the prepare response is the
 prepare-OK header, then parameter-definition packets + EOF, then column-definition
-packets + EOF. `COM_STMT_PREPARE` / `COM_STMT_CLOSE` are implemented;
-`COM_STMT_EXECUTE` (binary parameter encoding and binary result-row decoding) and
-the `DotRocksParameterMode.ServerPrepared` wiring remain to be built and verified.
+packets + EOF. `COM_STMT_PREPARE`, `COM_STMT_EXECUTE`, and `COM_STMT_CLOSE` are
+implemented and wired to `DotRocksParameterMode.ServerPrepared`, verified end to end
+against StarRocks 4.0.7. Fixed-width numerics and temporal values use their native
+binary layout; decimals, dates, and other non-numeric parameters are sent as
+`VAR_STRING` text, which the server casts to the placeholder type.
 
 HTTP SQL API exists and streams newline-delimited JSON for `SELECT`, `SHOW`,
 `EXPLAIN`, and `KILL`, one SQL query per HTTP request. It can be a future optional

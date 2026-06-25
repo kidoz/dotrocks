@@ -9,6 +9,11 @@ version is derived from the release tag at publish time.
 ## [Unreleased]
 
 ### Added
+- Server-side prepared statements via `DotRocksParameterMode.ServerPrepared`: the binary
+  `COM_STMT_PREPARE` / `COM_STMT_EXECUTE` / `COM_STMT_CLOSE` protocol with binary parameter encoding
+  and binary result-row decoding, verified end to end against StarRocks 4.0.7. Use positional `?`
+  placeholders and add parameters in order. Unsupported parameter value types fail with
+  `DotRocksUnsupportedFeatureException`.
 - `DotRocksJson`, an immutable lossless wrapper for StarRocks `JSON` values, readable via
   `reader.GetFieldValue<DotRocksJson>(ordinal)`. It preserves the server's exact bytes and offers
   `Parse()` for a caller-owned `JsonDocument`. Verified against StarRocks 4.0.7, which returns JSON
