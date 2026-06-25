@@ -74,9 +74,26 @@ public sealed class DotRocksStreamLoadOptions
     internal IReadOnlyDictionary<string, string> BuildHeaders(DotRocksStreamLoadFormat format)
     {
         Validate();
+
+        // StarRocks decompresses a CSV payload when the format is reported as "gzip" (it infers
+        // CSV after decompression); there is no separate compression header for CSV, and gzip is
+        // not accepted for JSON payloads.
+        string formatHeader = format == DotRocksStreamLoadFormat.Csv ? "csv" : "json";
+        if (Compression == DotRocksStreamLoadCompression.Gzip)
+        {
+            if (format != DotRocksStreamLoadFormat.Csv)
+            {
+                throw new NotSupportedException(
+                    "Gzip Stream Load compression is supported only for CSV payloads."
+                );
+            }
+
+            formatHeader = "gzip";
+        }
+
         var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            ["format"] = format == DotRocksStreamLoadFormat.Csv ? "csv" : "json",
+            ["format"] = formatHeader,
         };
 
         // A label makes a load idempotent: StarRocks rejects a duplicate label, so a resend
@@ -89,11 +106,6 @@ public sealed class DotRocksStreamLoadOptions
         if (Partitions is { Count: > 0 })
         {
             headers["partitions"] = string.Join(",", Partitions);
-        }
-
-        if (Compression == DotRocksStreamLoadCompression.Gzip)
-        {
-            headers["compression"] = "gzip";
         }
 
         if (StrictMode is not null)

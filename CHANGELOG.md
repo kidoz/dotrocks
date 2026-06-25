@@ -20,8 +20,9 @@ version is derived from the release tag at publish time.
   `dotrocks.stream_load.rows_loaded`, `dotrocks.stream_load.rows_filtered`, and
   `dotrocks.stream_load.bytes`, tagged only with a bounded `outcome`.
 - Stream Load partition targeting (`DotRocksStreamLoadOptions.Partitions`) and on-the-fly gzip
-  payload compression (`DotRocksStreamLoadOptions.Compression = DotRocksStreamLoadCompression.Gzip`).
-  Compression is streamed, so the upload is never buffered in memory.
+  payload compression (`DotRocksStreamLoadOptions.Compression = DotRocksStreamLoadCompression.Gzip`),
+  verified against StarRocks 4.0.7. Compression is streamed (the upload is never buffered in memory)
+  and reported via the `gzip` load format; it applies to CSV payloads only.
 - `DotRocksParameterMode` (`Auto` / `TextProtocol` / `ServerPrepared`) and
   `DotRocksCommand.ParameterMode`. `Auto`/`TextProtocol` use the verified client-side text path;
   `ServerPrepared` fails fast with the new public `DotRocksUnsupportedFeatureException` because the

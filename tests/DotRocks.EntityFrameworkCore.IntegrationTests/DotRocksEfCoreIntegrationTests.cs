@@ -2,6 +2,7 @@ using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using DotRocks.Data;
+using DotRocks.EntityFrameworkCore.Infrastructure;
 using DotRocks.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -367,6 +368,138 @@ public sealed class DotRocksEfCoreIntegrationTests
             Int128.Parse("-170141183460469231731687303715884105728", CultureInfo.InvariantCulture),
             rows[1].Value
         );
+    }
+
+    [Fact]
+    public async Task GroupBy_Category_AggregatesAgainstStarRocks()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
+        }
+
+        await using var context = CreateLiveContext();
+        await EnsureWidgetTableAsync(context).ConfigureAwait(true);
+
+        try
+        {
+            var groups = await context
+                .Widgets.GroupBy(widget => widget.Category)
+                .Select(group => new
+                {
+                    Category = group.Key,
+                    Count = group.LongCount(),
+                    Total = group.Sum(widget => widget.Id),
+                })
+                .OrderBy(row => row.Category)
+                .ToListAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+
+            // Seeded widgets: category 1 -> ids {1, 2}, category 2 -> id {3}.
+            Assert.Equal(2, groups.Count);
+            Assert.Equal(1, groups[0].Category);
+            Assert.Equal(2, groups[0].Count);
+            Assert.Equal(3, groups[0].Total);
+            Assert.Equal(2, groups[1].Category);
+            Assert.Equal(1, groups[1].Count);
+            Assert.Equal(3, groups[1].Total);
+        }
+        finally
+        {
+            await DropWidgetTableAsync(context).ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
+    public async Task GroupBy_WithHaving_FiltersAggregatesAgainstStarRocks()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
+        }
+
+        await using var context = CreateLiveContext();
+        await EnsureWidgetTableAsync(context).ConfigureAwait(true);
+
+        try
+        {
+            List<int> categories = await context
+                .Widgets.GroupBy(widget => widget.Category)
+                .Where(group => group.Count() > 1)
+                .Select(group => group.Key)
+                .ToListAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+
+            // Only category 1 has more than one widget.
+            Assert.Equal([1], categories);
+        }
+        finally
+        {
+            await DropWidgetTableAsync(context).ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
+    public async Task Join_SelfJoinOnPriority_ExecutesAgainstStarRocks()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
+        }
+
+        await using var context = CreateLiveContext();
+        await EnsureWidgetTableAsync(context).ConfigureAwait(true);
+
+        try
+        {
+            var pairs = await context
+                .Widgets.Join(
+                    context.Widgets,
+                    widget => widget.Priority,
+                    other => other.Id,
+                    (widget, other) => new { Left = widget.Id, Right = other.Id }
+                )
+                .OrderBy(pair => pair.Left)
+                .ToListAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+
+            // priority(id1)=2 -> other id 2; priority(id2)=1 -> id 1; priority(id3)=1 -> id 1.
+            Assert.Equal(3, pairs.Count);
+            Assert.Equal(2, pairs.Single(pair => pair.Left == 1).Right);
+            Assert.Equal(1, pairs.Single(pair => pair.Left == 2).Right);
+            Assert.Equal(1, pairs.Single(pair => pair.Left == 3).Right);
+        }
+        finally
+        {
+            await DropWidgetTableAsync(context).ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
+    public async Task DetectAsync_ReadsLiveServerVersion()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
+        }
+
+        StarRocksServerVersion version = await StarRocksServerVersion
+            .DetectAsync(
+                IntegrationTestEnvironment.ConnectionString,
+                TestContext.Current.CancellationToken
+            )
+            .ConfigureAwait(true);
+
+        // The pinned test image is StarRocks 3.x/4.x; only assert a sane lower bound.
+        Assert.True(version.Major >= 3, $"Unexpected detected StarRocks version: {version}");
     }
 
     [Fact]

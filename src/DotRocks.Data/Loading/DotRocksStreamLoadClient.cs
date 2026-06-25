@@ -425,12 +425,12 @@ public sealed class DotRocksStreamLoadClient : IDisposable
         if (payload is not null && mediaType is not null)
         {
             // The body is never disposed here: it is the caller's stream and is reused across
-            // redirect retries. When the request carries the StarRocks compression header, the
-            // payload is gzip-compressed on the fly so the upload is never buffered in memory.
+            // redirect retries. When the load format is reported as gzip, the payload is
+            // gzip-compressed on the fly so the upload is never buffered in memory.
             var bodyStream = new NonDisposingStream(payload);
             bool gzip =
-                headers.TryGetValue("compression", out string? codec)
-                && string.Equals(codec, "gzip", StringComparison.OrdinalIgnoreCase);
+                headers.TryGetValue("format", out string? formatHeader)
+                && string.Equals(formatHeader, "gzip", StringComparison.OrdinalIgnoreCase);
             request.Content = gzip
                 ? new GzipStreamContent(bodyStream, mediaType)
                 : new StreamContent(bodyStream)

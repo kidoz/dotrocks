@@ -13,6 +13,53 @@ public sealed class StreamLoadIntegrationTests
     private const string StreamLoadDatabaseName = "dotrocks_stream_load";
 
     [Fact]
+    public async Task LoadCsvAsync_WithGzip_LoadsRowsIntoTable()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
+        }
+
+        string tableName = await CreateStreamLoadTableAsync().ConfigureAwait(true);
+        try
+        {
+            using var client = new DotRocksStreamLoadClient(
+                IntegrationTestEnvironment.ConnectionString
+            );
+            using var payload = new MemoryStream(Encoding.UTF8.GetBytes("1,one\n2,two\n3,three\n"));
+
+            DotRocksStreamLoadResult result = await client
+                .LoadCsvAsync(
+                    StreamLoadDatabaseName,
+                    tableName,
+                    payload,
+                    new DotRocksStreamLoadOptions
+                    {
+                        Label =
+                            "dotrocks_"
+                            + Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture),
+                        Columns = "id,value",
+                        ColumnSeparator = ",",
+                        RowDelimiter = "\\n",
+                        Compression = DotRocksStreamLoadCompression.Gzip,
+                    },
+                    TestContext.Current.CancellationToken
+                )
+                .ConfigureAwait(true);
+
+            Assert.True(result.IsSuccess);
+            Assert.Equal(3, result.NumberLoadedRows);
+            Assert.Equal(3, await ReadRowCountAsync(tableName).ConfigureAwait(true));
+        }
+        finally
+        {
+            await DropTableAsync(tableName).ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
     public async Task LoadCsvAsync_LoadsRowsIntoTable()
     {
         if (!IntegrationTestEnvironment.IsEnabled)
