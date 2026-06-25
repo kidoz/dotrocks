@@ -230,15 +230,22 @@ EF Core type mapping:
 | `TIME` | `TimeOnly` when the value is returned as a time string/span |
 | `CHAR(36)` | `Guid` |
 | `CHAR`, `VARCHAR`, `STRING`, `TEXT` | `string` |
-| `JSON` | raw `string`, or `DotRocksJson` via `GetFieldValue<DotRocksJson>` |
-| `ARRAY`, `MAP`, `STRUCT` | raw JSON-text `string`, or `DotRocksJson` |
+| `JSON` | `string` |
 
-StarRocks 4.0.7 returns `JSON` over the text protocol typed as `STRING`, and `ARRAY` / `MAP` /
-`STRUCT` typed as `VAR_STRING`, each serialized as JSON-formatted text (for example `[1,2,3]`,
-`{"k1":1}`, `{"x":1,"y":"two"}`). None are distinguishable from a plain string by wire type, so they
-read as a raw `string` by default. For lossless, opt-in typed access call
-`reader.GetFieldValue<DotRocksJson>(ordinal)`: `DotRocksJson` preserves the server's exact bytes and
-offers `Parse()` for a caller-owned `System.Text.Json.JsonDocument`.
+EF Core maps only the `json` store type, to `string`. `ARRAY`, `MAP`, and `STRUCT` are not EF-mapped,
+and `DotRocksJson` (below) is an ADO.NET reader feature, not an EF type mapping.
+
+**Reading JSON and complex types over ADO.NET.** The `DotRocksDataReader` returns `JSON`, `ARRAY`,
+`MAP`, and `STRUCT` values as a raw `string` by default. For the cases exercised by the integration
+suite, StarRocks 4.0.7 sends `JSON` typed as `STRING` and `ARRAY` / `MAP` / `STRUCT` typed as
+`VAR_STRING`, each serialized as JSON-formatted text (for example `[1,2,3]`, `{"k1":1}`,
+`{"x":1,"y":"two"}`, including nested values, `null` elements, escaped strings, and decimal/date
+values). None are distinguishable from a plain string by wire type. For lossless, opt-in typed
+access call `reader.GetFieldValue<DotRocksJson>(ordinal)`: `DotRocksJson` preserves the server's
+exact bytes and offers `Parse()` for a caller-owned `System.Text.Json.JsonDocument`. The
+aggregate-state types `BITMAP`, `HLL`, and `PERCENTILE` are opaque — selecting them directly yields
+`NULL` over the text protocol — so read them through their StarRocks accessor functions (for example
+`bitmap_to_string(...)`, `hll_cardinality(...)`).
 
 Projecting high-precision StarRocks decimals to `decimal` can throw
 `DotRocksPrecisionLossException`; use `DotRocksDecimal` for lossless values.

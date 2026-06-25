@@ -35,6 +35,17 @@ public sealed class ConnectionIntegrationTests
     [InlineData("SELECT ['a', 'b'] AS v", """["a","b"]""")]
     [InlineData("SELECT map{'k1': 1, 'k2': 2} AS v", """{"k1":1,"k2":2}""")]
     [InlineData("SELECT named_struct('x', 1, 'y', 'two') AS v", """{"x":1,"y":"two"}""")]
+    // Edge cases: nesting, NULL elements, JSON string escaping, decimal scale, and dates/datetimes
+    // serialized as quoted strings — all returned as strict JSON-formatted text on 4.0.7.
+    [InlineData("SELECT [[1, 2], [3]] AS v", "[[1,2],[3]]")]
+    [InlineData("SELECT [1, NULL, 3] AS v", "[1,null,3]")]
+    [InlineData("""SELECT ['a"b'] AS v""", """["a\"b"]""")]
+    [InlineData("SELECT [CAST(1.50 AS DECIMAL(10,2))] AS v", "[1.50]")]
+    [InlineData("SELECT [CAST('2026-06-25' AS DATE)] AS v", """["2026-06-25"]""")]
+    [InlineData(
+        "SELECT map{'k': CAST('2026-06-25 01:02:03' AS DATETIME)} AS v",
+        """{"k":"2026-06-25 01:02:03"}"""
+    )]
     [SuppressMessage(
         "Security",
         "CA2100:Review SQL queries for security vulnerabilities",
