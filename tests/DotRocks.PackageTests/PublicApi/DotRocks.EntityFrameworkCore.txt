@@ -15,7 +15,7 @@ public sealed class DotRocks.EntityFrameworkCore.Infrastructure.DotRocksOptionsE
 public static class DotRocks.EntityFrameworkCore.Infrastructure.DotRocksServiceCollectionExtensions
   public static method Microsoft.Extensions.DependencyInjection.IServiceCollection AddEntityFrameworkDotRocks(Microsoft.Extensions.DependencyInjection.IServiceCollection services)
 
-public sealed class DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion System.IEquatable<DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion>
+public sealed class DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion System.IComparable, System.IComparable<DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion>, System.IEquatable<DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion>
   public DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion(System.Int32 major, System.Int32 minor, System.Int32 patch)
   public property System.Int32 Major { get; }
   public property System.Int32 Minor { get; }
@@ -24,6 +24,8 @@ public sealed class DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerV
   public static method System.Threading.Tasks.Task<DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion> DetectAsync(System.String connectionString, System.Threading.CancellationToken cancellationToken)
   public virtual method System.Boolean Equals(DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion other)
   public virtual method System.Boolean Equals(System.Object obj)
+  public virtual method System.Int32 CompareTo(DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion other)
+  public virtual method System.Int32 CompareTo(System.Object obj)
   public virtual method System.Int32 GetHashCode()
   public virtual method System.String ToString()
 

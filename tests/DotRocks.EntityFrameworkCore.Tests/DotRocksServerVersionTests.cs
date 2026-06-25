@@ -60,6 +60,50 @@ public sealed class DotRocksServerVersionTests
         );
     }
 
+    [Theory]
+    [InlineData(3, 5, 0, 4, 0, 0)] // major dominates
+    [InlineData(4, 0, 7, 4, 1, 0)] // minor dominates
+    [InlineData(4, 0, 7, 4, 0, 8)] // patch dominates
+    public void Comparison_OrdersByMajorThenMinorThenPatch(
+        int lMajor,
+        int lMinor,
+        int lPatch,
+        int rMajor,
+        int rMinor,
+        int rPatch
+    )
+    {
+        var lower = new StarRocksServerVersion(lMajor, lMinor, lPatch);
+        var higher = new StarRocksServerVersion(rMajor, rMinor, rPatch);
+
+        Assert.True(lower < higher);
+        Assert.True(lower <= higher);
+        Assert.True(higher > lower);
+        Assert.True(higher >= lower);
+        Assert.True(lower.CompareTo(higher) < 0);
+        Assert.Equal(0, lower.CompareTo(new StarRocksServerVersion(lMajor, lMinor, lPatch)));
+    }
+
+    [Fact]
+    public void Comparison_EnablesVersionGating()
+    {
+        StarRocksServerVersion detected = StarRocksServerVersion.Parse("4.0.7");
+
+        Assert.True(detected >= new StarRocksServerVersion(3, 5));
+        Assert.False(detected >= new StarRocksServerVersion(4, 1));
+    }
+
+    [Fact]
+    public void Comparison_TreatsNullAsEarliest()
+    {
+        var version = new StarRocksServerVersion(1);
+
+        Assert.True(version > null);
+        Assert.True(null < version);
+        Assert.Equal(1, version.CompareTo(null));
+        Assert.True((StarRocksServerVersion?)null == (StarRocksServerVersion?)null);
+    }
+
     [Fact]
     public void ServerVersion_IsRecordedOnTheOptionsExtension()
     {
