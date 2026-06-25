@@ -14,6 +14,9 @@ version is derived from the release tag at publish time.
   removed. Application code configures it only through the `UseStarRocks(...)` options action.
 
 ### Added
+- Compilable samples for the ADO.NET surface, dependency-injection wiring, Dapper, and Stream
+  Load (`DotRocks.Samples.AdoNet`, `.DependencyInjection`, `.Dapper`, `.StreamLoad`). DotRocks.Data
+  stays dependency-free, so the DI sample shows idiomatic `DbDataSource` registration in user code.
 - `StarRocksServerVersion` and `DotRocksDbContextOptionsBuilder.ServerVersion(...)` to pin the
   target StarRocks version when configuring the EF Core provider, plus an opt-in
   `StarRocksServerVersion.DetectAsync(connectionString)` that reads `SELECT current_version()`.

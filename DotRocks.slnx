@@ -7,7 +7,11 @@
     <Project Path="src/DotRocks.EntityFrameworkCore.Design/DotRocks.EntityFrameworkCore.Design.csproj" />
   </Folder>
   <Folder Name="/samples/">
+    <Project Path="samples/DotRocks.Samples.AdoNet/DotRocks.Samples.AdoNet.csproj" />
+    <Project Path="samples/DotRocks.Samples.Dapper/DotRocks.Samples.Dapper.csproj" />
+    <Project Path="samples/DotRocks.Samples.DependencyInjection/DotRocks.Samples.DependencyInjection.csproj" />
     <Project Path="samples/DotRocks.Samples.EntityFrameworkCore/DotRocks.Samples.EntityFrameworkCore.csproj" />
+    <Project Path="samples/DotRocks.Samples.StreamLoad/DotRocks.Samples.StreamLoad.csproj" />
   </Folder>
   <Folder Name="/benchmarks/">
     <Project Path="benchmarks/DotRocks.Benchmarks/DotRocks.Benchmarks.csproj" />

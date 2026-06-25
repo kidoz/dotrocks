@@ -186,8 +186,18 @@ intend to write.
 
 A compilable EF Core sample lives at
 [`samples/DotRocks.Samples.EntityFrameworkCore`](samples/DotRocks.Samples.EntityFrameworkCore).
-It demonstrates `UseStarRocks`, `ValueGeneratedNever()`, `SaveChangesAsync` insert/update/delete,
-and a minimal hand-authored migration.
+It demonstrates `UseStarRocks`, `ServerVersion(...)`, `ValueGeneratedNever()`, `SaveChangesAsync`
+insert/update/delete, and a minimal hand-authored migration.
+
+Other compilable samples cover the rest of the surface:
+
+- [`DotRocks.Samples.AdoNet`](samples/DotRocks.Samples.AdoNet) — `DotRocksDataSource`, a
+  parameterized query, and streaming a reader.
+- [`DotRocks.Samples.DependencyInjection`](samples/DotRocks.Samples.DependencyInjection) —
+  registering the dependency-free `DotRocksDataSource` with `Microsoft.Extensions.DependencyInjection`.
+- [`DotRocks.Samples.Dapper`](samples/DotRocks.Samples.Dapper) — Dapper over a `DotRocksConnection`.
+- [`DotRocks.Samples.StreamLoad`](samples/DotRocks.Samples.StreamLoad) — streaming CSV Stream Load
+  without buffering the payload in memory.
 
 StarRocks transaction behavior is characterized by live tests. `COMMIT WORK` makes EF
 `SaveChangesAsync` rows visible. Some StarRocks builds accept `ROLLBACK WORK` for DML

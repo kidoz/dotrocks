@@ -5,8 +5,28 @@ public sealed class DotRocks.Analyzers.Driver.InsecureStreamLoadEndpointAnalyzer
   public property System.Collections.Immutable.ImmutableArray<Microsoft.CodeAnalysis.DiagnosticDescriptor> SupportedDiagnostics { get; }
   public virtual method System.Void Initialize(Microsoft.CodeAnalysis.Diagnostics.AnalysisContext context)
 
+public sealed class DotRocks.Analyzers.Driver.LiteralPasswordAnalyzer Microsoft.CodeAnalysis.Diagnostics.DiagnosticAnalyzer
+  public DotRocks.Analyzers.Driver.LiteralPasswordAnalyzer()
+  public property System.Collections.Immutable.ImmutableArray<Microsoft.CodeAnalysis.DiagnosticDescriptor> SupportedDiagnostics { get; }
+  public virtual method System.Void Initialize(Microsoft.CodeAnalysis.Diagnostics.AnalysisContext context)
+
+public sealed class DotRocks.Analyzers.Driver.MissingCancellationTokenAnalyzer Microsoft.CodeAnalysis.Diagnostics.DiagnosticAnalyzer
+  public DotRocks.Analyzers.Driver.MissingCancellationTokenAnalyzer()
+  public property System.Collections.Immutable.ImmutableArray<Microsoft.CodeAnalysis.DiagnosticDescriptor> SupportedDiagnostics { get; }
+  public virtual method System.Void Initialize(Microsoft.CodeAnalysis.Diagnostics.AnalysisContext context)
+
+public sealed class DotRocks.Analyzers.Driver.SyncOverAsyncAnalyzer Microsoft.CodeAnalysis.Diagnostics.DiagnosticAnalyzer
+  public DotRocks.Analyzers.Driver.SyncOverAsyncAnalyzer()
+  public property System.Collections.Immutable.ImmutableArray<Microsoft.CodeAnalysis.DiagnosticDescriptor> SupportedDiagnostics { get; }
+  public virtual method System.Void Initialize(Microsoft.CodeAnalysis.Diagnostics.AnalysisContext context)
+
 public sealed class DotRocks.Analyzers.Driver.TransactionCompletionAnalyzer Microsoft.CodeAnalysis.Diagnostics.DiagnosticAnalyzer
   public DotRocks.Analyzers.Driver.TransactionCompletionAnalyzer()
+  public property System.Collections.Immutable.ImmutableArray<Microsoft.CodeAnalysis.DiagnosticDescriptor> SupportedDiagnostics { get; }
+  public virtual method System.Void Initialize(Microsoft.CodeAnalysis.Diagnostics.AnalysisContext context)
+
+public sealed class DotRocks.Analyzers.Driver.UnsafeCommandTextAnalyzer Microsoft.CodeAnalysis.Diagnostics.DiagnosticAnalyzer
+  public DotRocks.Analyzers.Driver.UnsafeCommandTextAnalyzer()
   public property System.Collections.Immutable.ImmutableArray<Microsoft.CodeAnalysis.DiagnosticDescriptor> SupportedDiagnostics { get; }
   public virtual method System.Void Initialize(Microsoft.CodeAnalysis.Diagnostics.AnalysisContext context)
 
@@ -38,9 +58,13 @@ public sealed class DotRocks.Analyzers.EntityFrameworkCore.UnsupportedEfApiAnaly
 public static class DotRocks.Analyzers.Infrastructure.DotRocksDiagnosticDescriptors
   public static field System.String CompositePrimaryKeyDiagnosticId
   public static field System.String InsecureStreamLoadEndpointDiagnosticId
+  public static field System.String LiteralPasswordDiagnosticId
+  public static field System.String MissingCancellationTokenDiagnosticId
   public static field System.String MissingValueGeneratedNeverDiagnosticId
   public static field System.String MultiRowSaveChangesDiagnosticId
+  public static field System.String SyncOverAsyncDiagnosticId
   public static field System.String TransactionDoubleCompletionDiagnosticId
+  public static field System.String UnsafeCommandTextDiagnosticId
   public static field System.String UnsupportedBinaryMappingDiagnosticId
   public static field System.String UnsupportedBulkDmlDiagnosticId
   public static field System.String UnsupportedDatabaseCreatorDiagnosticId
