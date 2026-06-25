@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- .NET 10 SDK
+- .NET 10 SDK, pinned by `global.json`
 - A reachable StarRocks FE (MySQL-protocol query port, default 9030)
 
 ## ADO.NET
@@ -24,16 +24,22 @@ For a non-local server, enable TLS with `Ssl Mode=Required`.
 
 ```csharp
 using Microsoft.EntityFrameworkCore;
+using DotRocks.EntityFrameworkCore.Infrastructure;
 
 DbContextOptions<AppDbContext> options = new DbContextOptionsBuilder<AppDbContext>()
-    .UseStarRocks("Server=127.0.0.1;Port=9030;User ID=root")
+    .UseStarRocks(
+        "Server=127.0.0.1;Port=9030;User ID=root",
+        starRocks => starRocks.ServerVersion(new StarRocksServerVersion(4, 0, 7)))
     .Options;
 
 await using var context = new AppDbContext(options);
 ```
 
-Write one row per `SaveChanges`, or use Stream Load for bulk ingestion. See the repository
-README for the full supported/unsupported EF Core surface.
+Pin the server version in provider options. To discover it once at startup, call
+`StarRocksServerVersion.DetectAsync(connectionString)` and cache the result.
+
+Write one row per `SaveChanges`, or use Stream Load for bulk ingestion. The repository
+README lists the supported and unsupported EF Core surface.
 
 ## Observability
 

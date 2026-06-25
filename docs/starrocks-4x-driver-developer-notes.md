@@ -46,7 +46,7 @@ Driver limitations should remain explicit for:
 - MySQL features not verified against StarRocks, even if common MySQL drivers
   support them.
 - General-purpose MySQL compatibility.
-- `LOAD DATA LOCAL INFILE`, unless deliberately implemented and threat-modeled.
+- `LOAD DATA LOCAL INFILE`, unless implemented and threat-modeled.
 - Stored procedures, multiple result sets from procedures, server cursors, and
   MySQL binary protocol extensions until verified.
 
@@ -71,21 +71,17 @@ Driver requirements:
 
 ## SQL Execution
 
-Text SQL is the safest initial execution path. DotRocks should keep named
-parameter binding as client-side literal formatting unless and until StarRocks
-binary prepared statements are characterized.
+Text SQL remains the default execution path. DotRocks uses client-side literal
+formatting for named `@` parameters and exposes the characterized binary prepared
+path through `DotRocksParameterMode.ServerPrepared`.
 
 Prepared statements in StarRocks 4.0 are session-scoped. The SQL documentation
 states that placeholders are `?`, variables are passed with `EXECUTE ... USING`,
 and the prepared statement is dropped at session end. The syntax section says only
 `SELECT` is currently supported as a preparable statement, while later examples
-and JDBC notes mention broader usage. Treat this as a documentation conflict:
-
-- Keep DotRocks `Prepare()` as client-side validation for now.
-- Add live characterization before implementing COM_STMT_PREPARE or SQL
-  `PREPARE`.
-- Test SELECT, INSERT, UPDATE, and DELETE independently.
-- Never assume MySQL Connector/J behavior equals DotRocks protocol behavior.
+and JDBC notes mention broader usage. Treat this as a documentation conflict.
+`SELECT`, `INSERT`, `UPDATE`, and `DELETE` must be tested independently; MySQL
+Connector/J behavior is not DotRocks protocol behavior.
 
 Characterized on StarRocks 4.0.7 (compatibility harness `--prepare-probe`):
 `COM_STMT_PREPARE` is supported. `SELECT 1 AS one` returns 0 params / 1 column;
@@ -101,7 +97,7 @@ binary layout; decimals, dates, and other non-numeric parameters are sent as
 HTTP SQL API exists and streams newline-delimited JSON for `SELECT`, `SHOW`,
 `EXPLAIN`, and `KILL`, one SQL query per HTTP request. It can be a future optional
 query path, but it is not a replacement for the ADO.NET MySQL-protocol driver
-unless DotRocks deliberately adds a separate HTTP execution mode.
+unless DotRocks adds a separate HTTP execution mode.
 
 ## Data Types
 

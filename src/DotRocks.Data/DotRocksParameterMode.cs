@@ -4,16 +4,15 @@ namespace DotRocks.Data;
 /// Selects how a <see cref="DotRocksCommand"/> binds parameters and executes against StarRocks.
 /// </summary>
 /// <remarks>
-/// Server-side prepared statements are not yet verified against StarRocks (only client-side
-/// validation is implemented), so <see cref="Auto"/> always uses the verified text protocol and
-/// <see cref="ServerPrepared"/> fails explicitly with a
-/// <see cref="DotRocksUnsupportedFeatureException"/>.
+/// <see cref="Auto"/> uses the verified client-side text protocol. <see cref="ServerPrepared"/>
+/// uses StarRocks server-side prepared statements and is limited to the server behavior DotRocks
+/// has characterized.
 /// </remarks>
 public enum DotRocksParameterMode
 {
     /// <summary>
     /// Chooses a verified mechanism automatically. Currently equivalent to
-    /// <see cref="TextProtocol"/> because the server-side prepared protocol is unverified.
+    /// <see cref="TextProtocol"/>.
     /// </summary>
     Auto = 0,
 
@@ -24,9 +23,9 @@ public enum DotRocksParameterMode
     TextProtocol = 1,
 
     /// <summary>
-    /// Requests the StarRocks server-side prepared-statement (binary) protocol. Not yet supported;
-    /// selecting this mode fails with a <see cref="DotRocksUnsupportedFeatureException"/> rather
-    /// than silently using a different mechanism.
+    /// Uses the StarRocks server-side prepared-statement binary protocol. Unsupported statements
+    /// or value types fail with a <see cref="DotRocksUnsupportedFeatureException"/> or a
+    /// StarRocks server error rather than falling back to another mechanism.
     /// </summary>
     ServerPrepared = 2,
 }

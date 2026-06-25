@@ -4,7 +4,7 @@
     <IsPackable>true</IsPackable>
     <PackageId>DotRocks.EntityFrameworkCore</PackageId>
     <Title>DotRocks.EntityFrameworkCore</Title>
-    <Description>Entity Framework Core provider skeleton for StarRocks built on DotRocks.Data. DotRocks for StarRocks.</Description>
+    <Description>Entity Framework Core relational provider for StarRocks built on DotRocks.Data. DotRocks for StarRocks.</Description>
     <PackageTags>starrocks;entity-framework-core;ef-core;database;provider;dotrocks</PackageTags>
     <EnablePackageValidation>true</EnablePackageValidation>
   </PropertyGroup>

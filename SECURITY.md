@@ -2,8 +2,8 @@
 
 ## Supported versions
 
-DotRocks is in active pre-1.0 development. Security fixes target the latest released version
-and `main`.
+Security fixes target the latest released version and `main`. The current latest tagged
+release is 1.1.0.
 
 ## Reporting a vulnerability
 

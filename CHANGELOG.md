@@ -53,17 +53,6 @@ version is derived from the release tag at publish time.
   payload compression (`DotRocksStreamLoadOptions.Compression = DotRocksStreamLoadCompression.Gzip`),
   verified against StarRocks 4.0.7. Compression is streamed (the upload is never buffered in memory)
   and reported via the `gzip` load format; it applies to CSV payloads only.
-- `DotRocksParameterMode` (`Auto` / `TextProtocol` / `ServerPrepared`) and
-  `DotRocksCommand.ParameterMode`. `Auto`/`TextProtocol` use the verified client-side text path;
-  `ServerPrepared` fails fast with the new public `DotRocksUnsupportedFeatureException` because the
-  StarRocks server-side prepared (binary) protocol is not yet characterized against a live server.
-
-### Changed
-- `DotRocksDbContextOptionsBuilder` is now a relational options builder bound to the
-  `DbContextOptionsBuilder`; its previously non-functional public parameterless constructor was
-  removed. Application code configures it only through the `UseStarRocks(...)` options action.
-
-### Added
 - Compilable samples for the ADO.NET surface, dependency-injection wiring, Dapper, and Stream
   Load (`DotRocks.Samples.AdoNet`, `.DependencyInjection`, `.Dapper`, `.StreamLoad`). DotRocks.Data
   stays dependency-free, so the DI sample shows idiomatic `DbDataSource` registration in user code.
@@ -86,6 +75,11 @@ version is derived from the release tag at publish time.
   `DotRocks.EntityFrameworkCore`, and `DotRocks.EntityFrameworkCore.Design`, so accidental
   breaking changes to the public API now fail the build. Package validation is enabled on
   the shipping packages.
+
+### Changed
+- `DotRocksDbContextOptionsBuilder` is now a relational options builder bound to the
+  `DbContextOptionsBuilder`; its previously non-functional public parameterless constructor was
+  removed. Application code configures it only through the `UseStarRocks(...)` options action.
 
 ## [1.1.0] - 2026-06-24
 

@@ -1,26 +1,25 @@
 # EF Core entity mapping
 
-A reference for developers and AI agents mapping entities to StarRocks tables with the
-DotRocks EF Core provider. It covers the two kinds of mapped entity, the up-front model
-validation rules, the table-shape APIs used by migrations, and a fix-by-symptom catalog for
-every validation error the provider can throw.
+A reference for mapping entities to StarRocks tables with the DotRocks EF Core provider. It
+covers mapped entity categories, model validation rules, migration table-shape APIs, and
+fixes for validation errors.
 
 > Authoritative API surface lives in the
-> [README EF Core section](../../README.md#entity-framework-core). This article expands it
-> with the *why*, decision rules, and worked examples. When the two disagree, the README and
-> the source (`DotRocksModelValidator`) win.
+> [README EF Core section](https://github.com/kidoz/dotrocks#entity-framework-core). This
+> article expands it with the why, decision rules, and worked examples. When the two
+> disagree, the README and source win.
 
-## The one rule that surprises everyone
+## Model Validation Timing
 
 **DotRocks validates the entire mapped model the first time the model is built — not at
 `SaveChanges`.** The model is built lazily on first use: your first query, your first
 `context.Model` access, even DI resolving `DbContextDependencies`. If any mapped entity
 violates the write-safety rules, the whole `DbContext` fails to initialize and *every*
-operation throws — including read-only `Where(...)` queries that never touch the offending
+operation throws, including read-only `Where(...)` queries that never touch the offending
 table.
 
 The validator that enforces this is
-[`DotRocksModelValidator`](../../src/DotRocks.EntityFrameworkCore/Infrastructure/DotRocksModelValidator.cs).
+[`DotRocksModelValidator`](https://github.com/kidoz/dotrocks/blob/main/src/DotRocks.EntityFrameworkCore/Infrastructure/DotRocksModelValidator.cs).
 
 ```text
 System.NotSupportedException: DotRocks EF Core writable entity type
@@ -31,11 +30,11 @@ composite keys are not supported.
    at MetricsService.GetMonthlySummaryAsync(...)   // a read-only query!
 ```
 
-The query is innocent; the *model* is the problem. Fix the mapping, not the query.
+The model is the problem, not the query. Fix the mapping.
 
 ## Two kinds of mapped entity
 
-Every entity you map is exactly one of these. Choose deliberately.
+Every mapped entity falls into one of these categories.
 
 | | Writable entity | Read-only / query entity |
 |---|---|---|
@@ -94,9 +93,8 @@ var summary = await context.Set<MonthlyMetricSummary>()
     .ToListAsync(cancellationToken);
 ```
 
-What you give up by going keyless: change tracking, identity resolution, and `SaveChanges`.
-That is exactly the intended trade for read-only data. If you later need to write the table,
-it must first satisfy the writable rules below.
+Keyless entities do not support change tracking, identity resolution, or `SaveChanges`. If
+you later need to write the table, it must satisfy the writable rules below.
 
 > **Mapping a result that has no table** (e.g. a `FromSqlRaw` DTO): map it
 > `HasNoKey()` and either `ToView(...)`/`ToTable(...)` to name the source, or leave it
@@ -197,9 +195,9 @@ modelBuilder.Entity<EventRow>(entity =>
 });
 ```
 
-Migrations are deliberately conservative: create database (`IF NOT EXISTS`), create/drop
-table, and the EF history table. Column add/drop/alter/rename, rename table, indexes, FK,
-defaults, computed columns, `DROP DATABASE`, and idempotent scripts are **not** generated.
+Migrations are conservative: create database (`IF NOT EXISTS`), create/drop table, and the
+EF history table. Column add/drop/alter/rename, rename table, indexes, FK, defaults,
+computed columns, `DROP DATABASE`, and idempotent scripts are **not** generated.
 
 ## Validation error catalog (fix by symptom)
 

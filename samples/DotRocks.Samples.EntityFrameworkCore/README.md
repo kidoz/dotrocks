@@ -10,6 +10,7 @@ dotnet run --project samples/DotRocks.Samples.EntityFrameworkCore
 The sample demonstrates:
 
 - `UseStarRocks(...)`.
+- `ServerVersion(...)` pinned in EF Core provider options.
 - A supported writable entity with a single explicit primary key and `ValueGeneratedNever()`.
 - StarRocks table-shape configuration for key model, hash distribution, and replication.
 - `SaveChangesAsync` insert, update, and delete.
