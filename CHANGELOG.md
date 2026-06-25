@@ -9,6 +9,9 @@ version is derived from the release tag at publish time.
 ## [Unreleased]
 
 ### Added
+- A protocol fuzz harness with a regression corpus that feeds random and adversarial bytes to the
+  handshake, OK/error packet, and length-encoded readers, asserting they fail only with a
+  controlled `MalformedPacketException`/`DotRocksException` and never an uncontrolled crash.
 - Stream Load metrics on the `DotRocks.Data` meter: `dotrocks.stream_load.duration` (ms),
   `dotrocks.stream_load.rows_loaded`, `dotrocks.stream_load.rows_filtered`, and
   `dotrocks.stream_load.bytes`, tagged only with a bounded `outcome`.
