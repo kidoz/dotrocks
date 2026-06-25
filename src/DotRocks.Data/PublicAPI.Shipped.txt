@@ -1,0 +1,301 @@
+#nullable enable
+DotRocks.Data.Diagnostics.DotRocksTelemetry
+DotRocks.Data.DotRocksBatch
+DotRocks.Data.DotRocksBatch.DotRocksBatch() -> void
+DotRocks.Data.DotRocksBatchCommand
+DotRocks.Data.DotRocksBatchCommand.DotRocksBatchCommand() -> void
+DotRocks.Data.DotRocksBatchCommand.DotRocksBatchCommand(string! commandText) -> void
+DotRocks.Data.DotRocksCommand
+DotRocks.Data.DotRocksCommand.DotRocksCommand() -> void
+DotRocks.Data.DotRocksCommand.DotRocksCommand(string! commandText, DotRocks.Data.DotRocksConnection! connection) -> void
+DotRocks.Data.DotRocksConnection
+DotRocks.Data.DotRocksConnection.DotRocksConnection() -> void
+DotRocks.Data.DotRocksConnection.DotRocksConnection(string! connectionString) -> void
+DotRocks.Data.DotRocksConnectionStringBuilder
+DotRocks.Data.DotRocksConnectionStringBuilder.AllowInsecureStreamLoad.get -> bool
+DotRocks.Data.DotRocksConnectionStringBuilder.AllowInsecureStreamLoad.set -> void
+DotRocks.Data.DotRocksConnectionStringBuilder.ConnectionIdleTimeout.get -> int
+DotRocks.Data.DotRocksConnectionStringBuilder.ConnectionIdleTimeout.set -> void
+DotRocks.Data.DotRocksConnectionStringBuilder.ConnectionLifetime.get -> int
+DotRocks.Data.DotRocksConnectionStringBuilder.ConnectionLifetime.set -> void
+DotRocks.Data.DotRocksConnectionStringBuilder.ConnectionRetries.get -> int
+DotRocks.Data.DotRocksConnectionStringBuilder.ConnectionRetries.set -> void
+DotRocks.Data.DotRocksConnectionStringBuilder.ConnectionRetryDelay.get -> int
+DotRocks.Data.DotRocksConnectionStringBuilder.ConnectionRetryDelay.set -> void
+DotRocks.Data.DotRocksConnectionStringBuilder.ConnectionTimeout.get -> int
+DotRocks.Data.DotRocksConnectionStringBuilder.ConnectionTimeout.set -> void
+DotRocks.Data.DotRocksConnectionStringBuilder.Database.get -> string!
+DotRocks.Data.DotRocksConnectionStringBuilder.Database.set -> void
+DotRocks.Data.DotRocksConnectionStringBuilder.DotRocksConnectionStringBuilder() -> void
+DotRocks.Data.DotRocksConnectionStringBuilder.DotRocksConnectionStringBuilder(string! connectionString) -> void
+DotRocks.Data.DotRocksConnectionStringBuilder.MaximumPoolSize.get -> int
+DotRocks.Data.DotRocksConnectionStringBuilder.MaximumPoolSize.set -> void
+DotRocks.Data.DotRocksConnectionStringBuilder.MinimumPoolSize.get -> int
+DotRocks.Data.DotRocksConnectionStringBuilder.MinimumPoolSize.set -> void
+DotRocks.Data.DotRocksConnectionStringBuilder.Password.get -> string!
+DotRocks.Data.DotRocksConnectionStringBuilder.Password.set -> void
+DotRocks.Data.DotRocksConnectionStringBuilder.Pooling.get -> bool
+DotRocks.Data.DotRocksConnectionStringBuilder.Pooling.set -> void
+DotRocks.Data.DotRocksConnectionStringBuilder.Port.get -> int
+DotRocks.Data.DotRocksConnectionStringBuilder.Port.set -> void
+DotRocks.Data.DotRocksConnectionStringBuilder.Server.get -> string!
+DotRocks.Data.DotRocksConnectionStringBuilder.Server.set -> void
+DotRocks.Data.DotRocksConnectionStringBuilder.SslMode.get -> DotRocks.Data.DotRocksSslMode
+DotRocks.Data.DotRocksConnectionStringBuilder.SslMode.set -> void
+DotRocks.Data.DotRocksConnectionStringBuilder.SslRevocationCheck.get -> System.Security.Cryptography.X509Certificates.X509RevocationMode
+DotRocks.Data.DotRocksConnectionStringBuilder.SslRevocationCheck.set -> void
+DotRocks.Data.DotRocksConnectionStringBuilder.StreamLoadEndpoint.get -> string!
+DotRocks.Data.DotRocksConnectionStringBuilder.StreamLoadEndpoint.set -> void
+DotRocks.Data.DotRocksConnectionStringBuilder.TrustServerCertificate.get -> bool
+DotRocks.Data.DotRocksConnectionStringBuilder.TrustServerCertificate.set -> void
+DotRocks.Data.DotRocksConnectionStringBuilder.UserId.get -> string!
+DotRocks.Data.DotRocksConnectionStringBuilder.UserId.set -> void
+DotRocks.Data.DotRocksDataReader
+DotRocks.Data.DotRocksDataReader.GetColumnSchema() -> System.Collections.ObjectModel.ReadOnlyCollection<System.Data.Common.DbColumn!>!
+DotRocks.Data.DotRocksDataSource
+DotRocks.Data.DotRocksDataSource.ClearPool() -> void
+DotRocks.Data.DotRocksDataSource.DotRocksDataSource(string! connectionString) -> void
+DotRocks.Data.DotRocksDecimal
+DotRocks.Data.DotRocksDecimal.CompareTo(DotRocks.Data.DotRocksDecimal other) -> int
+DotRocks.Data.DotRocksDecimal.CompareTo(object? obj) -> int
+DotRocks.Data.DotRocksDecimal.DotRocksDecimal() -> void
+DotRocks.Data.DotRocksDecimal.DotRocksDecimal(System.Numerics.BigInteger unscaledValue, int scale) -> void
+DotRocks.Data.DotRocksDecimal.Equals(DotRocks.Data.DotRocksDecimal other) -> bool
+DotRocks.Data.DotRocksDecimal.Scale.get -> int
+DotRocks.Data.DotRocksDecimal.ToDecimal() -> decimal
+DotRocks.Data.DotRocksDecimal.UnscaledValue.get -> System.Numerics.BigInteger
+DotRocks.Data.DotRocksException
+DotRocks.Data.DotRocksException.ConnectionId.get -> uint?
+DotRocks.Data.DotRocksException.DotRocksException() -> void
+DotRocks.Data.DotRocksException.DotRocksException(string! message) -> void
+DotRocks.Data.DotRocksException.DotRocksException(string! message, System.Exception! innerException) -> void
+DotRocks.Data.DotRocksException.IsTransient.get -> bool
+DotRocks.Data.DotRocksException.ServerErrorCode.get -> int?
+DotRocks.Data.DotRocksException.SqlState.get -> string?
+DotRocks.Data.DotRocksFactory
+DotRocks.Data.DotRocksFactory.DotRocksFactory() -> void
+DotRocks.Data.DotRocksParameter
+DotRocks.Data.DotRocksParameter.DotRocksParameter() -> void
+DotRocks.Data.DotRocksPrecisionLossException
+DotRocks.Data.DotRocksPrecisionLossException.DotRocksPrecisionLossException() -> void
+DotRocks.Data.DotRocksPrecisionLossException.DotRocksPrecisionLossException(string! message) -> void
+DotRocks.Data.DotRocksPrecisionLossException.DotRocksPrecisionLossException(string! message, System.Exception! innerException) -> void
+DotRocks.Data.DotRocksSslMode
+DotRocks.Data.DotRocksSslMode.Disabled = 0 -> DotRocks.Data.DotRocksSslMode
+DotRocks.Data.DotRocksSslMode.Preferred = 2 -> DotRocks.Data.DotRocksSslMode
+DotRocks.Data.DotRocksSslMode.Required = 1 -> DotRocks.Data.DotRocksSslMode
+DotRocks.Data.DotRocksTransaction
+DotRocks.Data.Loading.DotRocksStreamLoadClient
+DotRocks.Data.Loading.DotRocksStreamLoadClient.BeginTransactionAsync(string! databaseName, string! tableName, DotRocks.Data.Loading.DotRocksStreamLoadTransactionOptions! options, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<DotRocks.Data.Loading.DotRocksStreamLoadTransaction!>!
+DotRocks.Data.Loading.DotRocksStreamLoadClient.Dispose() -> void
+DotRocks.Data.Loading.DotRocksStreamLoadClient.DotRocksStreamLoadClient(string! connectionString) -> void
+DotRocks.Data.Loading.DotRocksStreamLoadClient.LoadCsvAsync(string! databaseName, string! tableName, System.IO.Stream! payload, DotRocks.Data.Loading.DotRocksStreamLoadOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<DotRocks.Data.Loading.DotRocksStreamLoadResult!>!
+DotRocks.Data.Loading.DotRocksStreamLoadClient.LoadJsonAsync(string! databaseName, string! tableName, System.IO.Stream! payload, DotRocks.Data.Loading.DotRocksStreamLoadOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<DotRocks.Data.Loading.DotRocksStreamLoadResult!>!
+DotRocks.Data.Loading.DotRocksStreamLoadClient.StreamLoadEndpoint.get -> System.Uri!
+DotRocks.Data.Loading.DotRocksStreamLoadException
+DotRocks.Data.Loading.DotRocksStreamLoadException.DotRocksStreamLoadException() -> void
+DotRocks.Data.Loading.DotRocksStreamLoadException.DotRocksStreamLoadException(string! message) -> void
+DotRocks.Data.Loading.DotRocksStreamLoadException.DotRocksStreamLoadException(string! message, System.Exception! innerException) -> void
+DotRocks.Data.Loading.DotRocksStreamLoadException.HttpStatusCode.get -> System.Net.HttpStatusCode?
+DotRocks.Data.Loading.DotRocksStreamLoadException.Result.get -> DotRocks.Data.Loading.DotRocksStreamLoadResult?
+DotRocks.Data.Loading.DotRocksStreamLoadOptions
+DotRocks.Data.Loading.DotRocksStreamLoadOptions.ColumnSeparator.get -> string?
+DotRocks.Data.Loading.DotRocksStreamLoadOptions.ColumnSeparator.set -> void
+DotRocks.Data.Loading.DotRocksStreamLoadOptions.Columns.get -> string?
+DotRocks.Data.Loading.DotRocksStreamLoadOptions.Columns.set -> void
+DotRocks.Data.Loading.DotRocksStreamLoadOptions.DotRocksStreamLoadOptions() -> void
+DotRocks.Data.Loading.DotRocksStreamLoadOptions.JsonPaths.get -> string?
+DotRocks.Data.Loading.DotRocksStreamLoadOptions.JsonPaths.set -> void
+DotRocks.Data.Loading.DotRocksStreamLoadOptions.Label.get -> string?
+DotRocks.Data.Loading.DotRocksStreamLoadOptions.Label.set -> void
+DotRocks.Data.Loading.DotRocksStreamLoadOptions.MaxFilterRatio.get -> double?
+DotRocks.Data.Loading.DotRocksStreamLoadOptions.MaxFilterRatio.set -> void
+DotRocks.Data.Loading.DotRocksStreamLoadOptions.RowDelimiter.get -> string?
+DotRocks.Data.Loading.DotRocksStreamLoadOptions.RowDelimiter.set -> void
+DotRocks.Data.Loading.DotRocksStreamLoadOptions.StrictMode.get -> bool?
+DotRocks.Data.Loading.DotRocksStreamLoadOptions.StrictMode.set -> void
+DotRocks.Data.Loading.DotRocksStreamLoadOptions.StripOuterArray.get -> bool?
+DotRocks.Data.Loading.DotRocksStreamLoadOptions.StripOuterArray.set -> void
+DotRocks.Data.Loading.DotRocksStreamLoadOptions.Timeout.get -> System.TimeSpan?
+DotRocks.Data.Loading.DotRocksStreamLoadOptions.Timeout.set -> void
+DotRocks.Data.Loading.DotRocksStreamLoadOptions.Where.get -> string?
+DotRocks.Data.Loading.DotRocksStreamLoadOptions.Where.set -> void
+DotRocks.Data.Loading.DotRocksStreamLoadResult
+DotRocks.Data.Loading.DotRocksStreamLoadResult.ErrorUrl.get -> System.Uri?
+DotRocks.Data.Loading.DotRocksStreamLoadResult.IsPublishTimeout.get -> bool
+DotRocks.Data.Loading.DotRocksStreamLoadResult.IsSuccess.get -> bool
+DotRocks.Data.Loading.DotRocksStreamLoadResult.Label.get -> string?
+DotRocks.Data.Loading.DotRocksStreamLoadResult.LoadBytes.get -> long
+DotRocks.Data.Loading.DotRocksStreamLoadResult.LoadTimeMilliseconds.get -> long
+DotRocks.Data.Loading.DotRocksStreamLoadResult.Message.get -> string?
+DotRocks.Data.Loading.DotRocksStreamLoadResult.NumberFilteredRows.get -> long
+DotRocks.Data.Loading.DotRocksStreamLoadResult.NumberLoadedRows.get -> long
+DotRocks.Data.Loading.DotRocksStreamLoadResult.NumberTotalRows.get -> long
+DotRocks.Data.Loading.DotRocksStreamLoadResult.NumberUnselectedRows.get -> long
+DotRocks.Data.Loading.DotRocksStreamLoadResult.Sequence.get -> int?
+DotRocks.Data.Loading.DotRocksStreamLoadResult.Status.get -> string!
+DotRocks.Data.Loading.DotRocksStreamLoadResult.TransactionId.get -> long?
+DotRocks.Data.Loading.DotRocksStreamLoadTransaction
+DotRocks.Data.Loading.DotRocksStreamLoadTransaction.BeginResult.get -> DotRocks.Data.Loading.DotRocksStreamLoadResult!
+DotRocks.Data.Loading.DotRocksStreamLoadTransaction.CommitAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<DotRocks.Data.Loading.DotRocksStreamLoadResult!>!
+DotRocks.Data.Loading.DotRocksStreamLoadTransaction.DatabaseName.get -> string!
+DotRocks.Data.Loading.DotRocksStreamLoadTransaction.DefaultTableName.get -> string!
+DotRocks.Data.Loading.DotRocksStreamLoadTransaction.Label.get -> string!
+DotRocks.Data.Loading.DotRocksStreamLoadTransaction.LoadCsvAsync(System.IO.Stream! payload, DotRocks.Data.Loading.DotRocksStreamLoadOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<DotRocks.Data.Loading.DotRocksStreamLoadResult!>!
+DotRocks.Data.Loading.DotRocksStreamLoadTransaction.LoadCsvAsync(string! tableName, System.IO.Stream! payload, DotRocks.Data.Loading.DotRocksStreamLoadOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<DotRocks.Data.Loading.DotRocksStreamLoadResult!>!
+DotRocks.Data.Loading.DotRocksStreamLoadTransaction.LoadJsonAsync(System.IO.Stream! payload, DotRocks.Data.Loading.DotRocksStreamLoadOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<DotRocks.Data.Loading.DotRocksStreamLoadResult!>!
+DotRocks.Data.Loading.DotRocksStreamLoadTransaction.LoadJsonAsync(string! tableName, System.IO.Stream! payload, DotRocks.Data.Loading.DotRocksStreamLoadOptions? options = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<DotRocks.Data.Loading.DotRocksStreamLoadResult!>!
+DotRocks.Data.Loading.DotRocksStreamLoadTransaction.PrepareAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<DotRocks.Data.Loading.DotRocksStreamLoadResult!>!
+DotRocks.Data.Loading.DotRocksStreamLoadTransaction.RollbackAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<DotRocks.Data.Loading.DotRocksStreamLoadResult!>!
+DotRocks.Data.Loading.DotRocksStreamLoadTransactionInDoubtException
+DotRocks.Data.Loading.DotRocksStreamLoadTransactionInDoubtException.DotRocksStreamLoadTransactionInDoubtException() -> void
+DotRocks.Data.Loading.DotRocksStreamLoadTransactionInDoubtException.DotRocksStreamLoadTransactionInDoubtException(string! label, string! operation, System.Exception! innerException) -> void
+DotRocks.Data.Loading.DotRocksStreamLoadTransactionInDoubtException.DotRocksStreamLoadTransactionInDoubtException(string! message) -> void
+DotRocks.Data.Loading.DotRocksStreamLoadTransactionInDoubtException.DotRocksStreamLoadTransactionInDoubtException(string! message, System.Exception! innerException) -> void
+DotRocks.Data.Loading.DotRocksStreamLoadTransactionInDoubtException.Label.get -> string!
+DotRocks.Data.Loading.DotRocksStreamLoadTransactionInDoubtException.Operation.get -> string!
+DotRocks.Data.Loading.DotRocksStreamLoadTransactionOptions
+DotRocks.Data.Loading.DotRocksStreamLoadTransactionOptions.DotRocksStreamLoadTransactionOptions() -> void
+DotRocks.Data.Loading.DotRocksStreamLoadTransactionOptions.IdleTimeout.get -> System.TimeSpan?
+DotRocks.Data.Loading.DotRocksStreamLoadTransactionOptions.IdleTimeout.set -> void
+DotRocks.Data.Loading.DotRocksStreamLoadTransactionOptions.IsMultiTable.get -> bool
+DotRocks.Data.Loading.DotRocksStreamLoadTransactionOptions.IsMultiTable.set -> void
+DotRocks.Data.Loading.DotRocksStreamLoadTransactionOptions.Label.get -> string?
+DotRocks.Data.Loading.DotRocksStreamLoadTransactionOptions.Label.set -> void
+DotRocks.Data.Loading.DotRocksStreamLoadTransactionOptions.PreparedTimeout.get -> System.TimeSpan?
+DotRocks.Data.Loading.DotRocksStreamLoadTransactionOptions.PreparedTimeout.set -> void
+DotRocks.Data.Loading.DotRocksStreamLoadTransactionOptions.Timeout.get -> System.TimeSpan?
+DotRocks.Data.Loading.DotRocksStreamLoadTransactionOptions.Timeout.set -> void
+const DotRocks.Data.Diagnostics.DotRocksTelemetry.ActivitySourceName = "DotRocks.Data" -> string!
+const DotRocks.Data.Diagnostics.DotRocksTelemetry.MeterName = "DotRocks.Data" -> string!
+override DotRocks.Data.DotRocksBatch.Cancel() -> void
+override DotRocks.Data.DotRocksBatch.ExecuteNonQuery() -> int
+override DotRocks.Data.DotRocksBatch.ExecuteNonQueryAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<int>!
+override DotRocks.Data.DotRocksBatch.ExecuteScalar() -> object?
+override DotRocks.Data.DotRocksBatch.ExecuteScalarAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<object?>!
+override DotRocks.Data.DotRocksBatch.Prepare() -> void
+override DotRocks.Data.DotRocksBatch.PrepareAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+override DotRocks.Data.DotRocksBatch.Timeout.get -> int
+override DotRocks.Data.DotRocksBatch.Timeout.set -> void
+override DotRocks.Data.DotRocksBatchCommand.CanCreateParameter.get -> bool
+override DotRocks.Data.DotRocksBatchCommand.CommandText.get -> string!
+override DotRocks.Data.DotRocksBatchCommand.CommandText.set -> void
+override DotRocks.Data.DotRocksBatchCommand.CommandType.get -> System.Data.CommandType
+override DotRocks.Data.DotRocksBatchCommand.CommandType.set -> void
+override DotRocks.Data.DotRocksBatchCommand.CreateParameter() -> System.Data.Common.DbParameter!
+override DotRocks.Data.DotRocksBatchCommand.RecordsAffected.get -> int
+override DotRocks.Data.DotRocksCommand.Cancel() -> void
+override DotRocks.Data.DotRocksCommand.CommandText.get -> string!
+override DotRocks.Data.DotRocksCommand.CommandText.set -> void
+override DotRocks.Data.DotRocksCommand.CommandTimeout.get -> int
+override DotRocks.Data.DotRocksCommand.CommandTimeout.set -> void
+override DotRocks.Data.DotRocksCommand.CommandType.get -> System.Data.CommandType
+override DotRocks.Data.DotRocksCommand.CommandType.set -> void
+override DotRocks.Data.DotRocksCommand.DesignTimeVisible.get -> bool
+override DotRocks.Data.DotRocksCommand.DesignTimeVisible.set -> void
+override DotRocks.Data.DotRocksCommand.ExecuteNonQuery() -> int
+override DotRocks.Data.DotRocksCommand.ExecuteNonQueryAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<int>!
+override DotRocks.Data.DotRocksCommand.ExecuteScalar() -> object?
+override DotRocks.Data.DotRocksCommand.ExecuteScalarAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<object?>!
+override DotRocks.Data.DotRocksCommand.Prepare() -> void
+override DotRocks.Data.DotRocksCommand.PrepareAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+override DotRocks.Data.DotRocksCommand.UpdatedRowSource.get -> System.Data.UpdateRowSource
+override DotRocks.Data.DotRocksCommand.UpdatedRowSource.set -> void
+override DotRocks.Data.DotRocksConnection.CanCreateBatch.get -> bool
+override DotRocks.Data.DotRocksConnection.ChangeDatabase(string! databaseName) -> void
+override DotRocks.Data.DotRocksConnection.Close() -> void
+override DotRocks.Data.DotRocksConnection.CloseAsync() -> System.Threading.Tasks.Task!
+override DotRocks.Data.DotRocksConnection.ConnectionString.get -> string!
+override DotRocks.Data.DotRocksConnection.ConnectionString.set -> void
+override DotRocks.Data.DotRocksConnection.DataSource.get -> string!
+override DotRocks.Data.DotRocksConnection.Database.get -> string!
+override DotRocks.Data.DotRocksConnection.Open() -> void
+override DotRocks.Data.DotRocksConnection.OpenAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+override DotRocks.Data.DotRocksConnection.ServerVersion.get -> string!
+override DotRocks.Data.DotRocksConnection.State.get -> System.Data.ConnectionState
+override DotRocks.Data.DotRocksConnectionStringBuilder.ToString() -> string!
+override DotRocks.Data.DotRocksDataReader.Close() -> void
+override DotRocks.Data.DotRocksDataReader.Depth.get -> int
+override DotRocks.Data.DotRocksDataReader.FieldCount.get -> int
+override DotRocks.Data.DotRocksDataReader.GetBoolean(int ordinal) -> bool
+override DotRocks.Data.DotRocksDataReader.GetByte(int ordinal) -> byte
+override DotRocks.Data.DotRocksDataReader.GetBytes(int ordinal, long dataOffset, byte[]? buffer, int bufferOffset, int length) -> long
+override DotRocks.Data.DotRocksDataReader.GetChar(int ordinal) -> char
+override DotRocks.Data.DotRocksDataReader.GetChars(int ordinal, long dataOffset, char[]? buffer, int bufferOffset, int length) -> long
+override DotRocks.Data.DotRocksDataReader.GetColumnSchemaAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.ObjectModel.ReadOnlyCollection<System.Data.Common.DbColumn!>!>!
+override DotRocks.Data.DotRocksDataReader.GetDataTypeName(int ordinal) -> string!
+override DotRocks.Data.DotRocksDataReader.GetDateTime(int ordinal) -> System.DateTime
+override DotRocks.Data.DotRocksDataReader.GetDecimal(int ordinal) -> decimal
+override DotRocks.Data.DotRocksDataReader.GetDouble(int ordinal) -> double
+override DotRocks.Data.DotRocksDataReader.GetEnumerator() -> System.Collections.IEnumerator!
+override DotRocks.Data.DotRocksDataReader.GetFieldType(int ordinal) -> System.Type!
+override DotRocks.Data.DotRocksDataReader.GetFieldValue<T>(int ordinal) -> T
+override DotRocks.Data.DotRocksDataReader.GetFieldValueAsync<T>(int ordinal, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<T>!
+override DotRocks.Data.DotRocksDataReader.GetFloat(int ordinal) -> float
+override DotRocks.Data.DotRocksDataReader.GetGuid(int ordinal) -> System.Guid
+override DotRocks.Data.DotRocksDataReader.GetInt16(int ordinal) -> short
+override DotRocks.Data.DotRocksDataReader.GetInt32(int ordinal) -> int
+override DotRocks.Data.DotRocksDataReader.GetInt64(int ordinal) -> long
+override DotRocks.Data.DotRocksDataReader.GetName(int ordinal) -> string!
+override DotRocks.Data.DotRocksDataReader.GetOrdinal(string! name) -> int
+override DotRocks.Data.DotRocksDataReader.GetSchemaTable() -> System.Data.DataTable!
+override DotRocks.Data.DotRocksDataReader.GetString(int ordinal) -> string!
+override DotRocks.Data.DotRocksDataReader.GetValue(int ordinal) -> object!
+override DotRocks.Data.DotRocksDataReader.GetValues(object![]! values) -> int
+override DotRocks.Data.DotRocksDataReader.HasRows.get -> bool
+override DotRocks.Data.DotRocksDataReader.IsClosed.get -> bool
+override DotRocks.Data.DotRocksDataReader.IsDBNull(int ordinal) -> bool
+override DotRocks.Data.DotRocksDataReader.NextResult() -> bool
+override DotRocks.Data.DotRocksDataReader.NextResultAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<bool>!
+override DotRocks.Data.DotRocksDataReader.Read() -> bool
+override DotRocks.Data.DotRocksDataReader.ReadAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<bool>!
+override DotRocks.Data.DotRocksDataReader.RecordsAffected.get -> int
+override DotRocks.Data.DotRocksDataReader.this[int ordinal].get -> object!
+override DotRocks.Data.DotRocksDataReader.this[string! name].get -> object!
+override DotRocks.Data.DotRocksDataSource.ConnectionString.get -> string!
+override DotRocks.Data.DotRocksDecimal.Equals(object? obj) -> bool
+override DotRocks.Data.DotRocksDecimal.GetHashCode() -> int
+override DotRocks.Data.DotRocksDecimal.ToString() -> string!
+override DotRocks.Data.DotRocksFactory.CreateCommand() -> System.Data.Common.DbCommand!
+override DotRocks.Data.DotRocksFactory.CreateConnection() -> System.Data.Common.DbConnection!
+override DotRocks.Data.DotRocksFactory.CreateConnectionStringBuilder() -> System.Data.Common.DbConnectionStringBuilder!
+override DotRocks.Data.DotRocksFactory.CreateDataSource(string! connectionString) -> System.Data.Common.DbDataSource!
+override DotRocks.Data.DotRocksFactory.CreateParameter() -> System.Data.Common.DbParameter!
+override DotRocks.Data.DotRocksParameter.DbType.get -> System.Data.DbType
+override DotRocks.Data.DotRocksParameter.DbType.set -> void
+override DotRocks.Data.DotRocksParameter.Direction.get -> System.Data.ParameterDirection
+override DotRocks.Data.DotRocksParameter.Direction.set -> void
+override DotRocks.Data.DotRocksParameter.IsNullable.get -> bool
+override DotRocks.Data.DotRocksParameter.IsNullable.set -> void
+override DotRocks.Data.DotRocksParameter.ParameterName.get -> string!
+override DotRocks.Data.DotRocksParameter.ParameterName.set -> void
+override DotRocks.Data.DotRocksParameter.ResetDbType() -> void
+override DotRocks.Data.DotRocksParameter.Size.get -> int
+override DotRocks.Data.DotRocksParameter.Size.set -> void
+override DotRocks.Data.DotRocksParameter.SourceColumn.get -> string!
+override DotRocks.Data.DotRocksParameter.SourceColumn.set -> void
+override DotRocks.Data.DotRocksParameter.SourceColumnNullMapping.get -> bool
+override DotRocks.Data.DotRocksParameter.SourceColumnNullMapping.set -> void
+override DotRocks.Data.DotRocksParameter.SourceVersion.get -> System.Data.DataRowVersion
+override DotRocks.Data.DotRocksParameter.SourceVersion.set -> void
+override DotRocks.Data.DotRocksParameter.Value.get -> object?
+override DotRocks.Data.DotRocksParameter.Value.set -> void
+override DotRocks.Data.DotRocksTransaction.Commit() -> void
+override DotRocks.Data.DotRocksTransaction.CommitAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+override DotRocks.Data.DotRocksTransaction.DisposeAsync() -> System.Threading.Tasks.ValueTask
+override DotRocks.Data.DotRocksTransaction.IsolationLevel.get -> System.Data.IsolationLevel
+override DotRocks.Data.DotRocksTransaction.Rollback() -> void
+override DotRocks.Data.DotRocksTransaction.RollbackAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+static DotRocks.Data.DotRocksConnection.ClearAllPools() -> void
+static DotRocks.Data.DotRocksConnection.ClearPool(DotRocks.Data.DotRocksConnection! connection) -> void
+static DotRocks.Data.DotRocksDecimal.FromDecimal(decimal value) -> DotRocks.Data.DotRocksDecimal
+static DotRocks.Data.DotRocksDecimal.Parse(string! value) -> DotRocks.Data.DotRocksDecimal
+static DotRocks.Data.DotRocksDecimal.explicit operator decimal(DotRocks.Data.DotRocksDecimal value) -> decimal
+static DotRocks.Data.DotRocksDecimal.implicit operator DotRocks.Data.DotRocksDecimal(decimal value) -> DotRocks.Data.DotRocksDecimal
+static DotRocks.Data.DotRocksDecimal.operator !=(DotRocks.Data.DotRocksDecimal left, DotRocks.Data.DotRocksDecimal right) -> bool
+static DotRocks.Data.DotRocksDecimal.operator <(DotRocks.Data.DotRocksDecimal left, DotRocks.Data.DotRocksDecimal right) -> bool
+static DotRocks.Data.DotRocksDecimal.operator <=(DotRocks.Data.DotRocksDecimal left, DotRocks.Data.DotRocksDecimal right) -> bool
+static DotRocks.Data.DotRocksDecimal.operator ==(DotRocks.Data.DotRocksDecimal left, DotRocks.Data.DotRocksDecimal right) -> bool
+static DotRocks.Data.DotRocksDecimal.operator >(DotRocks.Data.DotRocksDecimal left, DotRocks.Data.DotRocksDecimal right) -> bool
+static DotRocks.Data.DotRocksDecimal.operator >=(DotRocks.Data.DotRocksDecimal left, DotRocks.Data.DotRocksDecimal right) -> bool
+static DotRocks.Data.DotRocksFactory.Instance.get -> DotRocks.Data.DotRocksFactory!

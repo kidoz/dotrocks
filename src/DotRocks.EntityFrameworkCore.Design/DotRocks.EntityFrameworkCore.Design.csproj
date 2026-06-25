@@ -6,6 +6,7 @@
     <Title>DotRocks.EntityFrameworkCore.Design</Title>
     <Description>Design-time Entity Framework Core services for DotRocks for StarRocks.</Description>
     <PackageTags>starrocks;entity-framework-core;ef-core;migrations;design-time;dotrocks</PackageTags>
+    <EnablePackageValidation>true</EnablePackageValidation>
   </PropertyGroup>
 
   <ItemGroup>
@@ -20,5 +21,11 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" />
     <ProjectReference Include="../DotRocks.EntityFrameworkCore/DotRocks.EntityFrameworkCore.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Label="Public API tracking">
+    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
+    <AdditionalFiles Include="PublicAPI.Shipped.txt" />
+    <AdditionalFiles Include="PublicAPI.Unshipped.txt" />
   </ItemGroup>
 </Project>
