@@ -376,9 +376,12 @@ DotRocks emits OpenTelemetry-compatible tracing and metrics. Subscribe by name v
 
 - Activities: `dotrocks.connection.open`, `dotrocks.command.execute`.
 - Metrics: `dotrocks.connections.opened`, `dotrocks.commands.executed`,
-  the `dotrocks.command.duration` histogram (ms), and the pool instruments
+  the `dotrocks.command.duration` histogram (ms), the pool instruments
   (`dotrocks.pool.connections.idle` / `.active`, `dotrocks.pool.lease.wait_time`,
-  `dotrocks.pool.connections.discarded`).
+  `dotrocks.pool.connections.discarded`), and Stream Load instruments
+  (`dotrocks.stream_load.duration` histogram (ms), `dotrocks.stream_load.rows_loaded`,
+  `dotrocks.stream_load.rows_filtered`, `dotrocks.stream_load.bytes`), all tagged only with a
+  bounded `outcome`.
 
 ```csharp
 builder.Services.AddOpenTelemetry()
