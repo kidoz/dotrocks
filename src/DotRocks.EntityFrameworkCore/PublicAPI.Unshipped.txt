@@ -1,1 +1,21 @@
 #nullable enable
+*REMOVED*DotRocks.EntityFrameworkCore.Infrastructure.DotRocksDbContextOptionsBuilder.DotRocksDbContextOptionsBuilder() -> void
+DotRocks.EntityFrameworkCore.Infrastructure.DotRocksDbContextOptionsBuilder.DotRocksDbContextOptionsBuilder(Microsoft.EntityFrameworkCore.DbContextOptionsBuilder! optionsBuilder) -> void
+DotRocks.EntityFrameworkCore.Infrastructure.DotRocksDbContextOptionsBuilder.ServerVersion(DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion! serverVersion) -> DotRocks.EntityFrameworkCore.Infrastructure.DotRocksDbContextOptionsBuilder!
+DotRocks.EntityFrameworkCore.Infrastructure.DotRocksOptionsExtension
+DotRocks.EntityFrameworkCore.Infrastructure.DotRocksOptionsExtension.DotRocksOptionsExtension() -> void
+DotRocks.EntityFrameworkCore.Infrastructure.DotRocksOptionsExtension.ServerVersion.get -> DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion?
+DotRocks.EntityFrameworkCore.Infrastructure.DotRocksOptionsExtension.WithServerVersion(DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion! serverVersion) -> DotRocks.EntityFrameworkCore.Infrastructure.DotRocksOptionsExtension!
+DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion
+DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion.Equals(DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion? other) -> bool
+DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion.Major.get -> int
+DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion.Minor.get -> int
+DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion.Patch.get -> int
+DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion.StarRocksServerVersion(int major, int minor = 0, int patch = 0) -> void
+override DotRocks.EntityFrameworkCore.Infrastructure.DotRocksOptionsExtension.ApplyServices(Microsoft.Extensions.DependencyInjection.IServiceCollection! services) -> void
+override DotRocks.EntityFrameworkCore.Infrastructure.DotRocksOptionsExtension.Info.get -> Microsoft.EntityFrameworkCore.Infrastructure.DbContextOptionsExtensionInfo!
+override DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion.Equals(object? obj) -> bool
+override DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion.GetHashCode() -> int
+override DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion.ToString() -> string!
+static DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion.DetectAsync(string! connectionString, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion!>!
+static DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion.Parse(string! version) -> DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion!

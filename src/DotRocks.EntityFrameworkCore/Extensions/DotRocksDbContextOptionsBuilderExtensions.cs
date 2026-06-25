@@ -29,7 +29,7 @@ public static class DotRocksDbContextOptionsBuilderExtensions
             GetOrCreateExtension(optionsBuilder).WithConnectionString(connectionString)
             as DotRocksOptionsExtension;
         ((IDbContextOptionsBuilderInfrastructure)optionsBuilder).AddOrUpdateExtension(extension!);
-        dotRocksOptionsAction?.Invoke(new DotRocksDbContextOptionsBuilder());
+        dotRocksOptionsAction?.Invoke(new DotRocksDbContextOptionsBuilder(optionsBuilder));
         return optionsBuilder;
     }
 
@@ -55,7 +55,7 @@ public static class DotRocksDbContextOptionsBuilderExtensions
             GetOrCreateExtension(optionsBuilder).WithConnection(connection, contextOwnsConnection)
             as DotRocksOptionsExtension;
         ((IDbContextOptionsBuilderInfrastructure)optionsBuilder).AddOrUpdateExtension(extension!);
-        dotRocksOptionsAction?.Invoke(new DotRocksDbContextOptionsBuilder());
+        dotRocksOptionsAction?.Invoke(new DotRocksDbContextOptionsBuilder(optionsBuilder));
         return optionsBuilder;
     }
 
