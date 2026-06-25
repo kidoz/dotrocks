@@ -31,6 +31,45 @@ public sealed class ConnectionIntegrationTests
     }
 
     [Theory]
+    [InlineData("SELECT to_bitmap(1) AS v")]
+    [InlineData("SELECT hll_hash(1) AS v")]
+    [InlineData("SELECT percentile_hash(1.0) AS v")]
+    public async Task ExecuteReaderAsync_OpaqueAggregateStateTypesReadAsNull(string query)
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
+        }
+
+        ArgumentNullException.ThrowIfNull(query);
+
+        using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
+        await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+        using System.Data.Common.DbCommand command = connection.CreateCommand();
+#pragma warning disable CA2100 // Fixed inline test literals, not user input.
+        command.CommandText = query;
+#pragma warning restore CA2100
+
+        using System.Data.Common.DbDataReader reader = await command
+            .ExecuteReaderAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+        Assert.True(
+            await reader.ReadAsync(TestContext.Current.CancellationToken).ConfigureAwait(true)
+        );
+
+        // BITMAP/HLL/PERCENTILE are opaque aggregate-state types: a direct select returns NULL
+        // over the text protocol (no lossless value), so the driver surfaces DBNull rather than
+        // inventing a representation. Read them via accessor functions (bitmap_to_string, etc.).
+        Assert.True(
+            await reader
+                .IsDBNullAsync(0, TestContext.Current.CancellationToken)
+                .ConfigureAwait(true)
+        );
+    }
+
+    [Theory]
     [InlineData("SELECT [1, 2, 3] AS v", "[1,2,3]")]
     [InlineData("SELECT ['a', 'b'] AS v", """["a","b"]""")]
     [InlineData("SELECT map{'k1': 1, 'k2': 2} AS v", """{"k1":1,"k2":2}""")]
