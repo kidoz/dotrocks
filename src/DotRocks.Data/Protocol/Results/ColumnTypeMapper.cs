@@ -96,56 +96,63 @@ internal static class ColumnTypeMapper
                 return bytes.ToArray();
         }
 
-        string text = Encoding.UTF8.GetString(bytes);
         try
         {
+            // Numeric types parse straight from the UTF-8 bytes (IUtf8SpanParsable), so a wide
+            // numeric result set decodes with no per-value string allocation. Only the branches
+            // that need culture/format-exact parsing or return text decode the bytes to a string.
             return columnType switch
             {
-                ColumnType.Tiny when columnLength == BooleanColumnLength => ParseBoolean(text),
+                ColumnType.Tiny when columnLength == BooleanColumnLength => ParseBoolean(bytes),
                 ColumnType.Tiny => sbyte.Parse(
-                    text,
+                    bytes,
                     NumberStyles.Integer,
                     CultureInfo.InvariantCulture
                 ),
                 ColumnType.Short => short.Parse(
-                    text,
+                    bytes,
                     NumberStyles.Integer,
                     CultureInfo.InvariantCulture
                 ),
                 ColumnType.Long or ColumnType.Int24 or ColumnType.Year => int.Parse(
-                    text,
+                    bytes,
                     NumberStyles.Integer,
                     CultureInfo.InvariantCulture
                 ),
                 ColumnType.LongLong => long.Parse(
-                    text,
+                    bytes,
                     NumberStyles.Integer,
                     CultureInfo.InvariantCulture
                 ),
-                ColumnType.Decimal or ColumnType.NewDecimal => DotRocksDecimal.Parse(text),
+                ColumnType.Decimal or ColumnType.NewDecimal => DotRocksDecimal.Parse(
+                    Encoding.UTF8.GetString(bytes)
+                ),
                 ColumnType.Float => float.Parse(
-                    text,
+                    bytes,
                     NumberStyles.Float,
                     CultureInfo.InvariantCulture
                 ),
                 ColumnType.Double => double.Parse(
-                    text,
+                    bytes,
                     NumberStyles.Float,
                     CultureInfo.InvariantCulture
                 ),
                 ColumnType.Date or ColumnType.NewDate => DateTime.ParseExact(
-                    text,
+                    Encoding.UTF8.GetString(bytes),
                     DateFormat,
                     CultureInfo.InvariantCulture,
                     DateTimeStyles.None
                 ),
                 ColumnType.DateTime or ColumnType.Timestamp => DateTime.ParseExact(
-                    text,
+                    Encoding.UTF8.GetString(bytes),
                     DateTimeFormats,
                     CultureInfo.InvariantCulture,
                     DateTimeStyles.None
                 ),
-                ColumnType.Time => TimeSpan.Parse(text, CultureInfo.InvariantCulture),
+                ColumnType.Time => TimeSpan.Parse(
+                    Encoding.UTF8.GetString(bytes),
+                    CultureInfo.InvariantCulture
+                ),
                 ColumnType.Null
                 or ColumnType.VarChar
                 or ColumnType.Json
@@ -153,7 +160,7 @@ internal static class ColumnTypeMapper
                 or ColumnType.Set
                 or ColumnType.VarString
                 or ColumnType.String
-                or ColumnType.Geometry => text,
+                or ColumnType.Geometry => Encoding.UTF8.GetString(bytes),
                 _ => throw CreateUnsupportedTypeException(type),
             };
         }
@@ -167,19 +174,28 @@ internal static class ColumnTypeMapper
         }
     }
 
-    private static bool ParseBoolean(string text) =>
-        text switch
+    private static bool ParseBoolean(ReadOnlySpan<byte> bytes)
+    {
+        if (bytes.Length == 1)
         {
-            "1" => true,
-            "0" => false,
-            _ => bool.Parse(text),
-        };
+            switch (bytes[0])
+            {
+                case (byte)'1':
+                    return true;
+                case (byte)'0':
+                    return false;
+            }
+        }
+
+        return bool.Parse(Encoding.UTF8.GetString(bytes));
+    }
 
     private static ColumnType ToColumnType(byte type)
     {
-        if (Enum.IsDefined(typeof(ColumnType), type))
+        var columnType = (ColumnType)type;
+        if (Enum.IsDefined(columnType))
         {
-            return (ColumnType)type;
+            return columnType;
         }
 
         throw CreateUnsupportedTypeException(type);
