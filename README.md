@@ -64,7 +64,10 @@ object? value = await command.ExecuteScalarAsync();
   positional `?` placeholders and add parameters in order; values are sent with the binary
   parameter encoding and results are decoded from binary rows. A value type the binary encoder does
   not support fails with a `DotRocksUnsupportedFeatureException` (which derives from
-  `DotRocksException`).
+  `DotRocksException`). Prepared statements are cached and reused per physical connection, so
+  re-executing the same SQL avoids re-preparing. StarRocks 4.0.7 allows only `SELECT` in the
+  prepared protocol — a prepared `INSERT` / `UPDATE` / `DELETE` is rejected by the server, so use
+  `Auto` (text protocol) for parameterized writes.
 
 ```csharp
 await using var command = (DotRocksCommand)connection.CreateCommand();

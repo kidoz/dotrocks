@@ -16,10 +16,22 @@ namespace DotRocks.Data.Pooling;
 
 internal sealed class DotRocksPhysicalConnection : IDisposable
 {
+    private const int MaxCachedPreparedStatements = 64;
+
     private readonly TcpClient _client;
     private readonly Stream _stream;
     private readonly long _createdTimestamp;
     private readonly TimeSpan _maxLifetime;
+
+    // Server-prepared statements are session-scoped, so they stay valid for the life of this
+    // physical connection and can be reused across pool leases. Cache by SQL text with a bounded
+    // FIFO eviction. Only one command is active per physical connection, so no synchronization is
+    // needed.
+    private readonly Dictionary<string, StatementPrepareResult> _preparedStatements = new(
+        StringComparer.Ordinal
+    );
+    private readonly Queue<string> _preparedStatementOrder = new();
+
     private volatile bool _isDisposed;
     private volatile bool _isBroken;
     private volatile bool _sessionMayBeDirty;
@@ -425,6 +437,39 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
     }
 
     /// <summary>
+    /// Returns a prepared statement for the given SQL, reusing a cached one for this connection when
+    /// possible (since prepared statements are session-scoped) and otherwise preparing it and adding
+    /// it to the bounded cache.
+    /// </summary>
+    public async ValueTask<StatementPrepareResult> PrepareCachedAsync(
+        string commandText,
+        CancellationToken cancellationToken
+    )
+    {
+        if (_preparedStatements.TryGetValue(commandText, out StatementPrepareResult cached))
+        {
+            return cached;
+        }
+
+        StatementPrepareResult prepared = await PrepareAsync(commandText, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (_preparedStatements.Count >= MaxCachedPreparedStatements)
+        {
+            string evictedKey = _preparedStatementOrder.Dequeue();
+            if (_preparedStatements.Remove(evictedKey, out StatementPrepareResult evicted))
+            {
+                await ClosePreparedStatementAsync(evicted.StatementId, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+        }
+
+        _preparedStatements[commandText] = prepared;
+        _preparedStatementOrder.Enqueue(commandText);
+        return prepared;
+    }
+
+    /// <summary>
     /// Sends <c>COM_STMT_EXECUTE</c> for a prepared statement with the given positional parameter
     /// values and reads the binary result set into a buffered <see cref="QueryResult"/>. The whole
     /// result is buffered so the statement can be closed immediately after.
@@ -788,6 +833,11 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
         }
 
         _isDisposed = true;
+
+        // The session ends when the socket closes, so the server drops every prepared statement;
+        // just release the cache without sending per-statement COM_STMT_CLOSE packets.
+        _preparedStatements.Clear();
+        _preparedStatementOrder.Clear();
         _stream.Dispose();
         _client.Dispose();
     }
