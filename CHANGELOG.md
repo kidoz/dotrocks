@@ -8,6 +8,12 @@ version is derived from the release tag at publish time.
 
 ## [Unreleased]
 
+### Added
+- `DotRocksParameterMode` (`Auto` / `TextProtocol` / `ServerPrepared`) and
+  `DotRocksCommand.ParameterMode`. `Auto`/`TextProtocol` use the verified client-side text path;
+  `ServerPrepared` fails fast with the new public `DotRocksUnsupportedFeatureException` because the
+  StarRocks server-side prepared (binary) protocol is not yet characterized against a live server.
+
 ### Changed
 - `DotRocksDbContextOptionsBuilder` is now a relational options builder bound to the
   `DbContextOptionsBuilder`; its previously non-functional public parameterless constructor was

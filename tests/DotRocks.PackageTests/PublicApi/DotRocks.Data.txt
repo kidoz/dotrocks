@@ -41,6 +41,7 @@ public sealed class DotRocks.Data.DotRocksCommand System.Data.Common.DbCommand
   protected property System.Data.Common.DbParameterCollection DbParameterCollection { get; }
   protected property System.Data.Common.DbTransaction DbTransaction { get; set; }
   public property System.Boolean DesignTimeVisible { get; set; }
+  public property DotRocks.Data.DotRocksParameterMode ParameterMode { get; set; }
   public property System.Data.UpdateRowSource UpdatedRowSource { get; set; }
   protected virtual method System.Data.Common.DbDataReader ExecuteDbDataReader(System.Data.CommandBehavior behavior)
   protected virtual method System.Data.Common.DbParameter CreateDbParameter()
@@ -196,6 +197,11 @@ public sealed class DotRocks.Data.DotRocksParameter System.Data.Common.DbParamet
   public property System.Object Value { get; set; }
   public virtual method System.Void ResetDbType()
 
+public enum DotRocks.Data.DotRocksParameterMode
+  public static field DotRocks.Data.DotRocksParameterMode Auto
+  public static field DotRocks.Data.DotRocksParameterMode ServerPrepared
+  public static field DotRocks.Data.DotRocksParameterMode TextProtocol
+
 public sealed class DotRocks.Data.DotRocksPrecisionLossException DotRocks.Data.DotRocksException
   public DotRocks.Data.DotRocksPrecisionLossException()
   public DotRocks.Data.DotRocksPrecisionLossException(System.String message)
@@ -215,6 +221,11 @@ public sealed class DotRocks.Data.DotRocksTransaction System.Data.Common.DbTrans
   public virtual method System.Threading.Tasks.ValueTask DisposeAsync()
   public virtual method System.Void Commit()
   public virtual method System.Void Rollback()
+
+public sealed class DotRocks.Data.DotRocksUnsupportedFeatureException DotRocks.Data.DotRocksException
+  public DotRocks.Data.DotRocksUnsupportedFeatureException()
+  public DotRocks.Data.DotRocksUnsupportedFeatureException(System.String message)
+  public DotRocks.Data.DotRocksUnsupportedFeatureException(System.String message, System.Exception innerException)
 
 public sealed class DotRocks.Data.Loading.DotRocksStreamLoadClient System.IDisposable
   public DotRocks.Data.Loading.DotRocksStreamLoadClient(System.String connectionString)

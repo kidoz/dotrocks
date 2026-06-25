@@ -98,6 +98,61 @@ public sealed class DotRocksCommandTests
     }
 
     [Fact]
+    public void ParameterMode_DefaultsToAuto()
+    {
+        using var command = new DotRocksCommand();
+
+        Assert.Equal(DotRocksParameterMode.Auto, command.ParameterMode);
+    }
+
+    [Fact]
+    public void TextProtocolMode_Prepare_ValidatesClientSide()
+    {
+        using var command = new DotRocksCommand
+        {
+            CommandText = "SELECT @value",
+            ParameterMode = DotRocksParameterMode.TextProtocol,
+        };
+        command.Parameters.Add(new DotRocksParameter { ParameterName = "value", Value = 1 });
+
+        command.Prepare();
+    }
+
+    [Fact]
+    public void ServerPreparedMode_Prepare_ThrowsUnsupportedFeature()
+    {
+        using var command = new DotRocksCommand
+        {
+            CommandText = "SELECT 1",
+            ParameterMode = DotRocksParameterMode.ServerPrepared,
+        };
+
+        Assert.Throws<DotRocksUnsupportedFeatureException>(command.Prepare);
+    }
+
+    [Fact]
+    public async Task ServerPreparedMode_ExecuteScalarAsync_ThrowsUnsupportedFeature()
+    {
+        using var command = new DotRocksCommand
+        {
+            CommandText = "SELECT 1",
+            ParameterMode = DotRocksParameterMode.ServerPrepared,
+        };
+
+        await Assert
+            .ThrowsAsync<DotRocksUnsupportedFeatureException>(async () =>
+                await command
+                    .ExecuteScalarAsync(TestContext.Current.CancellationToken)
+                    .ConfigureAwait(true)
+            )
+            .ConfigureAwait(true);
+    }
+
+    [Fact]
+    public void UnsupportedFeatureException_IsDotRocksException() =>
+        Assert.IsAssignableFrom<DotRocksException>(new DotRocksUnsupportedFeatureException());
+
+    [Fact]
     public void Transaction_AssignmentSetsConnectionWhenMissing()
     {
         using var connection = new DotRocksConnection();
