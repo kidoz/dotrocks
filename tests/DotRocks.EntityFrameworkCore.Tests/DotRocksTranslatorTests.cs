@@ -80,6 +80,21 @@ public sealed class DotRocksTranslatorTests
         Assert.Contains("round(", sql, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void MathRoundWithMidpointRounding_IsNotTranslated()
+    {
+        using var context = CreateContext();
+
+        // Math.Round(value, MidpointRounding) has no StarRocks equivalent. The translator must
+        // decline it so EF surfaces a clear translation failure rather than emitting round(value,
+        // <enum int>) that would silently round to the wrong number of digits.
+        Assert.Throws<InvalidOperationException>(() =>
+            context
+                .Events.Where(e => Math.Round(e.Score, MidpointRounding.AwayFromZero) > 1)
+                .ToQueryString()
+        );
+    }
+
     private static UnitContext CreateContext()
     {
         var optionsBuilder = new DbContextOptionsBuilder<UnitContext>();

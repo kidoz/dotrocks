@@ -88,7 +88,7 @@ public sealed class DotRocksCommand : DbCommand
     /// <summary>
     /// Gets or sets how parameters are bound and the command is executed. Defaults to
     /// <see cref="DotRocksParameterMode.Auto"/>. <see cref="DotRocksParameterMode.ServerPrepared"/>
-    /// is not yet supported and fails explicitly at execution.
+    /// uses the StarRocks server-side prepared-statement protocol.
     /// </summary>
     public DotRocksParameterMode ParameterMode
     {
@@ -241,7 +241,10 @@ public sealed class DotRocksCommand : DbCommand
 
     /// <inheritdoc />
     protected override DbDataReader ExecuteDbDataReader(CommandBehavior behavior) =>
-        ExecuteDbDataReaderAsync(behavior, CancellationToken.None).GetAwaiter().GetResult();
+        ExecuteDbDataReaderAsync(behavior, CancellationToken.None)
+            .ConfigureAwait(false)
+            .GetAwaiter()
+            .GetResult();
 
     /// <inheritdoc />
     protected override async Task<DbDataReader> ExecuteDbDataReaderAsync(

@@ -42,13 +42,17 @@ internal sealed class DotRocksMathMethodTranslator(ISqlExpressionFactory sqlExpr
             return null;
         }
 
-        // Two-argument forms: Round(value, digits) and Pow(x, y).
+        // Two-argument forms: Round(value, digits) and Pow(x, y). Only translate Round when the
+        // second argument is the digit count; Round(value, MidpointRounding) has no StarRocks
+        // equivalent, so fall back to EF's normal translation failure rather than emit wrong SQL.
         if (
             arguments.Count == 2
             && string.Equals(method.Name, nameof(Math.Round), StringComparison.Ordinal)
         )
         {
-            return Function("round", arguments, method.ReturnType);
+            return arguments[1].Type == typeof(int) || arguments[1].Type == typeof(long)
+                ? Function("round", arguments, method.ReturnType)
+                : null;
         }
 
         if (
