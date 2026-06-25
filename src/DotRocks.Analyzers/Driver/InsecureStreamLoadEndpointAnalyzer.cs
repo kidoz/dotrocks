@@ -15,7 +15,7 @@ public sealed class InsecureStreamLoadEndpointAnalyzer : DiagnosticAnalyzer
 {
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
-        ImmutableArray.Create(DotRocksDiagnosticDescriptors.InsecureStreamLoadEndpoint);
+    [DotRocksDiagnosticDescriptors.InsecureStreamLoadEndpoint];
 
     /// <inheritdoc />
     public override void Initialize(AnalysisContext context)

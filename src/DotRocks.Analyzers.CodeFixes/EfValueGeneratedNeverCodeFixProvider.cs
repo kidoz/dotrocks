@@ -18,7 +18,7 @@ public sealed class EfValueGeneratedNeverCodeFixProvider : CodeFixProvider
 {
     /// <inheritdoc />
     public override ImmutableArray<string> FixableDiagnosticIds { get; } =
-        ImmutableArray.Create(DotRocksDiagnosticDescriptors.MissingValueGeneratedNeverDiagnosticId);
+    [DotRocksDiagnosticDescriptors.MissingValueGeneratedNeverDiagnosticId];
 
     /// <inheritdoc />
     public override FixAllProvider? GetFixAllProvider() => WellKnownFixAllProviders.BatchFixer;

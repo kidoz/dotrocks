@@ -18,7 +18,7 @@ public sealed class MissingCancellationTokenAnalyzer : DiagnosticAnalyzer
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
-        ImmutableArray.Create(DotRocksDiagnosticDescriptors.MissingCancellationToken);
+    [DotRocksDiagnosticDescriptors.MissingCancellationToken];
 
     /// <inheritdoc />
     public override void Initialize(AnalysisContext context)

@@ -15,7 +15,7 @@ public sealed class EfValueGeneratedNeverAnalyzer : DiagnosticAnalyzer
 {
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
-        ImmutableArray.Create(DotRocksDiagnosticDescriptors.MissingValueGeneratedNever);
+    [DotRocksDiagnosticDescriptors.MissingValueGeneratedNever];
 
     /// <inheritdoc />
     public override void Initialize(AnalysisContext context)

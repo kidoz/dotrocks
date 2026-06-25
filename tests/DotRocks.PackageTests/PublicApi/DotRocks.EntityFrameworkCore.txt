@@ -39,9 +39,12 @@ public static class Microsoft.EntityFrameworkCore.DotRocksDbContextOptionsBuilde
   public static method Microsoft.EntityFrameworkCore.DbContextOptionsBuilder UseStarRocks(Microsoft.EntityFrameworkCore.DbContextOptionsBuilder optionsBuilder, System.String connectionString, System.Action<DotRocks.EntityFrameworkCore.Infrastructure.DotRocksDbContextOptionsBuilder> dotRocksOptionsAction)
 
 public static class Microsoft.EntityFrameworkCore.DotRocksEntityTypeBuilderExtensions
+  public static method Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder DistributedRandomly(Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder entityTypeBuilder, System.Int32 buckets)
+  public static method Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder HasSortKey(Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder entityTypeBuilder, System.String[] columns)
   public static method Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder HasStarRocksDuplicateKey(Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder entityTypeBuilder, System.String[] columns)
   public static method Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder HasStarRocksHashDistribution(Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder entityTypeBuilder, System.Int32 buckets, System.String[] columns)
   public static method Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder HasStarRocksPrimaryKey(Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder entityTypeBuilder, System.String[] columns)
+  public static method Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder HasStarRocksProperty(Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder entityTypeBuilder, System.String name, System.String value)
   public static method Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder HasStarRocksReplicationNum(Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder entityTypeBuilder, System.Int32 replicationNum)
   public static method Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder HasStarRocksUniqueKey(Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder entityTypeBuilder, System.String[] columns)
 

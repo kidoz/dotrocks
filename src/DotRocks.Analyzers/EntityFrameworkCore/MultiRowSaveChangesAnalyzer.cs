@@ -28,7 +28,7 @@ public sealed class MultiRowSaveChangesAnalyzer : DiagnosticAnalyzer
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
-        ImmutableArray.Create(DotRocksDiagnosticDescriptors.MultiRowSaveChanges);
+    [DotRocksDiagnosticDescriptors.MultiRowSaveChanges];
 
     /// <inheritdoc />
     public override void Initialize(AnalysisContext context)

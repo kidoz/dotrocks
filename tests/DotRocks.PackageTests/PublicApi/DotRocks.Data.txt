@@ -318,3 +318,4 @@ public sealed class DotRocks.Data.Loading.DotRocksStreamLoadTransactionOptions
   public property System.String Label { get; set; }
   public property System.TimeSpan? PreparedTimeout { get; set; }
   public property System.TimeSpan? Timeout { get; set; }
+

@@ -6,5 +6,8 @@ internal static class DotRocksAnnotationNames
     public const string KeyColumns = "DotRocks:KeyColumns";
     public const string DistributionColumns = "DotRocks:DistributionColumns";
     public const string DistributionBuckets = "DotRocks:DistributionBuckets";
+    public const string RandomDistribution = "DotRocks:RandomDistribution";
+    public const string SortKeyColumns = "DotRocks:SortKeyColumns";
+    public const string Properties = "DotRocks:Properties";
     public const string ReplicationNum = "DotRocks:ReplicationNum";
 }

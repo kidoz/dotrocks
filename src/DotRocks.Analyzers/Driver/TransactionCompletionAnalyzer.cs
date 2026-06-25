@@ -15,7 +15,7 @@ public sealed class TransactionCompletionAnalyzer : DiagnosticAnalyzer
 {
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
-        ImmutableArray.Create(DotRocksDiagnosticDescriptors.TransactionDoubleCompletion);
+    [DotRocksDiagnosticDescriptors.TransactionDoubleCompletion];
 
     /// <inheritdoc />
     public override void Initialize(AnalysisContext context)

@@ -18,7 +18,7 @@ public sealed class UnsafeCommandTextAnalyzer : DiagnosticAnalyzer
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
-        ImmutableArray.Create(DotRocksDiagnosticDescriptors.UnsafeCommandText);
+    [DotRocksDiagnosticDescriptors.UnsafeCommandText];
 
     /// <inheritdoc />
     public override void Initialize(AnalysisContext context)

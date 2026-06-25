@@ -175,7 +175,9 @@ Supported EF Core query surface:
   migrations history table. `CREATE TABLE` defaults to `DUPLICATE KEY`, hash
   distribution by the key columns, one bucket, and `replication_num = 1`. Configure
   table shape with `HasStarRocksDuplicateKey(...)`, `HasStarRocksPrimaryKey(...)`,
-  `HasStarRocksUniqueKey(...)`, `HasStarRocksHashDistribution(...)`, and
+  `HasStarRocksUniqueKey(...)`, `HasStarRocksHashDistribution(...)`,
+  `DistributedRandomly(...)` (emits `DISTRIBUTED BY RANDOM`), `HasSortKey(...)` (emits
+  `ORDER BY`), `HasStarRocksProperty(name, value)` (adds a `PROPERTIES` entry), and
   `HasStarRocksReplicationNum(...)`. The
   design-time package is `DotRocks.EntityFrameworkCore.Design`. Down migrations are
   limited to the same conservative DDL boundary; table rollback through `DropTable` is

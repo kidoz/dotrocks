@@ -16,7 +16,7 @@ public sealed class SyncOverAsyncAnalyzer : DiagnosticAnalyzer
 {
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
-        ImmutableArray.Create(DotRocksDiagnosticDescriptors.SyncOverAsync);
+    [DotRocksDiagnosticDescriptors.SyncOverAsync];
 
     /// <inheritdoc />
     public override void Initialize(AnalysisContext context)
