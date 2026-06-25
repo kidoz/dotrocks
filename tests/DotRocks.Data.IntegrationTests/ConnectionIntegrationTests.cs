@@ -97,11 +97,11 @@ public sealed class ConnectionIntegrationTests
 
         using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
         await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
-        using var command = (DotRocksCommand)connection.CreateCommand();
+        using DotRocksCommand command = connection.CreateCommand();
         command.CommandText = "SELECT ? + ? AS total";
         command.ParameterMode = DotRocksParameterMode.ServerPrepared;
-        System.Data.Common.DbParameter first = command.CreateParameter();
-        System.Data.Common.DbParameter second = command.CreateParameter();
+        DbParameter first = command.CreateParameter();
+        DbParameter second = command.CreateParameter();
         command.Parameters.Add(first);
         command.Parameters.Add(second);
 
@@ -185,7 +185,7 @@ public sealed class ConnectionIntegrationTests
     )]
     private static async Task ExecuteAsync(DotRocksConnection connection, string sql)
     {
-        using System.Data.Common.DbCommand command = connection.CreateCommand();
+        using DbCommand command = connection.CreateCommand();
         command.CommandText = sql;
         await command
             .ExecuteNonQueryAsync(TestContext.Current.CancellationToken)
@@ -203,12 +203,12 @@ public sealed class ConnectionIntegrationTests
         object[] values
     )
     {
-        using var command = (DotRocksCommand)connection.CreateCommand();
+        using DotRocksCommand command = connection.CreateCommand();
         command.CommandText = sql;
         command.ParameterMode = DotRocksParameterMode.ServerPrepared;
         foreach (object value in values)
         {
-            System.Data.Common.DbParameter parameter = command.CreateParameter();
+            DbParameter parameter = command.CreateParameter();
             parameter.Value = value;
             command.Parameters.Add(parameter);
         }
@@ -230,14 +230,14 @@ public sealed class ConnectionIntegrationTests
 
         using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
         await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
-        using var command = (DotRocksCommand)connection.CreateCommand();
+        using DotRocksCommand command = connection.CreateCommand();
         command.CommandText = "SELECT ? + ? AS total, ? AS label";
         command.ParameterMode = DotRocksParameterMode.ServerPrepared;
         AddValue(command, 2);
         AddValue(command, 3);
         AddValue(command, "hello");
 
-        using System.Data.Common.DbDataReader reader = await command
+        using DbDataReader reader = await command
             .ExecuteReaderAsync(TestContext.Current.CancellationToken)
             .ConfigureAwait(true);
         Assert.True(
@@ -251,7 +251,7 @@ public sealed class ConnectionIntegrationTests
 
         static void AddValue(DotRocksCommand command, object value)
         {
-            System.Data.Common.DbParameter parameter = command.CreateParameter();
+            DbParameter parameter = command.CreateParameter();
             parameter.Value = value;
             command.Parameters.Add(parameter);
         }
@@ -274,12 +274,12 @@ public sealed class ConnectionIntegrationTests
 
         using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
         await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
-        using System.Data.Common.DbCommand command = connection.CreateCommand();
+        using DbCommand command = connection.CreateCommand();
 #pragma warning disable CA2100 // Fixed inline test literals, not user input.
         command.CommandText = query;
 #pragma warning restore CA2100
 
-        using System.Data.Common.DbDataReader reader = await command
+        using DbDataReader reader = await command
             .ExecuteReaderAsync(TestContext.Current.CancellationToken)
             .ConfigureAwait(true);
         Assert.True(
@@ -334,10 +334,10 @@ public sealed class ConnectionIntegrationTests
 
         using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
         await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
-        using System.Data.Common.DbCommand command = connection.CreateCommand();
+        using DbCommand command = connection.CreateCommand();
         command.CommandText = query;
 
-        using System.Data.Common.DbDataReader reader = await command
+        using DbDataReader reader = await command
             .ExecuteReaderAsync(TestContext.Current.CancellationToken)
             .ConfigureAwait(true);
         Assert.True(

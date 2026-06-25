@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Data.Common;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using Xunit;
@@ -105,6 +106,65 @@ public sealed class TelemetryIntegrationTests
         Assert.Equal("SELECT", capture.SingleCommandOperation());
     }
 
+    [Fact]
+    public async Task ConnectionOpenAndTransactionDurations_AreRecorded()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
+        }
+
+        var durations = new ConcurrentDictionary<string, string?>(StringComparer.Ordinal);
+        using var listener = new MeterListener
+        {
+            InstrumentPublished = (instrument, meterListener) =>
+            {
+                if (string.Equals(instrument.Meter.Name, "DotRocks.Data", StringComparison.Ordinal))
+                {
+                    meterListener.EnableMeasurementEvents(instrument);
+                }
+            },
+        };
+        listener.SetMeasurementEventCallback<double>(
+            (instrument, _, tags, _) =>
+            {
+                string? outcome = null;
+                foreach (KeyValuePair<string, object?> tag in tags)
+                {
+                    if (string.Equals(tag.Key, "outcome", StringComparison.Ordinal))
+                    {
+                        outcome = tag.Value?.ToString();
+                    }
+                }
+
+                durations[instrument.Name] = outcome;
+            }
+        );
+        listener.Start();
+
+        using (var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString))
+        {
+            await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+            DbTransaction transaction = await connection
+                .BeginTransactionAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+            await transaction
+                .CommitAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+        }
+
+        listener.Dispose();
+
+        Assert.True(
+            durations.TryGetValue("dotrocks.connection.open.duration", out string? openOutcome)
+        );
+        Assert.Equal("success", openOutcome);
+        Assert.True(durations.TryGetValue("dotrocks.transaction.duration", out string? txOutcome));
+        Assert.Equal("committed", txOutcome);
+    }
+
     private static async Task<object?> ExecuteScalarAsync(
         string sql,
         CancellationToken cancellationToken,
@@ -115,7 +175,7 @@ public sealed class TelemetryIntegrationTests
         await connection.OpenAsync(cancellationToken).ConfigureAwait(true);
 
 #pragma warning disable CA2100 // Integration test SQL is fixed, not user input.
-        using System.Data.Common.DbCommand command = connection.CreateCommand();
+        using DbCommand command = connection.CreateCommand();
         command.CommandText = sql;
 #pragma warning restore CA2100
         command.CommandTimeout = timeout;

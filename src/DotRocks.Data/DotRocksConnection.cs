@@ -165,12 +165,14 @@ public sealed class DotRocksConnection : DbConnection
             ActivityKind.Client
         );
         DotRocksTelemetryTags.TagConnectionOpen(activity, _options);
+        long startTimestamp = Stopwatch.GetTimestamp();
         try
         {
             _lease = await OpenLeaseWithRetryAsync(linked.Token).ConfigureAwait(false);
             _serverVersion = _lease.PhysicalConnection.ServerVersion;
             _state = ConnectionState.Open;
             DotRocksTelemetry.ConnectionsOpened.Add(1);
+            RecordConnectionOpenDuration(startTimestamp, "success");
             activity?.SetStatus(ActivityStatusCode.Ok);
         }
         catch (Exception ex)
@@ -184,10 +186,17 @@ public sealed class DotRocksConnection : DbConnection
                 timedOut ? DotRocksTelemetryTags.ErrorTimeout : errorType,
                 statusCode
             );
+            RecordConnectionOpenDuration(startTimestamp, timedOut ? "timeout" : "error");
             CloseCore(reusable: false);
             throw;
         }
     }
+
+    private static void RecordConnectionOpenDuration(long startTimestamp, string outcome) =>
+        DotRocksTelemetry.ConnectionOpenDuration.Record(
+            Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds,
+            new TagList { { "outcome", outcome } }
+        );
 
     private async ValueTask<DotRocksConnectionPoolLease> OpenLeaseWithRetryAsync(
         CancellationToken cancellationToken
@@ -249,8 +258,15 @@ public sealed class DotRocksConnection : DbConnection
         return transaction;
     }
 
+    /// <summary>
+    /// Creates a <see cref="DotRocksCommand"/> associated with this connection.
+    /// </summary>
+    public new DotRocksCommand CreateCommand() => CreateDotRocksCommand();
+
     /// <inheritdoc />
-    protected override DbCommand CreateDbCommand() => new DotRocksCommand(this);
+    protected override DbCommand CreateDbCommand() => CreateDotRocksCommand();
+
+    private DotRocksCommand CreateDotRocksCommand() => new(this);
 
     /// <summary>Returns the list of supported schema metadata collections.</summary>
     public override DataTable GetSchema() =>

@@ -1,3 +1,4 @@
+using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using Dapper;
@@ -74,9 +75,9 @@ public sealed class DapperIntegrationTests
         using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
         await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
 
-        using System.Data.Common.DbCommand command = connection.CreateCommand();
+        using DbCommand command = connection.CreateCommand();
         command.CommandText = "SELECT @value";
-        System.Data.Common.DbParameter parameter = command.CreateParameter();
+        DbParameter parameter = command.CreateParameter();
         parameter.ParameterName = "value";
         parameter.Value = 42;
         command.Parameters.Add(parameter);
@@ -136,7 +137,7 @@ public sealed class DapperIntegrationTests
             await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
             await UseTransactionDatabaseAsync(connection).ConfigureAwait(true);
 
-            using System.Data.Common.DbTransaction transaction = await connection
+            using DbTransaction transaction = await connection
                 .BeginTransactionAsync(TestContext.Current.CancellationToken)
                 .ConfigureAwait(true);
 
@@ -316,7 +317,7 @@ public sealed class DapperIntegrationTests
     )]
     private static async Task InsertDapperRowAsync(
         DotRocksConnection connection,
-        System.Data.Common.DbTransaction transaction,
+        DbTransaction transaction,
         string tableName,
         int id,
         int value

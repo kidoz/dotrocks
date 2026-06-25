@@ -69,6 +69,7 @@ public sealed class DotRocks.Data.DotRocksConnection System.Data.Common.DbConnec
   protected virtual method System.Data.Common.DbTransaction BeginDbTransaction(System.Data.IsolationLevel isolationLevel)
   protected virtual method System.Threading.Tasks.ValueTask<System.Data.Common.DbTransaction> BeginDbTransactionAsync(System.Data.IsolationLevel isolationLevel, System.Threading.CancellationToken cancellationToken)
   protected virtual method System.Void Dispose(System.Boolean disposing)
+  public method DotRocks.Data.DotRocksCommand CreateCommand()
   public static method System.Void ClearAllPools()
   public static method System.Void ClearPool(DotRocks.Data.DotRocksConnection connection)
   public virtual method System.Data.DataTable GetSchema()
@@ -317,4 +318,3 @@ public sealed class DotRocks.Data.Loading.DotRocksStreamLoadTransactionOptions
   public property System.String Label { get; set; }
   public property System.TimeSpan? PreparedTimeout { get; set; }
   public property System.TimeSpan? Timeout { get; set; }
-
