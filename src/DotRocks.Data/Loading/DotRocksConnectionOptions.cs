@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Data.Common;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
@@ -474,60 +475,8 @@ internal sealed record DotRocksConnectionOptions(
     internal static Uri BuildDefaultStreamLoadEndpoint(string server) =>
         new($"http://{server}:{DefaultStreamLoadPort}", UriKind.Absolute);
 
-    private static IEnumerable<string> Aliases(string canonical) =>
-        canonical switch
-        {
-            "Server" => ["Server", "Host", "Data Source"],
-            "User ID" => ["User ID", "UserID", "User", "Uid", "Username"],
-            "Password" => ["Password", "Pwd"],
-            "Database" => ["Database", "Initial Catalog"],
-            "Connection Timeout" => ["Connection Timeout", "Connect Timeout", "Timeout"],
-            "Minimum Pool Size" => ["Minimum Pool Size", "Min Pool Size"],
-            "Maximum Pool Size" => ["Maximum Pool Size", "Max Pool Size"],
-            "Connection Idle Timeout" => ["Connection Idle Timeout", "Idle Timeout"],
-            "Ssl Mode" => ["Ssl Mode", "SSL Mode", "SslMode"],
-            "Trust Server Certificate" => ["Trust Server Certificate", "TrustServerCertificate"],
-            "Ssl Revocation Check" =>
-            [
-                "Ssl Revocation Check",
-                "SSL Revocation Check",
-                "SslRevocationCheck",
-                "Revocation",
-            ],
-            "Allow Insecure Stream Load" =>
-            [
-                "Allow Insecure Stream Load",
-                "AllowInsecureStreamLoad",
-                "Allow Insecure StreamLoad",
-            ],
-            "Stream Load Endpoint" =>
-            [
-                "Stream Load Endpoint",
-                "StreamLoadEndpoint",
-                "Stream Load URL",
-                "Http Endpoint",
-            ],
-            "Connection Retries" =>
-            [
-                "Connection Retries",
-                "ConnectionRetries",
-                "Connect Retry Count",
-            ],
-            "Connection Retry Delay" =>
-            [
-                "Connection Retry Delay",
-                "ConnectionRetryDelay",
-                "Retry Delay",
-            ],
-            "Connection Lifetime" => ["Connection Lifetime", "ConnectionLifetime", "Lifetime"],
-            "Server Compatibility Level" =>
-            [
-                "Server Compatibility Level",
-                "ServerCompatibilityLevel",
-                "Compatibility Level",
-            ],
-            _ => [canonical],
-        };
+    private static ImmutableArray<string> Aliases(string canonical) =>
+        DotRocksConnectionStringKeywords.Aliases(canonical);
 
     private static string BuildConnectionString(
         string server,

@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Immutable;
 using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography.X509Certificates;
@@ -402,61 +403,6 @@ public sealed class DotRocksConnectionStringBuilder
         return false;
     }
 
-    private static IEnumerable<string> Aliases(string keyword) =>
-        keyword switch
-        {
-            ServerKeyword => [ServerKeyword, "Host", "Data Source"],
-            UserIdKeyword => [UserIdKeyword, "UserID", "User", "Uid", "Username"],
-            PasswordKeyword => [PasswordKeyword, "Pwd"],
-            DatabaseKeyword => [DatabaseKeyword, "Initial Catalog"],
-            ConnectionTimeoutKeyword => [ConnectionTimeoutKeyword, "Connect Timeout", "Timeout"],
-            MinimumPoolSizeKeyword => [MinimumPoolSizeKeyword, "Min Pool Size"],
-            MaximumPoolSizeKeyword => [MaximumPoolSizeKeyword, "Max Pool Size"],
-            ConnectionIdleTimeoutKeyword => [ConnectionIdleTimeoutKeyword, "Idle Timeout"],
-            SslModeKeyword => [SslModeKeyword, "SSL Mode", "SslMode"],
-            TrustServerCertificateKeyword =>
-            [
-                TrustServerCertificateKeyword,
-                "TrustServerCertificate",
-            ],
-            SslRevocationCheckKeyword =>
-            [
-                SslRevocationCheckKeyword,
-                "SSL Revocation Check",
-                "SslRevocationCheck",
-                "Revocation",
-            ],
-            AllowInsecureStreamLoadKeyword =>
-            [
-                AllowInsecureStreamLoadKeyword,
-                "AllowInsecureStreamLoad",
-                "Allow Insecure StreamLoad",
-            ],
-            ConnectionRetriesKeyword =>
-            [
-                ConnectionRetriesKeyword,
-                "ConnectionRetries",
-                "Connect Retry Count",
-            ],
-            ConnectionRetryDelayKeyword =>
-            [
-                ConnectionRetryDelayKeyword,
-                "ConnectionRetryDelay",
-                "Retry Delay",
-            ],
-            ConnectionLifetimeKeyword =>
-            [
-                ConnectionLifetimeKeyword,
-                "ConnectionLifetime",
-                "Lifetime",
-            ],
-            StreamLoadEndpointKeyword =>
-            [
-                StreamLoadEndpointKeyword,
-                "StreamLoadEndpoint",
-                "Stream Load URL",
-                "Http Endpoint",
-            ],
-            _ => [keyword],
-        };
+    private static ImmutableArray<string> Aliases(string keyword) =>
+        DotRocksConnectionStringKeywords.Aliases(keyword);
 }
