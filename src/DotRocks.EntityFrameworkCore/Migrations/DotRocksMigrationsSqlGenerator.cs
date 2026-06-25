@@ -404,25 +404,19 @@ internal sealed class DotRocksMigrationsSqlGenerator(
     private static string GetKeyClause(CreateTableOperation operation)
     {
         object? value = operation.FindAnnotation(DotRocksAnnotationNames.KeyModel)?.Value;
-        return value switch
+        if (value is null)
         {
-            null => "DUPLICATE KEY",
-            DotRocksTableKeyModel.DuplicateKey => "DUPLICATE KEY",
-            DotRocksTableKeyModel.PrimaryKey => "PRIMARY KEY",
-            DotRocksTableKeyModel.UniqueKey => "UNIQUE KEY",
-            string text
-                when string.Equals(text, "DUPLICATE KEY", StringComparison.OrdinalIgnoreCase) =>
-                "DUPLICATE KEY",
-            string text
-                when string.Equals(text, "PRIMARY KEY", StringComparison.OrdinalIgnoreCase) =>
-                "PRIMARY KEY",
-            string text
-                when string.Equals(text, "UNIQUE KEY", StringComparison.OrdinalIgnoreCase) =>
-                "UNIQUE KEY",
-            _ => throw new NotSupportedException(
-                $"DotRocks EF Core migrations do not support StarRocks table key model '{value}'."
-            ),
-        };
+            return "DUPLICATE KEY";
+        }
+
+        if (DotRocksTableKeyModels.TryParse(value, out DotRocksTableKeyModel keyModel))
+        {
+            return DotRocksTableKeyModels.ToKeyClause(keyModel);
+        }
+
+        throw new NotSupportedException(
+            $"DotRocks EF Core migrations do not support StarRocks table key model '{value}'."
+        );
     }
 
     private static string[] GetColumnListAnnotation(
