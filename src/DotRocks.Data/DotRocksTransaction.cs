@@ -33,7 +33,8 @@ public sealed class DotRocksTransaction : DbTransaction
     internal bool IsCompleted => _isCompleted;
 
     /// <inheritdoc />
-    public override void Commit() => CommitAsync(CancellationToken.None).GetAwaiter().GetResult();
+    public override void Commit() =>
+        CommitAsync(CancellationToken.None).ConfigureAwait(false).GetAwaiter().GetResult();
 
     /// <inheritdoc />
     public override async Task CommitAsync(CancellationToken cancellationToken = default)
@@ -48,7 +49,7 @@ public sealed class DotRocksTransaction : DbTransaction
 
     /// <inheritdoc />
     public override void Rollback() =>
-        RollbackAsync(CancellationToken.None).GetAwaiter().GetResult();
+        RollbackAsync(CancellationToken.None).ConfigureAwait(false).GetAwaiter().GetResult();
 
     /// <inheritdoc />
     public override async Task RollbackAsync(CancellationToken cancellationToken = default)

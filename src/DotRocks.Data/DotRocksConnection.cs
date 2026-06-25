@@ -65,7 +65,9 @@ public sealed class DotRocksConnection : DbConnection
     [AllowNull]
     public override string ConnectionString
     {
-        get => _options.ConnectionString;
+        // Never return the password from the getter (ADO PersistSecurityInfo=false convention), so
+        // logging or echoing ConnectionString cannot leak the secret.
+        get => _options.ToRedactedConnectionString();
         set
         {
             if (_state != ConnectionState.Closed)
@@ -143,7 +145,8 @@ public sealed class DotRocksConnection : DbConnection
     }
 
     /// <inheritdoc />
-    public override void Open() => OpenAsync(CancellationToken.None).GetAwaiter().GetResult();
+    public override void Open() =>
+        OpenAsync(CancellationToken.None).ConfigureAwait(false).GetAwaiter().GetResult();
 
     /// <inheritdoc />
     public override async Task OpenAsync(CancellationToken cancellationToken)
@@ -460,7 +463,11 @@ public sealed class DotRocksConnection : DbConnection
     }
 
     internal void RollbackTransactionForDispose(DotRocksTransaction transaction) =>
-        RollbackTransactionForDisposeAsync(transaction).AsTask().GetAwaiter().GetResult();
+        RollbackTransactionForDisposeAsync(transaction)
+            .AsTask()
+            .ConfigureAwait(false)
+            .GetAwaiter()
+            .GetResult();
 
     internal async ValueTask RollbackTransactionForDisposeAsync(DotRocksTransaction transaction)
     {

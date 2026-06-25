@@ -105,7 +105,7 @@ public sealed class DotRocksBatch : DbBatch
 
     /// <inheritdoc />
     public override int ExecuteNonQuery() =>
-        ExecuteNonQueryAsync(CancellationToken.None).GetAwaiter().GetResult();
+        ExecuteNonQueryAsync(CancellationToken.None).ConfigureAwait(false).GetAwaiter().GetResult();
 
     /// <inheritdoc />
     public override async Task<int> ExecuteNonQueryAsync(
@@ -128,7 +128,7 @@ public sealed class DotRocksBatch : DbBatch
 
     /// <inheritdoc />
     public override object? ExecuteScalar() =>
-        ExecuteScalarAsync(CancellationToken.None).GetAwaiter().GetResult();
+        ExecuteScalarAsync(CancellationToken.None).ConfigureAwait(false).GetAwaiter().GetResult();
 
     /// <inheritdoc />
     public override async Task<object?> ExecuteScalarAsync(
@@ -153,7 +153,10 @@ public sealed class DotRocksBatch : DbBatch
 
     /// <inheritdoc />
     protected override DbDataReader ExecuteDbDataReader(CommandBehavior behavior) =>
-        ExecuteDbDataReaderAsync(behavior, CancellationToken.None).GetAwaiter().GetResult();
+        ExecuteDbDataReaderAsync(behavior, CancellationToken.None)
+            .ConfigureAwait(false)
+            .GetAwaiter()
+            .GetResult();
 
     /// <inheritdoc />
     protected override async Task<DbDataReader> ExecuteDbDataReaderAsync(

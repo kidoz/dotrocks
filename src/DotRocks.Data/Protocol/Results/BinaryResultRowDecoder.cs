@@ -88,22 +88,43 @@ internal static class BinaryResultRowDecoder
         int year = (int)reader.ReadFixedInteger(2);
         int month = reader.ReadByte();
         int day = reader.ReadByte();
-        if (length == 4)
+        int hour = 0;
+        int minute = 0;
+        int second = 0;
+        long microseconds = 0;
+        if (length >= 7)
         {
-            return new DateTime(year, month, day, 0, 0, 0, DateTimeKind.Unspecified);
+            hour = reader.ReadByte();
+            minute = reader.ReadByte();
+            second = reader.ReadByte();
         }
 
-        int hour = reader.ReadByte();
-        int minute = reader.ReadByte();
-        int second = reader.ReadByte();
-        var value = new DateTime(year, month, day, hour, minute, second, DateTimeKind.Unspecified);
         if (length >= 11)
         {
-            uint microseconds = (uint)reader.ReadFixedInteger(4);
-            value = value.AddTicks(microseconds * (TimeSpan.TicksPerMillisecond / 1000));
+            microseconds = (uint)reader.ReadFixedInteger(4);
         }
 
-        return value;
+        // A hostile or buggy server may send out-of-range components; surface that as a controlled
+        // protocol error rather than letting the DateTime constructor throw an uncontrolled one.
+        try
+        {
+            return new DateTime(
+                year,
+                month,
+                day,
+                hour,
+                minute,
+                second,
+                DateTimeKind.Unspecified
+            ).AddTicks(microseconds * (TimeSpan.TicksPerMillisecond / 1000));
+        }
+        catch (ArgumentOutOfRangeException ex)
+        {
+            throw new MalformedPacketException(
+                "Binary DATETIME value has out-of-range date or time components.",
+                ex
+            );
+        }
     }
 
     private static TimeSpan DecodeTime(ref ProtocolReader reader)
@@ -115,15 +136,30 @@ internal static class BinaryResultRowDecoder
         }
 
         bool negative = reader.ReadByte() != 0;
-        int days = (int)(uint)reader.ReadFixedInteger(4);
+        uint days = (uint)reader.ReadFixedInteger(4);
         int hours = reader.ReadByte();
         int minutes = reader.ReadByte();
         int seconds = reader.ReadByte();
-        long microseconds = length >= 12 ? (long)(uint)reader.ReadFixedInteger(4) : 0;
+        long microseconds = length >= 12 ? (uint)reader.ReadFixedInteger(4) : 0;
 
-        var value =
-            new TimeSpan(days, hours, minutes, seconds)
-            + TimeSpan.FromTicks(microseconds * (TimeSpan.TicksPerMillisecond / 1000));
-        return negative ? -value : value;
+        // Reject a duration that cannot fit in a TimeSpan rather than overflowing silently.
+        if (days > TimeSpan.MaxValue.Days)
+        {
+            throw new MalformedPacketException(
+                $"Binary TIME value of {days} day(s) exceeds the supported duration."
+            );
+        }
+
+        try
+        {
+            TimeSpan value =
+                new TimeSpan((int)days, hours, minutes, seconds)
+                + TimeSpan.FromTicks(microseconds * (TimeSpan.TicksPerMillisecond / 1000));
+            return negative ? -value : value;
+        }
+        catch (ArgumentOutOfRangeException ex)
+        {
+            throw new MalformedPacketException("Binary TIME value is out of range.", ex);
+        }
     }
 }

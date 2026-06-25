@@ -400,6 +400,10 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
             }
 
             uint statementId = (uint)protocolReader.ReadFixedInteger(4);
+
+            // The counts are 2-byte wire fields, so each is inherently bounded to 65535; the
+            // definition-consume loops below also honor the cancellation token (command timeout) on
+            // every packet read, so a hostile count cannot cause an unbounded stall.
             int columnCount = (int)protocolReader.ReadFixedInteger(2);
             int parameterCount = (int)protocolReader.ReadFixedInteger(2);
 
@@ -835,7 +839,7 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
         _isDisposed = true;
 
         // The session ends when the socket closes, so the server drops every prepared statement;
-        // just release the cache without sending per-statement COM_STMT_CLOSE packets.
+        // release the cache without sending per-statement COM_STMT_CLOSE packets.
         _preparedStatements.Clear();
         _preparedStatementOrder.Clear();
         _stream.Dispose();

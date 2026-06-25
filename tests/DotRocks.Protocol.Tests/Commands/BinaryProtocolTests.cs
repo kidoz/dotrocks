@@ -1,6 +1,7 @@
 using System.Text;
 using DotRocks.Data.Protocol.Commands;
 using DotRocks.Data.Protocol.Results;
+using DotRocks.Data.Protocol.Serialization;
 using Xunit;
 
 namespace DotRocks.Protocol.Tests.Commands;
@@ -69,6 +70,39 @@ public sealed class BinaryProtocolTests
         Assert.Equal(42L, values[0]);
         Assert.Equal("hi", values[1]);
         Assert.Null(values[2]);
+    }
+
+    [Fact]
+    public void Decode_DateTimeWithOutOfRangeComponents_ThrowsMalformedPacket()
+    {
+        ColumnDefinition dateTimeColumn = Column(0x0C); // DATETIME
+
+        var row = new List<byte> { 0x00, 0x00 }; // header + 1-column NULL bitmap (nothing null)
+        row.Add(0x07); // value length: date + time, no microseconds
+        row.AddRange([0xE8, 0x07]); // year 2024
+        row.Add(0x0D); // month 13 -> invalid
+        row.Add(0x01); // day
+        row.AddRange([0x00, 0x00, 0x00]); // hour, minute, second
+
+        Assert.Throws<MalformedPacketException>(() =>
+            BinaryResultRowDecoder.Decode(row.ToArray(), [dateTimeColumn])
+        );
+    }
+
+    [Fact]
+    public void Decode_TimeExceedingMaxDuration_ThrowsMalformedPacket()
+    {
+        ColumnDefinition timeColumn = Column(0x0B); // TIME
+
+        var row = new List<byte> { 0x00, 0x00 }; // header + 1-column NULL bitmap
+        row.Add(0x08); // value length: sign + days + hms
+        row.Add(0x00); // not negative
+        row.AddRange([0xFF, 0xFF, 0xFF, 0xFF]); // days far beyond TimeSpan.MaxValue
+        row.AddRange([0x00, 0x00, 0x00]); // hours, minutes, seconds
+
+        Assert.Throws<MalformedPacketException>(() =>
+            BinaryResultRowDecoder.Decode(row.ToArray(), [timeColumn])
+        );
     }
 
     private static ColumnDefinition Column(byte type) =>

@@ -218,6 +218,32 @@ internal sealed record DotRocksConnectionOptions(
             (int)ConnectionLifetime.TotalSeconds
         );
 
+    // The public ADO.NET ConnectionString getter must not return the password (the ODBC/ADO
+    // PersistSecurityInfo=false convention): the password is omitted entirely so logging the getter
+    // cannot leak the secret. The full credentialed string remains internal for pool keying.
+    public string ToRedactedConnectionString() =>
+        BuildConnectionString(
+            Server,
+            Port,
+            UserId,
+            string.Empty,
+            Database,
+            (int)ConnectionTimeout.TotalSeconds,
+            Pooling,
+            MinimumPoolSize,
+            MaximumPoolSize,
+            (int)ConnectionIdleTimeout.TotalSeconds,
+            SslMode,
+            TrustServerCertificate,
+            SslRevocationMode,
+            StreamLoadEndpoint,
+            AllowInsecureStreamLoad,
+            MaxConnectionRetries,
+            (int)ConnectionRetryDelay.TotalMilliseconds,
+            ServerCompatibilityLevel,
+            (int)ConnectionLifetime.TotalSeconds
+        );
+
     internal DotRocksConnectionPoolKey CreatePoolKey() =>
         new(
             Server,

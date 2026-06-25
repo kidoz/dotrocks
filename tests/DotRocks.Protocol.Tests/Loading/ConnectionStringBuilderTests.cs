@@ -29,6 +29,24 @@ public sealed class ConnectionStringBuilderTests
     }
 
     [Fact]
+    public void Connection_ConnectionStringGetter_OmitsPassword()
+    {
+        using var connection = new DotRocksConnection(
+            "Server=h;User ID=alice;Password=topsecret;Database=db"
+        );
+
+        // The ADO ConnectionString getter follows PersistSecurityInfo=false: the password is
+        // omitted entirely (not even masked), so logging or echoing it cannot leak the secret.
+        string roundTripped = connection.ConnectionString;
+
+        Assert.DoesNotContain("topsecret", roundTripped, StringComparison.Ordinal);
+        Assert.DoesNotContain("Password", roundTripped, StringComparison.OrdinalIgnoreCase);
+        // Non-secret settings survive the round trip so the getter stays useful for diagnostics.
+        Assert.Contains("alice", roundTripped, StringComparison.Ordinal);
+        Assert.Contains("db", roundTripped, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ConnectionOptions_ToString_RedactsPasswordAndConnectionString()
     {
         DotRocksConnectionOptions options = DotRocksConnectionOptions.Parse(

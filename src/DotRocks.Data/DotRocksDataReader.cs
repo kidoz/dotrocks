@@ -434,7 +434,10 @@ public sealed class DotRocksDataReader
             return true;
         }
 
-        return ReadStreamingRowAsync(CancellationToken.None).GetAwaiter().GetResult();
+        return ReadStreamingRowAsync(CancellationToken.None)
+            .ConfigureAwait(false)
+            .GetAwaiter()
+            .GetResult();
     }
 
     /// <inheritdoc />
@@ -534,7 +537,10 @@ public sealed class DotRocksDataReader
             return true;
         }
 
-        _prefetchedRow = FetchStreamingRowAsync(CancellationToken.None).GetAwaiter().GetResult();
+        _prefetchedRow = FetchStreamingRowAsync(CancellationToken.None)
+            .ConfigureAwait(false)
+            .GetAwaiter()
+            .GetResult();
         _hasPrefetchedRow = _prefetchedRow is not null;
         return _hasPrefetchedRow;
     }
