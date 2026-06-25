@@ -985,9 +985,9 @@ public sealed class DotRocksUsageAnalyzerTests
             new MultiRowSaveChangesAnalyzer(),
             new EfCompositePrimaryKeyAnalyzer(),
         ];
-        CompilationWithAnalyzers compilationWithAnalyzers = compilation.WithAnalyzers(
-            ImmutableArray.Create(analyzers)
-        );
+        CompilationWithAnalyzers compilationWithAnalyzers = compilation.WithAnalyzers([
+            .. analyzers,
+        ]);
         ImmutableArray<Diagnostic> diagnostics = await compilationWithAnalyzers
             .GetAnalyzerDiagnosticsAsync()
             .ConfigureAwait(true);
@@ -1020,7 +1020,7 @@ public sealed class DotRocksUsageAnalyzerTests
             .ConfigureAwait(true);
         Assert.NotNull(compilation);
         ImmutableArray<Diagnostic> diagnostics = await compilation!
-            .WithAnalyzers(ImmutableArray.Create(analyzer))
+            .WithAnalyzers([analyzer])
             .GetAnalyzerDiagnosticsAsync()
             .ConfigureAwait(true);
         Diagnostic diagnostic = Assert.Single(diagnostics);

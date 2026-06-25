@@ -33,10 +33,10 @@ public sealed class UnsupportedEfApiAnalyzer : DiagnosticAnalyzer
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
-        ImmutableArray.Create(
-            DotRocksDiagnosticDescriptors.UnsupportedDatabaseCreator,
-            DotRocksDiagnosticDescriptors.UnsupportedBulkDml
-        );
+    [
+        DotRocksDiagnosticDescriptors.UnsupportedDatabaseCreator,
+        DotRocksDiagnosticDescriptors.UnsupportedBulkDml,
+    ];
 
     /// <inheritdoc />
     public override void Initialize(AnalysisContext context)

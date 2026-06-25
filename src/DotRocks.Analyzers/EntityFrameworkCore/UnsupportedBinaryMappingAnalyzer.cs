@@ -15,7 +15,7 @@ public sealed class UnsupportedBinaryMappingAnalyzer : DiagnosticAnalyzer
 {
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
-        ImmutableArray.Create(DotRocksDiagnosticDescriptors.UnsupportedBinaryMapping);
+    [DotRocksDiagnosticDescriptors.UnsupportedBinaryMapping];
 
     /// <inheritdoc />
     public override void Initialize(AnalysisContext context)

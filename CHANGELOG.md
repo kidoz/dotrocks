@@ -9,6 +9,10 @@ version is derived from the release tag at publish time.
 ## [Unreleased]
 
 ### Added
+- Advanced StarRocks table-model fluent APIs for EF Core migrations: `DistributedRandomly(buckets)`
+  (`DISTRIBUTED BY RANDOM`), `HasSortKey(columns)` (`ORDER BY`), and
+  `HasStarRocksProperty(name, value)` (additional `PROPERTIES`, validated against quote injection).
+  Verified end to end against StarRocks 4.0.7.
 - EF Core query translators for `DateTime`/`DateOnly` members (`Year`, `Month`, `Day`, `Hour`,
   `Minute`, `Second`, `DayOfYear`, `Date`), `Add…` methods (`days_add` / `months_add` / …), and
   `Math` methods (`Abs`, `Ceiling`, `Floor`, `Round`, `Round(x, n)`, `Pow`, `Sqrt`, `Exp`, `Log`,

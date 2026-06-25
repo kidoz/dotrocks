@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Migrations.Operations;
 using Microsoft.EntityFrameworkCore.Storage;
 using Xunit;
 
@@ -32,6 +33,7 @@ public sealed class DotRocksEfCoreIntegrationTests
     private const string UnsupportedDownMigrationWidgetTableName = "ef_unsupported_down_widgets";
     private const string UnsupportedDownMigrationId = "202606200004_UnsupportedDownMigration";
     private static readonly string[] IdStoreColumn = ["id"];
+    private static readonly string[] NameStoreColumn = ["name"];
 
     [Fact]
     public void UseStarRocks_ConfiguresProviderName()
@@ -283,6 +285,107 @@ public sealed class DotRocksEfCoreIntegrationTests
         finally
         {
             await DropWidgetTableAsync(context).ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
+    [SuppressMessage(
+        "Security",
+        "EF1003:Method inserts concatenated strings directly into the SQL",
+        Justification = "The cleanup and generated DDL is assembled only from fixed sanitized identifiers."
+    )]
+    public async Task AdvancedTableShape_RandomDistributionSortKeyAndProperties_CreatesTable()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
+        }
+
+        const string tableName = "ef_advanced_shape";
+        await using var context = CreateLiveContext();
+        await EnsureLinqDatabaseAsync(context).ConfigureAwait(true);
+        await context
+            .Database.ExecuteSqlRawAsync(
+                "DROP TABLE IF EXISTS "
+                    + DelimitIdentifier(LinqDatabaseName)
+                    + "."
+                    + DelimitIdentifier(tableName),
+                TestContext.Current.CancellationToken
+            )
+            .ConfigureAwait(true);
+
+        var operation = new CreateTableOperation { Name = tableName, Schema = LinqDatabaseName };
+        operation.Columns.Add(
+            new AddColumnOperation
+            {
+                Name = "id",
+                Table = tableName,
+                Schema = LinqDatabaseName,
+                ClrType = typeof(int),
+                ColumnType = "int",
+                IsNullable = false,
+            }
+        );
+        operation.Columns.Add(
+            new AddColumnOperation
+            {
+                Name = "name",
+                Table = tableName,
+                Schema = LinqDatabaseName,
+                ClrType = typeof(string),
+                ColumnType = "varchar(64)",
+                IsNullable = false,
+            }
+        );
+        operation.PrimaryKey = new AddPrimaryKeyOperation { Columns = IdStoreColumn };
+        operation.AddAnnotation("DotRocks:KeyModel", DotRocksTableKeyModel.DuplicateKey);
+        operation.AddAnnotation("DotRocks:KeyColumns", IdStoreColumn);
+        operation.AddAnnotation("DotRocks:RandomDistribution", true);
+        operation.AddAnnotation("DotRocks:DistributionBuckets", 3);
+        operation.AddAnnotation("DotRocks:SortKeyColumns", NameStoreColumn);
+        operation.AddAnnotation(
+            "DotRocks:Properties",
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["bloom_filter_columns"] = "name",
+            }
+        );
+
+        var generator = context.GetService<IMigrationsSqlGenerator>();
+        try
+        {
+            foreach (
+                Microsoft.EntityFrameworkCore.Migrations.MigrationCommand command in generator.Generate(
+                    [operation],
+                    model: null
+                )
+            )
+            {
+                await context
+                    .Database.ExecuteSqlRawAsync(
+                        command.CommandText,
+                        TestContext.Current.CancellationToken
+                    )
+                    .ConfigureAwait(true);
+            }
+
+            Assert.True(
+                await TableExistsAsync(context, LinqDatabaseName, tableName).ConfigureAwait(true)
+            );
+        }
+        finally
+        {
+            await context
+                .Database.ExecuteSqlRawAsync(
+                    "DROP TABLE IF EXISTS "
+                        + DelimitIdentifier(LinqDatabaseName)
+                        + "."
+                        + DelimitIdentifier(tableName),
+                    TestContext.Current.CancellationToken
+                )
+                .ConfigureAwait(true);
         }
     }
 

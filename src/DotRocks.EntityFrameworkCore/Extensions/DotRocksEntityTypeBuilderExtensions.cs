@@ -88,6 +88,83 @@ public static class DotRocksEntityTypeBuilderExtensions
         return entityTypeBuilder;
     }
 
+    /// <summary>
+    /// Configures StarRocks random distribution (<c>DISTRIBUTED BY RANDOM</c>) for migrations
+    /// generated for this entity, instead of hash distribution.
+    /// </summary>
+    /// <param name="entityTypeBuilder">The entity type builder.</param>
+    /// <param name="buckets">The positive bucket count for the <c>DISTRIBUTED BY RANDOM</c> clause.</param>
+    /// <returns>The same builder so calls can be chained.</returns>
+    public static EntityTypeBuilder DistributedRandomly(
+        this EntityTypeBuilder entityTypeBuilder,
+        int buckets
+    )
+    {
+        ArgumentNullException.ThrowIfNull(entityTypeBuilder);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(buckets);
+        entityTypeBuilder.Metadata.SetAnnotation(DotRocksAnnotationNames.RandomDistribution, true);
+        entityTypeBuilder.Metadata.SetAnnotation(
+            DotRocksAnnotationNames.DistributionBuckets,
+            buckets
+        );
+        entityTypeBuilder.Metadata.RemoveAnnotation(DotRocksAnnotationNames.DistributionColumns);
+        return entityTypeBuilder;
+    }
+
+    /// <summary>
+    /// Configures the StarRocks sort key (<c>ORDER BY</c>) for migrations generated for this entity.
+    /// </summary>
+    /// <param name="entityTypeBuilder">The entity type builder.</param>
+    /// <param name="columns">The sort-key columns to emit in the StarRocks <c>ORDER BY</c> clause.</param>
+    /// <returns>The same builder so calls can be chained.</returns>
+    public static EntityTypeBuilder HasSortKey(
+        this EntityTypeBuilder entityTypeBuilder,
+        params string[] columns
+    )
+    {
+        ArgumentNullException.ThrowIfNull(entityTypeBuilder);
+        entityTypeBuilder.Metadata.SetAnnotation(
+            DotRocksAnnotationNames.SortKeyColumns,
+            ValidateColumns(columns)
+        );
+        return entityTypeBuilder;
+    }
+
+    /// <summary>
+    /// Adds a StarRocks table property (a <c>PROPERTIES</c> entry) for migrations generated for this
+    /// entity. Names and values are validated and quote-escaped.
+    /// </summary>
+    /// <param name="entityTypeBuilder">The entity type builder.</param>
+    /// <param name="name">The property name.</param>
+    /// <param name="value">The property value.</param>
+    /// <returns>The same builder so calls can be chained.</returns>
+    public static EntityTypeBuilder HasStarRocksProperty(
+        this EntityTypeBuilder entityTypeBuilder,
+        string name,
+        string value
+    )
+    {
+        ArgumentNullException.ThrowIfNull(entityTypeBuilder);
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentNullException.ThrowIfNull(value);
+
+        var properties = new SortedDictionary<string, string>(StringComparer.Ordinal);
+        if (
+            entityTypeBuilder.Metadata.FindAnnotation(DotRocksAnnotationNames.Properties)?.Value
+            is IReadOnlyDictionary<string, string> existing
+        )
+        {
+            foreach (KeyValuePair<string, string> entry in existing)
+            {
+                properties[entry.Key] = entry.Value;
+            }
+        }
+
+        properties[name] = value;
+        entityTypeBuilder.Metadata.SetAnnotation(DotRocksAnnotationNames.Properties, properties);
+        return entityTypeBuilder;
+    }
+
     private static EntityTypeBuilder SetKeyModel(
         EntityTypeBuilder entityTypeBuilder,
         DotRocksTableKeyModel keyModel,

@@ -36,18 +36,34 @@ internal sealed class DotRocksMigrationsSqlGenerator(
             operation.PrimaryKey.Columns,
             "table key"
         );
-        string[] distributionColumns = GetColumnListAnnotation(
-            operation,
-            DotRocksAnnotationNames.DistributionColumns,
-            keyColumns,
-            "hash distribution"
-        );
+        bool randomDistribution =
+            operation.FindAnnotation(DotRocksAnnotationNames.RandomDistribution)?.Value is true;
+        string[] distributionColumns = randomDistribution
+            ? []
+            : GetColumnListAnnotation(
+                operation,
+                DotRocksAnnotationNames.DistributionColumns,
+                keyColumns,
+                "hash distribution"
+            );
         int distributionBuckets = GetPositiveIntAnnotation(
             operation,
             DotRocksAnnotationNames.DistributionBuckets,
             1,
-            "hash distribution bucket count"
+            "distribution bucket count"
         );
+        // The sort key is optional, so read it directly rather than via the required-list helper.
+        string[] sortKeyColumns = operation
+            .FindAnnotation(DotRocksAnnotationNames.SortKeyColumns)
+            ?.Value switch
+        {
+            null => [],
+            string[] array => array,
+            IReadOnlyList<string> list => [.. list],
+            _ => throw new NotSupportedException(
+                "DotRocks EF Core migrations require sort key columns to be configured as string column names."
+            ),
+        };
         int replicationNum = GetPositiveIntAnnotation(
             operation,
             DotRocksAnnotationNames.ReplicationNum,
@@ -57,6 +73,7 @@ internal sealed class DotRocksMigrationsSqlGenerator(
         string keyClause = GetKeyClause(operation);
 
         ValidateColumnsExist(operation, keyColumns, "table key");
+        ValidateColumnsExist(operation, sortKeyColumns, "sort key");
         ValidateColumnsExist(operation, distributionColumns, "hash distribution");
         ValidateKeyColumnTypes(operation, keyColumns);
 
@@ -80,16 +97,27 @@ internal sealed class DotRocksMigrationsSqlGenerator(
         builder.Append(") ").Append(keyClause).Append("(");
         AppendDelimitedColumnList(builder, keyColumns);
         builder.AppendLine(")");
-        builder.Append("DISTRIBUTED BY HASH(");
-        AppendDelimitedColumnList(builder, distributionColumns);
-        builder
-            .Append(") BUCKETS ")
-            .Append(distributionBuckets.ToString(CultureInfo.InvariantCulture))
-            .AppendLine();
-        builder
-            .Append("PROPERTIES ('replication_num' = '")
-            .Append(replicationNum.ToString(CultureInfo.InvariantCulture))
-            .Append("')");
+        if (randomDistribution)
+        {
+            builder.Append("DISTRIBUTED BY RANDOM BUCKETS ");
+        }
+        else
+        {
+            builder.Append("DISTRIBUTED BY HASH(");
+            AppendDelimitedColumnList(builder, distributionColumns);
+            builder.Append(") BUCKETS ");
+        }
+
+        builder.Append(distributionBuckets.ToString(CultureInfo.InvariantCulture)).AppendLine();
+
+        if (sortKeyColumns.Length > 0)
+        {
+            builder.Append("ORDER BY (");
+            AppendDelimitedColumnList(builder, sortKeyColumns);
+            builder.AppendLine(")");
+        }
+
+        AppendProperties(builder, operation, replicationNum);
 
         if (terminate)
         {
@@ -273,6 +301,64 @@ internal sealed class DotRocksMigrationsSqlGenerator(
     )
     {
         throw CreateUnsupportedMigrationOperationException("ADD FOREIGN KEY");
+    }
+
+    private static void AppendProperties(
+        MigrationCommandListBuilder builder,
+        CreateTableOperation operation,
+        int replicationNum
+    )
+    {
+        var properties = new SortedDictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["replication_num"] = replicationNum.ToString(CultureInfo.InvariantCulture),
+        };
+
+        if (
+            operation.FindAnnotation(DotRocksAnnotationNames.Properties)?.Value
+            is IReadOnlyDictionary<string, string> custom
+        )
+        {
+            foreach (KeyValuePair<string, string> entry in custom)
+            {
+                if (
+                    string.IsNullOrWhiteSpace(entry.Key)
+                    || entry.Key.Contains('\'', StringComparison.Ordinal)
+                    || entry.Value.Contains('\'', StringComparison.Ordinal)
+                )
+                {
+                    throw new NotSupportedException(
+                        $"DotRocks EF Core migrations reject the StarRocks table property '{entry.Key}'; names and values must not be empty or contain a single quote."
+                    );
+                }
+
+                // replication_num is taken from HasStarRocksReplicationNum; a duplicate is ignored.
+                if (!string.Equals(entry.Key, "replication_num", StringComparison.Ordinal))
+                {
+                    properties[entry.Key] = entry.Value;
+                }
+            }
+        }
+
+        builder.Append("PROPERTIES (");
+        bool first = true;
+        foreach (KeyValuePair<string, string> property in properties)
+        {
+            if (!first)
+            {
+                builder.Append(", ");
+            }
+
+            first = false;
+            builder
+                .Append("'")
+                .Append(property.Key)
+                .Append("' = '")
+                .Append(property.Value)
+                .Append("'");
+        }
+
+        builder.Append(")");
     }
 
     private void AppendDelimitedColumnList(MigrationCommandListBuilder builder, string[] columns)

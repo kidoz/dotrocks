@@ -370,9 +370,9 @@ public sealed class DotRocksDriverSecurityAnalyzerTests
             new SyncOverAsyncAnalyzer(),
             new LiteralPasswordAnalyzer(),
         ];
-        CompilationWithAnalyzers compilationWithAnalyzers = compilation.WithAnalyzers(
-            ImmutableArray.Create(analyzers)
-        );
+        CompilationWithAnalyzers compilationWithAnalyzers = compilation.WithAnalyzers([
+            .. analyzers,
+        ]);
         ImmutableArray<Diagnostic> diagnostics = await compilationWithAnalyzers
             .GetAnalyzerDiagnosticsAsync()
             .ConfigureAwait(true);

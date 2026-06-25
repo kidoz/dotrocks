@@ -17,7 +17,7 @@ public sealed class EfCompositePrimaryKeyAnalyzer : DiagnosticAnalyzer
 {
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
-        ImmutableArray.Create(DotRocksDiagnosticDescriptors.CompositePrimaryKey);
+    [DotRocksDiagnosticDescriptors.CompositePrimaryKey];
 
     /// <inheritdoc />
     public override void Initialize(AnalysisContext context)

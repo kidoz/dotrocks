@@ -21,7 +21,7 @@ public sealed class InsecureStreamLoadEndpointCodeFixProvider : CodeFixProvider
 {
     /// <inheritdoc />
     public override ImmutableArray<string> FixableDiagnosticIds { get; } =
-        ImmutableArray.Create(DotRocksDiagnosticDescriptors.InsecureStreamLoadEndpointDiagnosticId);
+    [DotRocksDiagnosticDescriptors.InsecureStreamLoadEndpointDiagnosticId];
 
     /// <inheritdoc />
     public override FixAllProvider? GetFixAllProvider() => WellKnownFixAllProviders.BatchFixer;

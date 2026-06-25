@@ -17,7 +17,7 @@ public sealed class LiteralPasswordAnalyzer : DiagnosticAnalyzer
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
-        ImmutableArray.Create(DotRocksDiagnosticDescriptors.LiteralPassword);
+    [DotRocksDiagnosticDescriptors.LiteralPassword];
 
     /// <inheritdoc />
     public override void Initialize(AnalysisContext context)

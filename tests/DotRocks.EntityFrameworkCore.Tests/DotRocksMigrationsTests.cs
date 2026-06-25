@@ -36,6 +36,68 @@ public sealed class DotRocksMigrationsTests
     }
 
     [Fact]
+    public void Generate_CreateTableWithRandomDistribution_ProducesRandomBucketsSql()
+    {
+        using var context = CreateContext();
+        var generator = context.GetService<IMigrationsSqlGenerator>();
+        CreateTableOperation operation = CreateWidgetsTable();
+        operation.AddAnnotation("DotRocks:RandomDistribution", true);
+        operation.AddAnnotation("DotRocks:DistributionBuckets", 3);
+
+        string sql = GenerateSql(generator, operation);
+
+        Assert.Contains("DISTRIBUTED BY RANDOM BUCKETS 3", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("DISTRIBUTED BY HASH", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Generate_CreateTableWithSortKey_ProducesOrderByClause()
+    {
+        using var context = CreateContext();
+        var generator = context.GetService<IMigrationsSqlGenerator>();
+        CreateTableOperation operation = CreateWidgetsTable();
+        operation.AddAnnotation("DotRocks:SortKeyColumns", NameColumn);
+
+        string sql = GenerateSql(generator, operation);
+
+        Assert.Contains("ORDER BY (`name`)", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Generate_CreateTableWithProperty_MergesIntoPropertiesClause()
+    {
+        using var context = CreateContext();
+        var generator = context.GetService<IMigrationsSqlGenerator>();
+        CreateTableOperation operation = CreateWidgetsTable();
+        operation.AddAnnotation(
+            "DotRocks:Properties",
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["bloom_filter_columns"] = "name",
+            }
+        );
+
+        string sql = GenerateSql(generator, operation);
+
+        Assert.Contains("'bloom_filter_columns' = 'name'", sql, StringComparison.Ordinal);
+        Assert.Contains("'replication_num' = '1'", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Generate_CreateTableWithInjectingProperty_Throws()
+    {
+        using var context = CreateContext();
+        var generator = context.GetService<IMigrationsSqlGenerator>();
+        CreateTableOperation operation = CreateWidgetsTable();
+        operation.AddAnnotation(
+            "DotRocks:Properties",
+            new Dictionary<string, string>(StringComparer.Ordinal) { ["x"] = "a' DROP" }
+        );
+
+        Assert.Throws<NotSupportedException>(() => GenerateSql(generator, operation));
+    }
+
+    [Fact]
     public void Generate_CreateTableWithPrimaryKeyShape_ProducesPrimaryKeyTableSql()
     {
         using var context = CreateContext();
