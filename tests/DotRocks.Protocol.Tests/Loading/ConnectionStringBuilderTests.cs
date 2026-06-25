@@ -280,6 +280,50 @@ public sealed class ConnectionStringBuilderTests
         );
     }
 
+    [Fact]
+    public void StreamLoadEndpoint_DefaultFollowsServerUntilExplicitEndpointConfigured()
+    {
+        var builder = new DotRocksConnectionStringBuilder();
+
+        Assert.Equal("http://127.0.0.1:8030/", builder.StreamLoadEndpoint);
+
+        builder.Server = "fe.starrocks.local";
+
+        Assert.Equal("http://fe.starrocks.local:8030/", builder.StreamLoadEndpoint);
+
+        builder.StreamLoadEndpoint = "https://load.starrocks.local:8443";
+        builder.Server = "other-fe.starrocks.local";
+
+        Assert.Equal("https://load.starrocks.local:8443/", builder.StreamLoadEndpoint);
+    }
+
+    [Fact]
+    public void Parse_StreamLoadEndpointAliases_RoundTripThroughCanonicalConnectionString()
+    {
+        DotRocksConnectionOptions options = DotRocksConnectionOptions.Parse(
+            "Host=starrocks.local;Http Endpoint=https://load.starrocks.local:8443;AllowInsecureStreamLoad=true"
+        );
+
+        DotRocksConnectionOptions reparsed = DotRocksConnectionOptions.Parse(
+            options.ConnectionString
+        );
+
+        Assert.Equal(new Uri("https://load.starrocks.local:8443/"), options.StreamLoadEndpoint);
+        Assert.True(options.AllowInsecureStreamLoad);
+        Assert.Equal(options.StreamLoadEndpoint, reparsed.StreamLoadEndpoint);
+        Assert.Equal(options.AllowInsecureStreamLoad, reparsed.AllowInsecureStreamLoad);
+        Assert.Contains(
+            "Stream Load Endpoint=https://load.starrocks.local:8443/",
+            options.ConnectionString,
+            StringComparison.Ordinal
+        );
+        Assert.Contains(
+            "Allow Insecure Stream Load=True",
+            options.ConnectionString,
+            StringComparison.Ordinal
+        );
+    }
+
     [Theory]
     [InlineData("ftp://starrocks.local:8030")]
     [InlineData("http://alice@starrocks.local:8030")]
@@ -288,6 +332,16 @@ public sealed class ConnectionStringBuilderTests
         var builder = new DotRocksConnectionStringBuilder();
 
         Assert.Throws<ArgumentException>(() => builder.StreamLoadEndpoint = endpoint);
+    }
+
+    [Theory]
+    [InlineData("ftp://starrocks.local:8030")]
+    [InlineData("http://alice@starrocks.local:8030")]
+    public void Parse_InvalidStreamLoadEndpoint_Throws(string endpoint)
+    {
+        Assert.Throws<ArgumentException>(() =>
+            DotRocksConnectionOptions.Parse($"Stream Load Endpoint={endpoint}")
+        );
     }
 
     [Fact]
