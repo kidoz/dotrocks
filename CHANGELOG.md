@@ -12,6 +12,10 @@ version is derived from the release tag at publish time.
 - A protocol fuzz harness with a regression corpus that feeds random and adversarial bytes to the
   handshake, OK/error packet, and length-encoded readers, asserting they fail only with a
   controlled `MalformedPacketException`/`DotRocksException` and never an uncontrolled crash.
+- A parameter-tokenizer fuzz harness that feeds adversarial command text (unbalanced quotes,
+  comments, dangling placeholders) and diverse CLR values to the binder and literal formatter,
+  asserting controlled failures only and that placeholders inside string literals are never
+  substituted.
 - Stream Load metrics on the `DotRocks.Data` meter: `dotrocks.stream_load.duration` (ms),
   `dotrocks.stream_load.rows_loaded`, `dotrocks.stream_load.rows_filtered`, and
   `dotrocks.stream_load.bytes`, tagged only with a bounded `outcome`.
