@@ -202,7 +202,7 @@ public sealed class DotRocksStreamLoadClientTests
     }
 
     [Fact]
-    public async Task LoadCsvAsync_WithGzip_CompressesBodyAndSetsCompressionHeader()
+    public async Task LoadCsvAsync_WithGzip_CompressesBodyAndSetsGzipFormat()
     {
         byte[]? receivedBody = null;
         using var handler = new RecordingHandler(
@@ -230,10 +230,38 @@ public sealed class DotRocksStreamLoadClientTests
             .ConfigureAwait(true);
 
         Assert.NotNull(handler.Request);
-        AssertHeader(handler.Request.Headers, "compression", "gzip");
+        // StarRocks decompresses a CSV payload reported as the "gzip" format; there is no
+        // separate compression header.
+        AssertHeader(handler.Request.Headers, "format", "gzip");
         Assert.NotNull(receivedBody);
         Assert.NotEqual(original, receivedBody);
         Assert.Equal(original, Decompress(receivedBody));
+    }
+
+    [Fact]
+    public async Task LoadJsonAsync_WithGzip_Throws()
+    {
+        using var handler = new RecordingHandler(static (_, _) => Task.FromResult(JsonResponse()));
+        using var httpClient = new HttpClient(handler);
+        using var client = CreateClient(httpClient);
+        using var payload = new MemoryStream(Encoding.UTF8.GetBytes("[{\"id\":1}]"));
+
+        await Assert
+            .ThrowsAsync<NotSupportedException>(async () =>
+                await client
+                    .LoadJsonAsync(
+                        "warehouse",
+                        "events",
+                        payload,
+                        new DotRocksStreamLoadOptions
+                        {
+                            Compression = DotRocksStreamLoadCompression.Gzip,
+                        },
+                        TestContext.Current.CancellationToken
+                    )
+                    .ConfigureAwait(true)
+            )
+            .ConfigureAwait(true);
     }
 
     private static byte[] Decompress(byte[] compressed)
