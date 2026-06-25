@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Buffers.Binary;
 using System.Text;
 
 namespace DotRocks.Data.Protocol.Serialization;
@@ -49,12 +50,33 @@ internal sealed class ProtocolWriter : IDisposable
         }
 
         EnsureCapacity(byteCount);
-        for (int i = 0; i < byteCount; i++)
-        {
-            Storage[_position + i] = (byte)(value >> (8 * i));
-        }
-
+        Span<byte> destination = Storage.AsSpan(_position, byteCount);
         _position += byteCount;
+
+        // The common 1/2/4/8-byte widths write as a single store via BinaryPrimitives; the odd
+        // 3/5/6/7-byte widths (e.g. the length-encoded 3-byte form) keep the byte-shift loop.
+        switch (byteCount)
+        {
+            case 1:
+                destination[0] = (byte)value;
+                break;
+            case 2:
+                BinaryPrimitives.WriteUInt16LittleEndian(destination, (ushort)value);
+                break;
+            case 4:
+                BinaryPrimitives.WriteUInt32LittleEndian(destination, (uint)value);
+                break;
+            case 8:
+                BinaryPrimitives.WriteUInt64LittleEndian(destination, value);
+                break;
+            default:
+                for (int i = 0; i < destination.Length; i++)
+                {
+                    destination[i] = (byte)(value >> (8 * i));
+                }
+
+                break;
+        }
     }
 
     /// <summary>Writes a length-encoded integer using the smallest legal encoding.</summary>
