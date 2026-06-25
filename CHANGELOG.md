@@ -8,6 +8,8 @@ version is derived from the release tag at publish time.
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-06-25
+
 ### Added
 - Advanced StarRocks table-model fluent APIs for EF Core migrations: `DistributedRandomly(buckets)`
   (`DISTRIBUTED BY RANDOM`), `HasSortKey(columns)` (`ORDER BY`), and
@@ -59,7 +61,9 @@ version is derived from the release tag at publish time.
 - `StarRocksServerVersion` and `DotRocksDbContextOptionsBuilder.ServerVersion(...)` to pin the
   target StarRocks version when configuring the EF Core provider, plus an opt-in
   `StarRocksServerVersion.DetectAsync(connectionString)` that reads `SELECT current_version()`.
-  Building `DbContextOptions` never contacts the server.
+  Building `DbContextOptions` never contacts the server. `StarRocksServerVersion` implements
+  `IComparable<StarRocksServerVersion>` and comparison operators for version gating such as
+  `version >= new StarRocksServerVersion(3, 5)`.
 - EF Core query translation now emits SQL for explicit relational joins (`Join`,
   `GroupJoin`/`SelectMany`+`DefaultIfEmpty`, cross joins) and for `GroupBy` with `HAVING`
   predicates and aggregate functions, instead of throwing `NotSupportedException`.
@@ -80,6 +84,21 @@ version is derived from the release tag at publish time.
 - `DotRocksDbContextOptionsBuilder` is now a relational options builder bound to the
   `DbContextOptionsBuilder`; its previously non-functional public parameterless constructor was
   removed. Application code configures it only through the `UseStarRocks(...)` options action.
+- Reduced per-row and per-call allocations on hot paths with no change to observable behavior:
+  result-value decoding now parses directly from UTF-8 spans, the wire-protocol integer reader and
+  writer use `BinaryPrimitives`, SQL literal escaping fast-paths through `SearchValues`, and the
+  EF Core function-lookup tables are `FrozenDictionary`.
+
+### Fixed
+- `Math.Round(value, MidpointRounding)` is no longer translated to SQL with the rounding mode
+  mistaken for a digit count; it now falls back to client evaluation like other untranslatable
+  calls.
+
+### Security
+- The ADO.NET `DbConnection.ConnectionString` getter no longer returns the password (the
+  `PersistSecurityInfo=false` convention), so logging or echoing it cannot leak the secret.
+- Binary prepared-statement temporal decoders raise a controlled `MalformedPacketException` on
+  out-of-range `DATETIME` / `TIME` components instead of an uncontrolled exception.
 
 ## [1.1.0] - 2026-06-24
 
@@ -132,7 +151,8 @@ version is derived from the release tag at publish time.
 - Stream Load refuses to forward credentials over a downgraded (HTTPS→HTTP) redirect.
 - NuGet vulnerability auditing and CodeQL analysis in CI.
 
-[Unreleased]: https://github.com/kidoz/dotrocks/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/kidoz/dotrocks/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/kidoz/dotrocks/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/kidoz/dotrocks/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/kidoz/dotrocks/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/kidoz/dotrocks/releases/tag/v1.0.0
