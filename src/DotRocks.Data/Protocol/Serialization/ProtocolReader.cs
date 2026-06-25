@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Text;
 
 namespace DotRocks.Data.Protocol.Serialization;
@@ -81,13 +82,29 @@ internal ref struct ProtocolReader
             );
         }
 
-        ulong value = 0;
-        for (int i = 0; i < byteCount; i++)
+        ReadOnlySpan<byte> slice = _buffer.Slice(_position, byteCount);
+        _position += byteCount;
+
+        // The common 1/2/4/8-byte widths read as a single load via BinaryPrimitives; the odd
+        // 3/5/6/7-byte widths (e.g. the length-encoded 3-byte form) keep the byte-shift loop.
+        return byteCount switch
         {
-            value |= (ulong)_buffer[_position + i] << (8 * i);
+            1 => slice[0],
+            2 => BinaryPrimitives.ReadUInt16LittleEndian(slice),
+            4 => BinaryPrimitives.ReadUInt32LittleEndian(slice),
+            8 => BinaryPrimitives.ReadUInt64LittleEndian(slice),
+            _ => ReadOddWidthInteger(slice),
+        };
+    }
+
+    private static ulong ReadOddWidthInteger(ReadOnlySpan<byte> slice)
+    {
+        ulong value = 0;
+        for (int i = 0; i < slice.Length; i++)
+        {
+            value |= (ulong)slice[i] << (8 * i);
         }
 
-        _position += byteCount;
         return value;
     }
 
