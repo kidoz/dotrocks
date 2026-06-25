@@ -62,7 +62,7 @@ Driver limitations should remain explicit for:
 - Authentication switch requests if not implemented.
 - MySQL features not verified against StarRocks 3.x.
 - General-purpose MySQL compatibility.
-- `LOAD DATA LOCAL INFILE`, unless deliberately implemented and threat-modeled.
+- `LOAD DATA LOCAL INFILE`, unless implemented and threat-modeled.
 - Stored procedures, multiple result sets, server cursors, and MySQL binary
   protocol extensions until verified.
 
@@ -100,13 +100,10 @@ named parameter binding as client-side literal formatting unless and until
 StarRocks binary prepared statements are characterized per version.
 
 Prepared statements are documented from 3.2 onward, but the `PREPARE` syntax
-section still carries the SELECT-only caveat:
-
-- Keep DotRocks `Prepare()` as client-side validation. Do not implement
-  server-side prepared statements for 3.x until COM_STMT_PREPARE or SQL
-  `PREPARE` behavior is characterized by version.
-- Add live characterization before implementing server-side prepares.
-- Never assume MySQL Connector/J behavior equals DotRocks protocol behavior.
+section still carries the SELECT-only caveat. Do not enable server-side prepared
+statements for a 3.x line until `COM_STMT_PREPARE` or SQL `PREPARE` behavior is
+characterized for that version. MySQL Connector/J behavior is not DotRocks
+protocol behavior.
 
 HTTP SQL API is documented from 3.2.0, initially for internal tables only; from
 3.2.1 it can query external catalogs. It should remain an optional future query

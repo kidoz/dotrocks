@@ -23,17 +23,12 @@
     "content": [
       {
         "files": ["**/*.{md,yml}"],
-        "exclude": ["_site/**", "../artifacts/**"]
+        "exclude": ["_site/**"]
       },
       {
         "src": "../artifacts/docfx/api",
         "files": ["**/*.{md,yml}"],
         "dest": "api"
-      }
-    ],
-    "resource": [
-      {
-        "files": ["images/**"]
       }
     ],
     "output": "../artifacts/docfx/_site",

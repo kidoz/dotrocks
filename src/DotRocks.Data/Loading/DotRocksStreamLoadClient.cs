@@ -415,7 +415,7 @@ public sealed class DotRocksStreamLoadClient : IDisposable
         }
 
         // Expect: 100-continue only matters when sending a body; on bodyless transaction
-        // control requests it just adds a wasted round-trip (and can hang on some servers).
+        // control requests it adds a wasted round-trip and can hang on some servers.
         request.Headers.ExpectContinue = payload is not null;
         foreach (KeyValuePair<string, string> header in headers)
         {
