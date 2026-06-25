@@ -87,6 +87,15 @@ and JDBC notes mention broader usage. Treat this as a documentation conflict:
 - Test SELECT, INSERT, UPDATE, and DELETE independently.
 - Never assume MySQL Connector/J behavior equals DotRocks protocol behavior.
 
+Characterized on StarRocks 4.0.7 (compatibility harness `--prepare-probe`):
+`COM_STMT_PREPARE` is supported. `SELECT 1 AS one` returns 0 params / 1 column;
+`SELECT ? + ? AS total` returns 2 params / 1 column with a non-zero statement id.
+DotRocks does not negotiate `CLIENT_DEPRECATE_EOF`, so the prepare response is the
+prepare-OK header, then parameter-definition packets + EOF, then column-definition
+packets + EOF. `COM_STMT_PREPARE` / `COM_STMT_CLOSE` are implemented;
+`COM_STMT_EXECUTE` (binary parameter encoding and binary result-row decoding) and
+the `DotRocksParameterMode.ServerPrepared` wiring remain to be built and verified.
+
 HTTP SQL API exists and streams newline-delimited JSON for `SELECT`, `SHOW`,
 `EXPLAIN`, and `KILL`, one SQL query per HTTP request. It can be a future optional
 query path, but it is not a replacement for the ADO.NET MySQL-protocol driver

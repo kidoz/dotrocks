@@ -346,6 +346,135 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
     }
 
     /// <summary>
+    /// Sends <c>COM_STMT_PREPARE</c> for the given SQL and parses the prepare response, consuming the
+    /// parameter and column definition packets (and their trailing EOF packets, since DotRocks does
+    /// not negotiate <c>CLIENT_DEPRECATE_EOF</c>). Returns the server statement id and counts.
+    /// </summary>
+    public async ValueTask<StatementPrepareResult> PrepareAsync(
+        string commandText,
+        CancellationToken cancellationToken
+    )
+    {
+        if (_isDisposed)
+        {
+            throw new InvalidOperationException("The physical StarRocks connection is closed.");
+        }
+
+        try
+        {
+            byte[] payload = StatementCommandBuilder.BuildPrepare(commandText);
+            var writer = new PacketWriter(_stream);
+            writer.ResetSequence();
+            await writer.WritePayloadAsync(payload, cancellationToken).ConfigureAwait(false);
+
+            var reader = new PacketReader(_stream);
+            reader.ResetSequence(1);
+            byte[] firstPayload = await reader
+                .ReadPayloadAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            if (ResultPacket.IsError(firstPayload))
+            {
+                throw ResultPacket.ReadError(firstPayload, connectionId: null);
+            }
+
+            var protocolReader = new ProtocolReader(firstPayload);
+            byte status = protocolReader.ReadByte();
+            if (status != 0x00)
+            {
+                throw new MalformedPacketException(
+                    $"Unexpected COM_STMT_PREPARE response status 0x{status:X2}."
+                );
+            }
+
+            uint statementId = (uint)protocolReader.ReadFixedInteger(4);
+            int columnCount = (int)protocolReader.ReadFixedInteger(2);
+            int parameterCount = (int)protocolReader.ReadFixedInteger(2);
+
+            // Consume the parameter-definition packets (+EOF) and column-definition packets (+EOF)
+            // so the connection is left at a clean packet boundary for the next command.
+            await ConsumeDefinitionBlockAsync(reader, parameterCount, cancellationToken)
+                .ConfigureAwait(false);
+            await ConsumeDefinitionBlockAsync(reader, columnCount, cancellationToken)
+                .ConfigureAwait(false);
+
+            return new StatementPrepareResult(statementId, parameterCount, columnCount);
+        }
+        catch (OperationCanceledException)
+        {
+            MarkBroken();
+            throw;
+        }
+        catch (MalformedPacketException ex)
+        {
+            MarkBroken();
+            throw new DotRocksException("StarRocks returned malformed protocol bytes.", ex);
+        }
+        catch (IOException ex)
+        {
+            MarkBroken();
+            throw new DotRocksException(
+                "I/O failed while preparing the StarRocks statement.",
+                serverErrorCode: null,
+                sqlState: null,
+                isTransient: true,
+                connectionId: null,
+                innerException: ex
+            );
+        }
+    }
+
+    /// <summary>Sends <c>COM_STMT_CLOSE</c> for the given statement id. The server sends no reply.</summary>
+    public async ValueTask ClosePreparedStatementAsync(
+        uint statementId,
+        CancellationToken cancellationToken
+    )
+    {
+        if (_isDisposed)
+        {
+            return;
+        }
+
+        try
+        {
+            byte[] payload = StatementCommandBuilder.BuildClose(statementId);
+            var writer = new PacketWriter(_stream);
+            writer.ResetSequence();
+            await writer.WritePayloadAsync(payload, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is IOException or ObjectDisposedException)
+        {
+            MarkBroken();
+        }
+    }
+
+    private static async ValueTask ConsumeDefinitionBlockAsync(
+        PacketReader reader,
+        int count,
+        CancellationToken cancellationToken
+    )
+    {
+        if (count == 0)
+        {
+            return;
+        }
+
+        for (int i = 0; i < count; i++)
+        {
+            await reader.ReadPayloadAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        // Without CLIENT_DEPRECATE_EOF the definition block is terminated by an EOF packet.
+        byte[] terminator = await reader.ReadPayloadAsync(cancellationToken).ConfigureAwait(false);
+        if (!ResultPacket.IsEndOfResultSet(terminator))
+        {
+            throw new MalformedPacketException(
+                "Expected an EOF packet after a prepared-statement definition block."
+            );
+        }
+    }
+
+    /// <summary>
     /// Queries the authoritative StarRocks version via <c>SELECT current_version()</c>. The MySQL
     /// handshake only carries a bare compatibility string (e.g. <c>8.0.33</c>), so this is the
     /// source used for capability gating. Best-effort: any server/protocol failure (an older
