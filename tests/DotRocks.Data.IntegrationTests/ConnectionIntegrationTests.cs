@@ -31,6 +31,38 @@ public sealed class ConnectionIntegrationTests
     }
 
     [Fact]
+    public async Task ExecuteReaderAsync_ReadsJsonColumnAsLosslessDotRocksJson()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
+        }
+
+        using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
+        await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+        using DbCommand command = connection.CreateCommand();
+        command.CommandText = """SELECT PARSE_JSON('{"a": 1, "b": [2, 3]}') AS j""";
+
+        using DbDataReader reader = await command
+            .ExecuteReaderAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+        Assert.True(
+            await reader.ReadAsync(TestContext.Current.CancellationToken).ConfigureAwait(true)
+        );
+
+        // Characterize the wire type, then read the value losslessly as DotRocksJson.
+        Assert.Equal("JSON", reader.GetDataTypeName(0), StringComparer.OrdinalIgnoreCase);
+        DotRocksJson json = await reader
+            .GetFieldValueAsync<DotRocksJson>(0, TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+        Assert.Equal("""{"a": 1, "b": [2, 3]}""", json.RawText);
+        using System.Text.Json.JsonDocument document = json.Parse();
+        Assert.Equal(1, document.RootElement.GetProperty("a").GetInt32());
+    }
+
+    [Fact]
     public async Task ExecuteScalarAsync_ReturnsSelectOne()
     {
         if (!IntegrationTestEnvironment.IsEnabled)
@@ -43,7 +75,7 @@ public sealed class ConnectionIntegrationTests
         using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
         await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
 
-        using System.Data.Common.DbCommand command = connection.CreateCommand();
+        using DbCommand command = connection.CreateCommand();
         command.CommandText = "SELECT 1";
 
         object? value = await command
@@ -51,7 +83,7 @@ public sealed class ConnectionIntegrationTests
             .ConfigureAwait(true);
 
         // StarRocks types the integer literal as TINYINT, which maps to sbyte.
-        Assert.Equal(1, Convert.ToInt32(value, System.Globalization.CultureInfo.InvariantCulture));
+        Assert.Equal(1, Convert.ToInt32(value, CultureInfo.InvariantCulture));
     }
 
     [Fact]
@@ -67,10 +99,10 @@ public sealed class ConnectionIntegrationTests
         using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
         await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
 
-        using System.Data.Common.DbCommand command = connection.CreateCommand();
+        using DbCommand command = connection.CreateCommand();
         command.CommandText = "SELECT 1";
 
-        using System.Data.Common.DbDataReader reader = await command
+        using DbDataReader reader = await command
             .ExecuteReaderAsync(TestContext.Current.CancellationToken)
             .ConfigureAwait(true);
 
@@ -140,7 +172,7 @@ public sealed class ConnectionIntegrationTests
         using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
         await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
 
-        using System.Data.Common.DbCommand command = connection.CreateCommand();
+        using DbCommand command = connection.CreateCommand();
         command.CommandText = sql;
 
         object? value = await command
@@ -163,7 +195,7 @@ public sealed class ConnectionIntegrationTests
         using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
         await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
 
-        using System.Data.Common.DbCommand command = connection.CreateCommand();
+        using DbCommand command = connection.CreateCommand();
         command.CommandText = """
             SELECT
                 CAST(123 AS INT) AS i32,
@@ -177,7 +209,7 @@ public sealed class ConnectionIntegrationTests
                 CAST(1234 AS SMALLINT) AS smol
             """;
 
-        using System.Data.Common.DbDataReader reader = await command
+        using DbDataReader reader = await command
             .ExecuteReaderAsync(TestContext.Current.CancellationToken)
             .ConfigureAwait(true);
 
@@ -375,7 +407,7 @@ public sealed class ConnectionIntegrationTests
         using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
         await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
 
-        using System.Data.Common.DbCommand command = connection.CreateCommand();
+        using DbCommand command = connection.CreateCommand();
         command.CommandText = """
             SELECT
                 @text AS text_value,
@@ -418,7 +450,7 @@ public sealed class ConnectionIntegrationTests
             new DotRocksParameter { ParameterName = "null_value", Value = DBNull.Value }
         );
 
-        using System.Data.Common.DbDataReader reader = await command
+        using DbDataReader reader = await command
             .ExecuteReaderAsync(TestContext.Current.CancellationToken)
             .ConfigureAwait(true);
 
@@ -655,11 +687,8 @@ public sealed class ConnectionIntegrationTests
             .ConfigureAwait(true);
 
         // StarRocks types the integer literal as TINYINT, which maps to sbyte.
-        Assert.Equal(42, Convert.ToInt32(first, System.Globalization.CultureInfo.InvariantCulture));
-        Assert.Equal(
-            43,
-            Convert.ToInt32(second, System.Globalization.CultureInfo.InvariantCulture)
-        );
+        Assert.Equal(42, Convert.ToInt32(first, CultureInfo.InvariantCulture));
+        Assert.Equal(43, Convert.ToInt32(second, CultureInfo.InvariantCulture));
     }
 
     [Fact]
@@ -834,7 +863,7 @@ public sealed class ConnectionIntegrationTests
         using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
         await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
 
-        using System.Data.Common.DbCommand command = connection.CreateCommand();
+        using DbCommand command = connection.CreateCommand();
         command.CommandText = "SELECT NULL";
 
         object? value = await command
@@ -857,7 +886,7 @@ public sealed class ConnectionIntegrationTests
         using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
         await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
 
-        using System.Data.Common.DbCommand command = connection.CreateCommand();
+        using DbCommand command = connection.CreateCommand();
         command.CommandText = "SELECT SLEEP(3)";
         command.CommandTimeout = 1;
 
@@ -887,7 +916,7 @@ public sealed class ConnectionIntegrationTests
         using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
         await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
 
-        using System.Data.Common.DbCommand command = connection.CreateCommand();
+        using DbCommand command = connection.CreateCommand();
         command.CommandText = "SELECT SLEEP(3)";
         command.CommandTimeout = 0;
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(
@@ -917,7 +946,7 @@ public sealed class ConnectionIntegrationTests
         using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
         await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
 
-        using System.Data.Common.DbCommand command = connection.CreateCommand();
+        using DbCommand command = connection.CreateCommand();
         command.CommandText = "SELECT SLEEP(3)";
         command.CommandTimeout = 0;
 
@@ -948,7 +977,7 @@ public sealed class ConnectionIntegrationTests
         using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
         await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
 
-        using System.Data.Common.DbCommand command = connection.CreateCommand();
+        using DbCommand command = connection.CreateCommand();
         command.CommandText = "SELECT FROM";
 
         DotRocksException exception = await Assert
@@ -1122,7 +1151,7 @@ public sealed class ConnectionIntegrationTests
             await first.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
             firstConnectionId = await ReadConnectionIdAsync(first).ConfigureAwait(true);
 
-            using System.Data.Common.DbCommand command = first.CreateCommand();
+            using DbCommand command = first.CreateCommand();
             command.CommandText = "SELECT SLEEP(3)";
             command.CommandTimeout = 1;
 
@@ -1190,7 +1219,7 @@ public sealed class ConnectionIntegrationTests
             .ExecuteScalarAsync(TestContext.Current.CancellationToken)
             .ConfigureAwait(true);
         // StarRocks types the integer literal as TINYINT, which maps to sbyte.
-        Assert.Equal(1, Convert.ToInt32(value, System.Globalization.CultureInfo.InvariantCulture));
+        Assert.Equal(1, Convert.ToInt32(value, CultureInfo.InvariantCulture));
     }
 
     [Fact]
@@ -1395,7 +1424,7 @@ public sealed class ConnectionIntegrationTests
             );
             await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
             await UseTransactionDatabaseAsync(connection).ConfigureAwait(true);
-            using System.Data.Common.DbTransaction transaction = await connection
+            using DbTransaction transaction = await connection
                 .BeginTransactionAsync(TestContext.Current.CancellationToken)
                 .ConfigureAwait(true);
             await ExecuteNonQueryAsync(
@@ -1435,7 +1464,7 @@ public sealed class ConnectionIntegrationTests
             );
             await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
             await UseTransactionDatabaseAsync(connection).ConfigureAwait(true);
-            using System.Data.Common.DbTransaction transaction = await connection
+            using DbTransaction transaction = await connection
                 .BeginTransactionAsync(TestContext.Current.CancellationToken)
                 .ConfigureAwait(true);
             await ExecuteNonQueryAsync(
@@ -1484,7 +1513,7 @@ public sealed class ConnectionIntegrationTests
             await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
             await UseTransactionDatabaseAsync(connection).ConfigureAwait(true);
 
-            System.Data.Common.DbTransaction transaction = await connection
+            DbTransaction transaction = await connection
                 .BeginTransactionAsync(TestContext.Current.CancellationToken)
                 .ConfigureAwait(true);
             await using (transaction.ConfigureAwait(true))
@@ -1500,16 +1529,13 @@ public sealed class ConnectionIntegrationTests
 
             // The connection must remain open and usable after the rolled-back transaction.
             Assert.Equal(ConnectionState.Open, connection.State);
-            using (System.Data.Common.DbCommand probe = connection.CreateCommand())
+            using (DbCommand probe = connection.CreateCommand())
             {
                 probe.CommandText = "SELECT 7";
                 object? value = await probe
                     .ExecuteScalarAsync(TestContext.Current.CancellationToken)
                     .ConfigureAwait(true);
-                Assert.Equal(
-                    7,
-                    Convert.ToInt32(value, System.Globalization.CultureInfo.InvariantCulture)
-                );
+                Assert.Equal(7, Convert.ToInt32(value, CultureInfo.InvariantCulture));
             }
 
             int rowCount = await ReadTransactionRowCountAsync(tableName).ConfigureAwait(true);
@@ -1557,7 +1583,7 @@ public sealed class ConnectionIntegrationTests
 
     private static async Task<long> ReadConnectionIdAsync(DotRocksConnection connection)
     {
-        using System.Data.Common.DbCommand command = connection.CreateCommand();
+        using DbCommand command = connection.CreateCommand();
         command.CommandText = "SELECT CONNECTION_ID()";
         object? value = await command
             .ExecuteScalarAsync(TestContext.Current.CancellationToken)
@@ -1584,7 +1610,7 @@ public sealed class ConnectionIntegrationTests
             "dotrocks_tx_" + Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture)[..12];
         using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
         await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
-        using System.Data.Common.DbCommand createDatabase = connection.CreateCommand();
+        using DbCommand createDatabase = connection.CreateCommand();
         createDatabase.CommandText = $"CREATE DATABASE IF NOT EXISTS {TransactionDatabaseName}";
         await createDatabase
             .ExecuteNonQueryAsync(TestContext.Current.CancellationToken)
@@ -1596,7 +1622,7 @@ public sealed class ConnectionIntegrationTests
         await databaseConnection
             .OpenAsync(TestContext.Current.CancellationToken)
             .ConfigureAwait(true);
-        using System.Data.Common.DbCommand command = databaseConnection.CreateCommand();
+        using DbCommand command = databaseConnection.CreateCommand();
         command.CommandText = $"""
             CREATE TABLE {tableName}
             (
@@ -1624,7 +1650,7 @@ public sealed class ConnectionIntegrationTests
             "dotrocks_bin_" + Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture)[..12];
         using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
         await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
-        using System.Data.Common.DbCommand createDatabase = connection.CreateCommand();
+        using DbCommand createDatabase = connection.CreateCommand();
         createDatabase.CommandText = $"CREATE DATABASE IF NOT EXISTS {TransactionDatabaseName}";
         await createDatabase
             .ExecuteNonQueryAsync(TestContext.Current.CancellationToken)
@@ -1636,7 +1662,7 @@ public sealed class ConnectionIntegrationTests
         await databaseConnection
             .OpenAsync(TestContext.Current.CancellationToken)
             .ConfigureAwait(true);
-        using System.Data.Common.DbCommand command = databaseConnection.CreateCommand();
+        using DbCommand command = databaseConnection.CreateCommand();
         command.CommandText = $"""
             CREATE TABLE {tableName}
             (
@@ -1664,7 +1690,7 @@ public sealed class ConnectionIntegrationTests
             "dotrocks_largeint_" + Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture)[..12];
         using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
         await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
-        using System.Data.Common.DbCommand createDatabase = connection.CreateCommand();
+        using DbCommand createDatabase = connection.CreateCommand();
         createDatabase.CommandText = $"CREATE DATABASE IF NOT EXISTS {TransactionDatabaseName}";
         await createDatabase
             .ExecuteNonQueryAsync(TestContext.Current.CancellationToken)
@@ -1676,7 +1702,7 @@ public sealed class ConnectionIntegrationTests
         await databaseConnection
             .OpenAsync(TestContext.Current.CancellationToken)
             .ConfigureAwait(true);
-        using System.Data.Common.DbCommand command = databaseConnection.CreateCommand();
+        using DbCommand command = databaseConnection.CreateCommand();
         command.CommandText = $"""
             CREATE TABLE {tableName}
             (
@@ -1704,7 +1730,7 @@ public sealed class ConnectionIntegrationTests
             BuildDatabaseConnectionString(TransactionDatabaseName)
         );
         await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
-        using System.Data.Common.DbCommand command = connection.CreateCommand();
+        using DbCommand command = connection.CreateCommand();
         command.CommandText = $"DROP TABLE IF EXISTS {tableName}";
         await command
             .ExecuteNonQueryAsync(TestContext.Current.CancellationToken)
@@ -1718,11 +1744,11 @@ public sealed class ConnectionIntegrationTests
     )]
     private static async Task ExecuteNonQueryAsync(
         DotRocksConnection connection,
-        System.Data.Common.DbTransaction? transaction,
+        DbTransaction? transaction,
         string commandText
     )
     {
-        using System.Data.Common.DbCommand command = connection.CreateCommand();
+        using DbCommand command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = commandText;
         await command
@@ -1737,7 +1763,7 @@ public sealed class ConnectionIntegrationTests
     )]
     private static async Task UseTransactionDatabaseAsync(DotRocksConnection connection)
     {
-        using System.Data.Common.DbCommand command = connection.CreateCommand();
+        using DbCommand command = connection.CreateCommand();
         command.CommandText = $"USE {TransactionDatabaseName}";
         await command
             .ExecuteNonQueryAsync(TestContext.Current.CancellationToken)
@@ -1755,7 +1781,7 @@ public sealed class ConnectionIntegrationTests
             BuildDatabaseConnectionString(TransactionDatabaseName)
         );
         await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
-        using System.Data.Common.DbCommand command = connection.CreateCommand();
+        using DbCommand command = connection.CreateCommand();
         command.CommandText = $"SELECT value FROM {tableName} WHERE id = @id";
         command.Parameters.Add(new DotRocksParameter { ParameterName = "id", Value = id });
         object? value = await command
@@ -1775,7 +1801,7 @@ public sealed class ConnectionIntegrationTests
             BuildDatabaseConnectionString(TransactionDatabaseName)
         );
         await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
-        using System.Data.Common.DbCommand command = connection.CreateCommand();
+        using DbCommand command = connection.CreateCommand();
         command.CommandText = $"SELECT COUNT(*) FROM {tableName}";
         object? value = await command
             .ExecuteScalarAsync(TestContext.Current.CancellationToken)

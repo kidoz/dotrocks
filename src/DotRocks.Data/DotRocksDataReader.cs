@@ -716,6 +716,12 @@ public sealed class DotRocksDataReader
             return GetString(ordinal);
         }
 
+        if (targetType == typeof(DotRocksJson))
+        {
+            // JSON arrives over the text protocol as a string; preserve the exact bytes losslessly.
+            return value as DotRocksJson ?? new DotRocksJson(GetString(ordinal));
+        }
+
         if (targetType == typeof(DateOnly))
         {
             return value switch

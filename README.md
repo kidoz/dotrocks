@@ -230,7 +230,12 @@ EF Core type mapping:
 | `TIME` | `TimeOnly` when the value is returned as a time string/span |
 | `CHAR(36)` | `Guid` |
 | `CHAR`, `VARCHAR`, `STRING`, `TEXT` | `string` |
-| `JSON` | raw `string` |
+| `JSON` | raw `string`, or `DotRocksJson` via `GetFieldValue<DotRocksJson>` |
+
+StarRocks 4.0.7 returns `JSON` over the text protocol typed as `STRING`, so a JSON value is not
+distinguishable from a string by wire type. By default it reads as a raw `string`; for lossless,
+opt-in typed access call `reader.GetFieldValue<DotRocksJson>(ordinal)`. `DotRocksJson` preserves the
+server's exact bytes and offers `Parse()` for a caller-owned `System.Text.Json.JsonDocument`.
 
 Projecting high-precision StarRocks decimals to `decimal` can throw
 `DotRocksPrecisionLossException`; use `DotRocksDecimal` for lossless values.
