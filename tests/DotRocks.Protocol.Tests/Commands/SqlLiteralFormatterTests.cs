@@ -14,12 +14,23 @@ public sealed class SqlLiteralFormatterTests
     [InlineData(123, "123")]
     [InlineData(123.5d, "123.5")]
     [InlineData(123.5f, "123.5")]
+    [InlineData("plain text", "'plain text'")] // fast path: no escapable character
+    [InlineData("", "''")] // fast path: empty string
     [InlineData("O'Reilly", "'O''Reilly'")]
     [InlineData("back\\slash", "'back\\\\slash'")]
     [InlineData("line\nbreak", "'line\\nbreak'")]
     public void Format_ProducesExpectedSqlLiteral(object? value, string expected)
     {
         Assert.Equal(expected, SqlLiteralFormatter.Format(value));
+    }
+
+    [Fact]
+    public void Format_EscapesNulAndCtrlZThatBypassTheFastPath()
+    {
+        // Built at runtime so no raw control character appears in the test source. Both are in
+        // the escapable set, so a string containing them must take the escaping slow path.
+        Assert.Equal("'nul\\0byte'", SqlLiteralFormatter.Format("nul" + (char)0x00 + "byte"));
+        Assert.Equal("'ctrl\\Zz'", SqlLiteralFormatter.Format("ctrl" + (char)0x1A + "z"));
     }
 
     [Fact]

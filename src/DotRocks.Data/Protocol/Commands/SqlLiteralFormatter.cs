@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Globalization;
 using System.Text;
 
@@ -5,6 +6,13 @@ namespace DotRocks.Data.Protocol.Commands;
 
 internal static class SqlLiteralFormatter
 {
+    // The characters that need escaping inside a single-quoted StarRocks string literal (NUL,
+    // quote, backslash, LF, CR, and Ctrl-Z). Most parameter strings contain none of them, so one
+    // vectorized scan lets the common case skip the per-character escaping loop entirely.
+    private static readonly SearchValues<char> CharactersRequiringEscape = SearchValues.Create(
+        "\0'\\\n\r\u001A"
+    );
+
     public static string Format(object? value) =>
         value switch
         {
@@ -63,6 +71,12 @@ internal static class SqlLiteralFormatter
 
     private static string FormatString(string value)
     {
+        // Fast path: no escapable character, so the literal is just the value wrapped in quotes.
+        if (!value.AsSpan().ContainsAny(CharactersRequiringEscape))
+        {
+            return string.Concat("'", value, "'");
+        }
+
         var builder = new StringBuilder(value.Length + 2);
         builder.Append('\'');
         foreach (char character in value)
