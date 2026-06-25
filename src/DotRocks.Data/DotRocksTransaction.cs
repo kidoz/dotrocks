@@ -1,5 +1,7 @@
 using System.Data;
 using System.Data.Common;
+using System.Diagnostics;
+using DotRocks.Data.Diagnostics;
 
 namespace DotRocks.Data;
 
@@ -9,12 +11,15 @@ namespace DotRocks.Data;
 public sealed class DotRocksTransaction : DbTransaction
 {
     private readonly DotRocksConnection _connection;
+    private readonly long _startTimestamp;
     private bool _isCompleted;
+    private bool _durationRecorded;
 
     internal DotRocksTransaction(DotRocksConnection connection, IsolationLevel isolationLevel)
     {
         _connection = connection;
         IsolationLevel = isolationLevel;
+        _startTimestamp = Stopwatch.GetTimestamp();
     }
 
     /// <inheritdoc />
@@ -38,6 +43,7 @@ public sealed class DotRocksTransaction : DbTransaction
             .ExecuteTransactionCommandAsync("COMMIT WORK", this, cancellationToken)
             .ConfigureAwait(false);
         MarkCompleted();
+        RecordDuration("committed");
     }
 
     /// <inheritdoc />
@@ -52,6 +58,22 @@ public sealed class DotRocksTransaction : DbTransaction
             .ExecuteTransactionCommandAsync("ROLLBACK WORK", this, cancellationToken)
             .ConfigureAwait(false);
         MarkCompleted();
+        RecordDuration("rolledback");
+    }
+
+    // Bounded label only: outcome in {committed, rolledback}. Recorded once per transaction.
+    private void RecordDuration(string outcome)
+    {
+        if (_durationRecorded)
+        {
+            return;
+        }
+
+        _durationRecorded = true;
+        DotRocksTelemetry.TransactionDuration.Record(
+            Stopwatch.GetElapsedTime(_startTimestamp).TotalMilliseconds,
+            new TagList { { "outcome", outcome } }
+        );
     }
 
     internal void EnsureActive()
@@ -87,6 +109,7 @@ public sealed class DotRocksTransaction : DbTransaction
             // usable, matching the DbTransaction contract (only a failed rollback aborts).
             _connection.RollbackTransactionForDispose(this);
             _isCompleted = true;
+            RecordDuration("rolledback");
         }
 
         base.Dispose(disposing);
@@ -99,6 +122,7 @@ public sealed class DotRocksTransaction : DbTransaction
         {
             await _connection.RollbackTransactionForDisposeAsync(this).ConfigureAwait(false);
             _isCompleted = true;
+            RecordDuration("rolledback");
         }
 
         await base.DisposeAsync().ConfigureAwait(false);

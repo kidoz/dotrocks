@@ -27,6 +27,16 @@ public sealed class DotRocksFactoryTests
     }
 
     [Fact]
+    public void Connection_CreateCommand_ReturnsTypedCommand()
+    {
+        using var connection = new DotRocksConnection();
+
+        using DotRocksCommand command = connection.CreateCommand();
+
+        Assert.Same(connection, command.Connection);
+    }
+
+    [Fact]
     public void CreateDataSource_ReturnsDotRocksDataSource()
     {
         DbDataSource dataSource = DotRocksFactory.Instance.CreateDataSource(

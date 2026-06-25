@@ -25,6 +25,19 @@ public static class DotRocksTelemetry
         description: "Number of physical or pooled StarRocks connections opened."
     );
 
+    internal static readonly Histogram<double> ConnectionOpenDuration =
+        Meter.CreateHistogram<double>(
+            "dotrocks.connection.open.duration",
+            unit: "ms",
+            description: "Duration of opening a StarRocks connection (pool acquisition and physical open) in milliseconds."
+        );
+
+    internal static readonly Histogram<double> TransactionDuration = Meter.CreateHistogram<double>(
+        "dotrocks.transaction.duration",
+        unit: "ms",
+        description: "Duration of a StarRocks transaction from begin to commit or rollback in milliseconds."
+    );
+
     internal static readonly Counter<long> CommandsExecuted = Meter.CreateCounter<long>(
         "dotrocks.commands.executed",
         unit: "{command}",

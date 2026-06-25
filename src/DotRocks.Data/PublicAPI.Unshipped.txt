@@ -1,6 +1,7 @@
 #nullable enable
 DotRocks.Data.DotRocksCommand.ParameterMode.get -> DotRocks.Data.DotRocksParameterMode
 DotRocks.Data.DotRocksCommand.ParameterMode.set -> void
+DotRocks.Data.DotRocksConnection.CreateCommand() -> DotRocks.Data.DotRocksCommand!
 DotRocks.Data.DotRocksJson
 DotRocks.Data.DotRocksJson.DotRocksJson(string! rawText) -> void
 DotRocks.Data.DotRocksJson.Equals(DotRocks.Data.DotRocksJson? other) -> bool

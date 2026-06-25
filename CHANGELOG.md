@@ -9,6 +9,9 @@ version is derived from the release tag at publish time.
 ## [Unreleased]
 
 ### Added
+- Observability timing histograms on the `DotRocks.Data` meter:
+  `dotrocks.connection.open.duration` (pool acquisition + physical open) and
+  `dotrocks.transaction.duration` (begin to commit/rollback), each tagged with a bounded `outcome`.
 - `DbConnection.GetSchema()` metadata collections over StarRocks `INFORMATION_SCHEMA`:
   `MetaDataCollections`, `Databases`, `Tables`, `Views`, and `Columns`, with restriction filtering.
   Verified against StarRocks 4.0.7.
