@@ -59,6 +59,12 @@ validated up front, and execution still sends StarRocks text SQL with safely for
 current parameter values. The driver does not use the MySQL binary prepared-statement
 protocol yet.
 
+`DotRocksCommand.ParameterMode` selects the binding mechanism. `Auto` (the default) and
+`TextProtocol` use the verified client-side text path above. `ServerPrepared` requests the
+StarRocks server-side prepared (binary) protocol, which is not yet characterized against a
+live server; selecting it fails fast with a `DotRocksUnsupportedFeatureException` rather than
+silently using a different mechanism. The exception derives from `DotRocksException`.
+
 Use `DotRocksDataSource` when one normalized configuration should create many logical
 connections and participate in DotRocks pooling:
 

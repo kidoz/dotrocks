@@ -21,6 +21,7 @@ public sealed class DotRocksCommand : DbCommand
     private string _commandText = string.Empty;
     private int _commandTimeout = 30;
     private PreparedCommandText? _preparedCommand;
+    private DotRocksParameterMode _parameterMode = DotRocksParameterMode.Auto;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DotRocksCommand"/> class.
@@ -82,6 +83,17 @@ public sealed class DotRocksCommand : DbCommand
                 throw new NotSupportedException("DotRocks supports only text commands.");
             }
         }
+    }
+
+    /// <summary>
+    /// Gets or sets how parameters are bound and the command is executed. Defaults to
+    /// <see cref="DotRocksParameterMode.Auto"/>. <see cref="DotRocksParameterMode.ServerPrepared"/>
+    /// is not yet supported and fails explicitly at execution.
+    /// </summary>
+    public DotRocksParameterMode ParameterMode
+    {
+        get => _parameterMode;
+        set => _parameterMode = value;
     }
 
     /// <inheritdoc />
@@ -177,6 +189,7 @@ public sealed class DotRocksCommand : DbCommand
     public override void Prepare()
     {
         EnsureTextCommand();
+        EnsureParameterModeSupported();
         _preparedCommand = CommandTextParameterBinder.Prepare(CommandText, _parameters);
     }
 
@@ -232,6 +245,7 @@ public sealed class DotRocksCommand : DbCommand
     )
     {
         cancellationToken.ThrowIfCancellationRequested();
+        EnsureParameterModeSupported();
         if (_connection is null)
         {
             throw new InvalidOperationException("Command requires a DotRocksConnection.");
@@ -451,6 +465,21 @@ public sealed class DotRocksCommand : DbCommand
         if (CommandType != CommandType.Text)
         {
             throw new NotSupportedException("DotRocks supports only text commands.");
+        }
+    }
+
+    private void EnsureParameterModeSupported()
+    {
+        // Auto resolves to the verified text protocol; only an explicit ServerPrepared request
+        // fails. StarRocks' server-side prepared-statement protocol is not yet characterized
+        // against a live server, so DotRocks fails clearly instead of silently using another path.
+        if (_parameterMode == DotRocksParameterMode.ServerPrepared)
+        {
+            throw new DotRocksUnsupportedFeatureException(
+                "DotRocksParameterMode.ServerPrepared is not supported yet: the StarRocks "
+                    + "server-side prepared-statement (binary) protocol is unverified. Use "
+                    + "DotRocksParameterMode.Auto or TextProtocol."
+            );
         }
     }
 }

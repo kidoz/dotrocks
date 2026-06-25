@@ -1,1 +1,11 @@
 #nullable enable
+DotRocks.Data.DotRocksCommand.ParameterMode.get -> DotRocks.Data.DotRocksParameterMode
+DotRocks.Data.DotRocksCommand.ParameterMode.set -> void
+DotRocks.Data.DotRocksParameterMode
+DotRocks.Data.DotRocksParameterMode.Auto = 0 -> DotRocks.Data.DotRocksParameterMode
+DotRocks.Data.DotRocksParameterMode.ServerPrepared = 2 -> DotRocks.Data.DotRocksParameterMode
+DotRocks.Data.DotRocksParameterMode.TextProtocol = 1 -> DotRocks.Data.DotRocksParameterMode
+DotRocks.Data.DotRocksUnsupportedFeatureException
+DotRocks.Data.DotRocksUnsupportedFeatureException.DotRocksUnsupportedFeatureException() -> void
+DotRocks.Data.DotRocksUnsupportedFeatureException.DotRocksUnsupportedFeatureException(string! message) -> void
+DotRocks.Data.DotRocksUnsupportedFeatureException.DotRocksUnsupportedFeatureException(string! message, System.Exception! innerException) -> void
