@@ -250,6 +250,14 @@ Current diagnostics:
 | `DTR0006` | Warning | EF Core `ExecuteUpdate` / `ExecuteDelete` calls. | Use tracked single-row `SaveChanges` or raw SQL with explicit parameters; bulk LINQ DML is not translated. |
 | `DTR0007` | Warning | Source-visible `AddRange` / `UpdateRange` / `RemoveRange` followed by one `SaveChanges` call. | Save one row per `SaveChanges`, or use Stream Load for bulk ingestion. |
 | `DTR0008` | Warning | EF Core entities configured with a composite primary key (`HasKey(e => new { ... })`) in `OnModelCreating`. | Use a single-column primary key for writable entities, or `HasNoKey()` for read-only entities. Escalate to a build error with `dotnet_diagnostic.DTR0008.severity = error`. No automatic fix is provided. |
+| `DTR0009` | Warning | Interpolated or concatenated SQL assigned to `DotRocksCommand.CommandText` or passed to its constructor. | Use parameter placeholders (for example `@id`) with `DotRocksParameter` values. Escalate to a build error with `dotnet_diagnostic.DTR0009.severity = error`. No automatic fix is provided because parameterization needs human intent. |
+| `DTR0010` | Warning | An async DotRocks call that accepts a `CancellationToken` but does not pass the one available in the enclosing method. | Pass the available `CancellationToken` to the async call. No automatic fix is provided. |
+| `DTR0011` | Warning | Blocking on an async DotRocks call with `.Result`, `.Wait()`, or `.GetAwaiter().GetResult()`. | `await` the operation instead of blocking on it. No automatic fix is provided. |
+| `DTR0012` | Warning | A hard-coded password embedded in a DotRocks connection string literal or local string. | Load credentials from configuration, environment, or a secret store instead of a string literal. No automatic fix is provided. |
+
+Disposal (connections, commands, readers, transactions) is intentionally not a DotRocks
+diagnostic; the built-in .NET analyzer `CA2000` already covers undisposed `IDisposable`
+values without provider-specific knowledge.
 
 Analyzer limits: diagnostics currently inspect source-visible constants, local string
 assignments, `DotRocksConnectionStringBuilder` initializers, and local method bodies.
