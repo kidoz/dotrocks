@@ -100,8 +100,8 @@ public sealed class ConnectionIntegrationTests
         using DotRocksCommand command = connection.CreateCommand();
         command.CommandText = "SELECT ? + ? AS total";
         command.ParameterMode = DotRocksParameterMode.ServerPrepared;
-        DbParameter first = command.CreateParameter();
-        DbParameter second = command.CreateParameter();
+        var first = command.CreateParameter();
+        var second = command.CreateParameter();
         command.Parameters.Add(first);
         command.Parameters.Add(second);
 
@@ -208,7 +208,7 @@ public sealed class ConnectionIntegrationTests
         command.ParameterMode = DotRocksParameterMode.ServerPrepared;
         foreach (object value in values)
         {
-            DbParameter parameter = command.CreateParameter();
+            var parameter = command.CreateParameter();
             parameter.Value = value;
             command.Parameters.Add(parameter);
         }
@@ -251,7 +251,7 @@ public sealed class ConnectionIntegrationTests
 
         static void AddValue(DotRocksCommand command, object value)
         {
-            DbParameter parameter = command.CreateParameter();
+            var parameter = command.CreateParameter();
             parameter.Value = value;
             command.Parameters.Add(parameter);
         }
@@ -999,7 +999,7 @@ public sealed class ConnectionIntegrationTests
 
         using DbCommand command = connection.CreateCommand();
         command.CommandText = "SELECT @value";
-        DbParameter parameter = command.CreateParameter();
+        var parameter = command.CreateParameter();
         parameter.ParameterName = "value";
         parameter.Value = 42;
         command.Parameters.Add(parameter);
@@ -1107,7 +1107,7 @@ public sealed class ConnectionIntegrationTests
 
             using DbCommand command = connection.CreateCommand();
             command.CommandText = $"SELECT value FROM {tableName} WHERE id = @id";
-            DbParameter id = command.CreateParameter();
+            var id = command.CreateParameter();
             id.ParameterName = "id";
             id.Value = 1;
             command.Parameters.Add(id);
@@ -1920,7 +1920,7 @@ public sealed class ConnectionIntegrationTests
 
     private static void AddParameter(DbCommand command, string name, object? value)
     {
-        DbParameter parameter = command.CreateParameter();
+        var parameter = command.CreateParameter();
         parameter.ParameterName = name;
         parameter.Value = value;
         command.Parameters.Add(parameter);

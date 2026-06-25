@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Data;
 using System.Data.Common;
 using System.Globalization;
 using System.Text;
@@ -401,7 +402,7 @@ public sealed class DotRocksDataReaderTests
             )
         );
 
-        System.Data.DataTable schema = reader.GetSchemaTable();
+        DataTable schema = reader.GetSchemaTable();
 
         Assert.Equal(2, schema.Rows.Count);
         Assert.Equal("id", schema.Rows[0]["ColumnName"]);
@@ -472,7 +473,7 @@ public sealed class DotRocksDataReaderTests
                 ),
             },
             connection: null,
-            behavior: System.Data.CommandBehavior.Default
+            behavior: CommandBehavior.Default
         );
 
         Assert.Equal(1, reader.FieldCount);

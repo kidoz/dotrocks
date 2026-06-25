@@ -77,7 +77,7 @@ public sealed class DapperIntegrationTests
 
         using DbCommand command = connection.CreateCommand();
         command.CommandText = "SELECT @value";
-        DbParameter parameter = command.CreateParameter();
+        var parameter = command.CreateParameter();
         parameter.ParameterName = "value";
         parameter.Value = 42;
         command.Parameters.Add(parameter);

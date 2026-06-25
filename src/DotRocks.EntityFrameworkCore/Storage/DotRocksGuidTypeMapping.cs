@@ -1,6 +1,7 @@
 using System.Globalization;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
+using DataDbType = System.Data.DbType;
 
 namespace DotRocks.EntityFrameworkCore.Storage;
 
@@ -17,7 +18,7 @@ internal sealed class DotRocksGuidTypeMapping : RelationalTypeMapping
                 new CoreTypeMappingParameters(typeof(Guid), converter: GuidConverter),
                 storeType,
                 StoreTypePostfix.None,
-                System.Data.DbType.String
+                DataDbType.String
             )
         ) { }
 

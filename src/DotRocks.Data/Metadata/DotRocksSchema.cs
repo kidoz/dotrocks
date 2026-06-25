@@ -121,7 +121,7 @@ internal static class DotRocksSchema
             hasWhere = true;
             string parameterName = "@r" + i.ToString(CultureInfo.InvariantCulture);
             builder.Append(restrictionColumns[i]).Append(" = ").Append(parameterName);
-            DbParameter parameter = command.CreateParameter();
+            var parameter = command.CreateParameter();
             parameter.ParameterName = parameterName;
             parameter.Value = value;
             command.Parameters.Add(parameter);
