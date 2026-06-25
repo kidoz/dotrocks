@@ -45,8 +45,20 @@ public sealed class MissingCancellationTokenAnalyzer : DiagnosticAnalyzer
             return;
         }
 
-        // The called overload must accept a CancellationToken for the call to be fixable.
-        if (!method.Parameters.Any(parameter => IsCancellationToken(parameter.Type)))
+        // The called overload must accept a CancellationToken for the call to be fixable. Iterate
+        // the ImmutableArray directly to avoid the delegate/enumerator allocations Any() incurs on
+        // this per-invocation analyzer path.
+        bool acceptsCancellationToken = false;
+        foreach (IParameterSymbol parameter in method.Parameters)
+        {
+            if (IsCancellationToken(parameter.Type))
+            {
+                acceptsCancellationToken = true;
+                break;
+            }
+        }
+
+        if (!acceptsCancellationToken)
         {
             return;
         }

@@ -38,10 +38,13 @@ public sealed class UnsupportedBinaryMappingAnalyzer : DiagnosticAnalyzer
             return;
         }
 
-        if (
-            invocation.ArgumentList.Arguments.FirstOrDefault()?.Expression is not { } expression
-            || AnalyzerSyntaxHelpers.GetConstantString(context, expression) is not { } storeType
-        )
+        if (invocation.ArgumentList.Arguments.Count == 0)
+        {
+            return;
+        }
+
+        ExpressionSyntax expression = invocation.ArgumentList.Arguments[0].Expression;
+        if (AnalyzerSyntaxHelpers.GetConstantString(context, expression) is not { } storeType)
         {
             return;
         }
