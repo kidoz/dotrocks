@@ -184,6 +184,15 @@ public sealed class DotRocks.Data.DotRocksFactory System.Data.Common.DbProviderF
   public virtual method System.Data.Common.DbDataSource CreateDataSource(System.String connectionString)
   public virtual method System.Data.Common.DbParameter CreateParameter()
 
+public sealed class DotRocks.Data.DotRocksJson System.IEquatable<DotRocks.Data.DotRocksJson>
+  public DotRocks.Data.DotRocksJson(System.String rawText)
+  public property System.String RawText { get; }
+  public method System.Text.Json.JsonDocument Parse()
+  public virtual method System.Boolean Equals(DotRocks.Data.DotRocksJson other)
+  public virtual method System.Boolean Equals(System.Object obj)
+  public virtual method System.Int32 GetHashCode()
+  public virtual method System.String ToString()
+
 public sealed class DotRocks.Data.DotRocksParameter System.Data.Common.DbParameter
   public DotRocks.Data.DotRocksParameter()
   public property System.Data.DbType DbType { get; set; }

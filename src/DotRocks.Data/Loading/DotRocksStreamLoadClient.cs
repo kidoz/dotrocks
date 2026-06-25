@@ -493,10 +493,10 @@ public sealed class DotRocksStreamLoadClient : IDisposable
 
     private static bool IsRedirect(HttpResponseMessage response) =>
         response.StatusCode
-            is System.Net.HttpStatusCode.MovedPermanently
-                or System.Net.HttpStatusCode.Redirect
-                or System.Net.HttpStatusCode.TemporaryRedirect
-                or System.Net.HttpStatusCode.PermanentRedirect;
+            is HttpStatusCode.MovedPermanently
+                or HttpStatusCode.Redirect
+                or HttpStatusCode.TemporaryRedirect
+                or HttpStatusCode.PermanentRedirect;
 
     private static Uri GetRedirectUri(HttpResponseMessage response, Uri requestUri)
     {

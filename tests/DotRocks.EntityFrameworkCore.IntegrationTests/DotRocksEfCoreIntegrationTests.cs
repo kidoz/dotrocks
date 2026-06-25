@@ -781,10 +781,9 @@ public sealed class DotRocksEfCoreIntegrationTests
 
         try
         {
-            using Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction transaction =
-                await context
-                    .Database.BeginTransactionAsync(TestContext.Current.CancellationToken)
-                    .ConfigureAwait(true);
+            using IDbContextTransaction transaction = await context
+                .Database.BeginTransactionAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
             context.WriteWidgets.Add(
                 new EfWriteWidget
                 {
@@ -834,10 +833,9 @@ public sealed class DotRocksEfCoreIntegrationTests
 
         try
         {
-            using Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction transaction =
-                await context
-                    .Database.BeginTransactionAsync(TestContext.Current.CancellationToken)
-                    .ConfigureAwait(true);
+            using IDbContextTransaction transaction = await context
+                .Database.BeginTransactionAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
             context.WriteWidgets.Add(
                 new EfWriteWidget
                 {

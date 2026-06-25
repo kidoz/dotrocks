@@ -9,6 +9,10 @@ version is derived from the release tag at publish time.
 ## [Unreleased]
 
 ### Added
+- `DotRocksJson`, an immutable lossless wrapper for StarRocks `JSON` values, readable via
+  `reader.GetFieldValue<DotRocksJson>(ordinal)`. It preserves the server's exact bytes and offers
+  `Parse()` for a caller-owned `JsonDocument`. Verified against StarRocks 4.0.7, which returns JSON
+  over the text protocol typed as `STRING` (so JSON is opt-in typed access, not an automatic map).
 - A protocol fuzz harness with a regression corpus that feeds random and adversarial bytes to the
   handshake, OK/error packet, and length-encoded readers, asserting they fail only with a
   controlled `MalformedPacketException`/`DotRocksException` and never an uncontrolled crash.

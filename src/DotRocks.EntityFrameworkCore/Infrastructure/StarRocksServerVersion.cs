@@ -77,7 +77,7 @@ public sealed class StarRocksServerVersion : IEquatable<StarRocksServerVersion>
     /// <exception cref="InvalidOperationException">The server did not return a version string.</exception>
     public static async Task<StarRocksServerVersion> DetectAsync(
         string connectionString,
-        System.Threading.CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default
     )
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);

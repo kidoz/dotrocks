@@ -1,6 +1,11 @@
 #nullable enable
 DotRocks.Data.DotRocksCommand.ParameterMode.get -> DotRocks.Data.DotRocksParameterMode
 DotRocks.Data.DotRocksCommand.ParameterMode.set -> void
+DotRocks.Data.DotRocksJson
+DotRocks.Data.DotRocksJson.DotRocksJson(string! rawText) -> void
+DotRocks.Data.DotRocksJson.Equals(DotRocks.Data.DotRocksJson? other) -> bool
+DotRocks.Data.DotRocksJson.Parse() -> System.Text.Json.JsonDocument!
+DotRocks.Data.DotRocksJson.RawText.get -> string!
 DotRocks.Data.DotRocksParameterMode
 DotRocks.Data.DotRocksParameterMode.Auto = 0 -> DotRocks.Data.DotRocksParameterMode
 DotRocks.Data.DotRocksParameterMode.ServerPrepared = 2 -> DotRocks.Data.DotRocksParameterMode
@@ -16,3 +21,6 @@ DotRocks.Data.Loading.DotRocksStreamLoadOptions.Compression.get -> DotRocks.Data
 DotRocks.Data.Loading.DotRocksStreamLoadOptions.Compression.set -> void
 DotRocks.Data.Loading.DotRocksStreamLoadOptions.Partitions.get -> System.Collections.Generic.IReadOnlyList<string!>?
 DotRocks.Data.Loading.DotRocksStreamLoadOptions.Partitions.set -> void
+override DotRocks.Data.DotRocksJson.Equals(object? obj) -> bool
+override DotRocks.Data.DotRocksJson.GetHashCode() -> int
+override DotRocks.Data.DotRocksJson.ToString() -> string!
