@@ -49,4 +49,28 @@ public static class DotRocksTelemetry
         unit: "{connection}",
         description: "Number of pooled StarRocks connections discarded on return instead of reused."
     );
+
+    internal static readonly Histogram<double> StreamLoadDuration = Meter.CreateHistogram<double>(
+        "dotrocks.stream_load.duration",
+        unit: "ms",
+        description: "Duration of a StarRocks Stream Load request in milliseconds."
+    );
+
+    internal static readonly Counter<long> StreamLoadRowsLoaded = Meter.CreateCounter<long>(
+        "dotrocks.stream_load.rows_loaded",
+        unit: "{row}",
+        description: "Number of rows loaded by StarRocks Stream Load."
+    );
+
+    internal static readonly Counter<long> StreamLoadRowsFiltered = Meter.CreateCounter<long>(
+        "dotrocks.stream_load.rows_filtered",
+        unit: "{row}",
+        description: "Number of rows filtered (rejected) by StarRocks Stream Load."
+    );
+
+    internal static readonly Counter<long> StreamLoadBytes = Meter.CreateCounter<long>(
+        "dotrocks.stream_load.bytes",
+        unit: "By",
+        description: "Number of payload bytes accepted by StarRocks Stream Load."
+    );
 }

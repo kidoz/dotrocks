@@ -1,8 +1,10 @@
+using System.Diagnostics.Metrics;
 using System.IO.Compression;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using DotRocks.Data;
+using DotRocks.Data.Diagnostics;
 using DotRocks.Data.Loading;
 using DotRocks.Data.Protocol.Handshake;
 using Xunit;
@@ -106,6 +108,74 @@ public sealed class DotRocksStreamLoadClientTests
 
         Assert.NotNull(handler.Request);
         AssertHeader(handler.Request.Headers, "partitions", "p20240101,p20240102");
+    }
+
+    [Fact]
+    public async Task LoadCsvAsync_RecordsStreamLoadMetrics()
+    {
+        var measurements = new Dictionary<string, double>(StringComparer.Ordinal);
+        using var listener = new MeterListener
+        {
+            InstrumentPublished = (instrument, meterListener) =>
+            {
+                if (
+                    string.Equals(
+                        instrument.Meter.Name,
+                        DotRocksTelemetry.MeterName,
+                        StringComparison.Ordinal
+                    )
+                )
+                {
+                    meterListener.EnableMeasurementEvents(instrument);
+                }
+            },
+        };
+        listener.SetMeasurementEventCallback<double>(
+            (instrument, value, _, _) => measurements[instrument.Name] = value
+        );
+        listener.SetMeasurementEventCallback<long>(
+            (instrument, value, _, _) => measurements[instrument.Name] = value
+        );
+        listener.Start();
+
+        using var handler = new RecordingHandler(
+            static (_, _) =>
+                Task.FromResult(
+                    JsonResponse(
+                        """
+                        {
+                          "Status": "Success",
+                          "Message": "OK",
+                          "NumberTotalRows": 4,
+                          "NumberLoadedRows": 3,
+                          "NumberFilteredRows": 1,
+                          "NumberUnselectedRows": 0,
+                          "LoadBytes": 42,
+                          "LoadTimeMs": 7
+                        }
+                        """
+                    )
+                )
+        );
+        using var httpClient = new HttpClient(handler);
+        using var client = CreateClient(httpClient);
+        using var payload = new MemoryStream(Encoding.UTF8.GetBytes("1,one"));
+
+        await client
+            .LoadCsvAsync(
+                "warehouse",
+                "events",
+                payload,
+                null,
+                TestContext.Current.CancellationToken
+            )
+            .ConfigureAwait(true);
+        listener.Dispose();
+
+        Assert.True(measurements.ContainsKey("dotrocks.stream_load.duration"));
+        Assert.Equal(3, measurements["dotrocks.stream_load.rows_loaded"]);
+        Assert.Equal(1, measurements["dotrocks.stream_load.rows_filtered"]);
+        Assert.Equal(42, measurements["dotrocks.stream_load.bytes"]);
     }
 
     [Fact]

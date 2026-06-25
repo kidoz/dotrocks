@@ -1,8 +1,10 @@
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.IO.Compression;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
+using DotRocks.Data.Diagnostics;
 using DotRocks.Data.Pooling;
 using DotRocks.Data.Protocol.Handshake;
 
@@ -224,14 +226,47 @@ public sealed class DotRocksStreamLoadClient : IDisposable
 
         options ??= new DotRocksStreamLoadOptions();
         IReadOnlyDictionary<string, string> headers = options.BuildHeaders(format);
-        return await SendPayloadRequestAsync(
-                BuildStreamLoadUri(databaseName, tableName),
-                headers,
-                payload,
-                mediaType,
-                cancellationToken
-            )
-            .ConfigureAwait(false);
+        long startTimestamp = Stopwatch.GetTimestamp();
+        try
+        {
+            DotRocksStreamLoadResult result = await SendPayloadRequestAsync(
+                    BuildStreamLoadUri(databaseName, tableName),
+                    headers,
+                    payload,
+                    mediaType,
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+            RecordStreamLoadMetrics(startTimestamp, result);
+            return result;
+        }
+        catch
+        {
+            // Bounded labels only: outcome in {success, error}. Never label, table, or SQL text.
+            DotRocksTelemetry.StreamLoadDuration.Record(
+                Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds,
+                new TagList { { "outcome", "error" } }
+            );
+            throw;
+        }
+    }
+
+    private static void RecordStreamLoadMetrics(
+        long startTimestamp,
+        DotRocksStreamLoadResult result
+    )
+    {
+        var tags = new TagList { { "outcome", result.IsSuccess ? "success" : "error" } };
+        DotRocksTelemetry.StreamLoadDuration.Record(
+            Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds,
+            tags
+        );
+        if (result.IsSuccess)
+        {
+            DotRocksTelemetry.StreamLoadRowsLoaded.Add(result.NumberLoadedRows, tags);
+            DotRocksTelemetry.StreamLoadRowsFiltered.Add(result.NumberFilteredRows, tags);
+            DotRocksTelemetry.StreamLoadBytes.Add(result.LoadBytes, tags);
+        }
     }
 
     internal Task<DotRocksStreamLoadResult> SendTransactionLoadAsync(

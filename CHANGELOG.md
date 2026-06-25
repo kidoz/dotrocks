@@ -9,6 +9,9 @@ version is derived from the release tag at publish time.
 ## [Unreleased]
 
 ### Added
+- Stream Load metrics on the `DotRocks.Data` meter: `dotrocks.stream_load.duration` (ms),
+  `dotrocks.stream_load.rows_loaded`, `dotrocks.stream_load.rows_filtered`, and
+  `dotrocks.stream_load.bytes`, tagged only with a bounded `outcome`.
 - Stream Load partition targeting (`DotRocksStreamLoadOptions.Partitions`) and on-the-fly gzip
   payload compression (`DotRocksStreamLoadOptions.Compression = DotRocksStreamLoadCompression.Gzip`).
   Compression is streamed, so the upload is never buffered in memory.
