@@ -1,3 +1,4 @@
+using System.Data;
 using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
@@ -207,7 +208,7 @@ public sealed class DotRocksEfCoreIntegrationTests
             DbConnection connection = context.Database.GetDbConnection();
             await using DbCommand command = connection.CreateCommand();
             command.CommandText = CreateParameterizedVerificationSql();
-            if (connection.State != System.Data.ConnectionState.Open)
+            if (connection.State != ConnectionState.Open)
             {
                 await connection
                     .OpenAsync(TestContext.Current.CancellationToken)
@@ -1817,11 +1818,11 @@ public sealed class DotRocksEfCoreIntegrationTests
             Assert.DoesNotContain("'two'", command.CommandText, StringComparison.Ordinal);
             Assert.DoesNotContain("23.45", command.CommandText, StringComparison.Ordinal);
             Assert.DoesNotContain("FALSE", command.CommandText, StringComparison.OrdinalIgnoreCase);
-            AssertParameter(command, "@id", 2, System.Data.DbType.Int32);
-            AssertParameter(command, "@name", name, System.Data.DbType.String);
-            AssertParameter(command, "@amount", amount, System.Data.DbType.Decimal);
-            AssertParameter(command, "@optionalScore", optionalScore, System.Data.DbType.Int32);
-            AssertParameter(command, "@active", active, System.Data.DbType.Boolean);
+            AssertParameter(command, "@id", 2, DbType.Int32);
+            AssertParameter(command, "@name", name, DbType.String);
+            AssertParameter(command, "@amount", amount, DbType.Decimal);
+            AssertParameter(command, "@optionalScore", optionalScore, DbType.Int32);
+            AssertParameter(command, "@active", active, DbType.Boolean);
         }
         finally
         {
@@ -1872,11 +1873,11 @@ public sealed class DotRocksEfCoreIntegrationTests
             Assert.Contains("@amount", command.CommandText, StringComparison.Ordinal);
             Assert.Contains("@optionalScore", command.CommandText, StringComparison.Ordinal);
             Assert.Contains("@active", command.CommandText, StringComparison.Ordinal);
-            AssertParameter(command, "@id", 2, System.Data.DbType.Int32);
-            AssertParameter(command, "@name", name, System.Data.DbType.String);
-            AssertParameter(command, "@amount", amount, System.Data.DbType.Decimal);
-            AssertParameter(command, "@optionalScore", optionalScore, System.Data.DbType.Int32);
-            AssertParameter(command, "@active", active, System.Data.DbType.Boolean);
+            AssertParameter(command, "@id", 2, DbType.Int32);
+            AssertParameter(command, "@name", name, DbType.String);
+            AssertParameter(command, "@amount", amount, DbType.Decimal);
+            AssertParameter(command, "@optionalScore", optionalScore, DbType.Int32);
+            AssertParameter(command, "@active", active, DbType.Boolean);
         }
         finally
         {
@@ -1950,7 +1951,7 @@ public sealed class DotRocksEfCoreIntegrationTests
             Assert.Contains("@name", quotedCommand.CommandText, StringComparison.Ordinal);
             Assert.Contains("@optionalScore", quotedCommand.CommandText, StringComparison.Ordinal);
             Assert.DoesNotContain(quotedName, quotedCommand.CommandText, StringComparison.Ordinal);
-            AssertParameter(quotedCommand, "@name", quotedName, System.Data.DbType.String);
+            AssertParameter(quotedCommand, "@name", quotedName, DbType.String);
             AssertNullParameter(quotedCommand, "@optionalScore");
 
             name = jsonName;
@@ -1965,7 +1966,7 @@ public sealed class DotRocksEfCoreIntegrationTests
             Assert.Equal(5, jsonId);
             Assert.Contains("@name", jsonCommand.CommandText, StringComparison.Ordinal);
             Assert.DoesNotContain(jsonName, jsonCommand.CommandText, StringComparison.Ordinal);
-            AssertParameter(jsonCommand, "@name", jsonName, System.Data.DbType.String);
+            AssertParameter(jsonCommand, "@name", jsonName, DbType.String);
             AssertNullParameter(jsonCommand, "@optionalScore");
         }
         finally
@@ -2025,7 +2026,7 @@ public sealed class DotRocksEfCoreIntegrationTests
             Assert.Equal(1, id);
             Assert.Contains("@target", command.CommandText, StringComparison.Ordinal);
             Assert.DoesNotContain(value.ToString(), command.CommandText, StringComparison.Ordinal);
-            AssertParameter(command, "@target", value, System.Data.DbType.Decimal);
+            AssertParameter(command, "@target", value, DbType.Decimal);
         }
         finally
         {
@@ -2290,7 +2291,7 @@ public sealed class DotRocksEfCoreIntegrationTests
     private static async Task<string> ReadShowCreateTableAsync(DbContext context, string tableName)
     {
         DbConnection connection = context.Database.GetDbConnection();
-        if (connection.State != System.Data.ConnectionState.Open)
+        if (connection.State != ConnectionState.Open)
         {
             await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
         }
@@ -2365,7 +2366,7 @@ public sealed class DotRocksEfCoreIntegrationTests
         CapturedCommand command,
         string name,
         object? value,
-        System.Data.DbType dbType
+        DbType dbType
     )
     {
         CapturedParameter parameter = command.Parameter(name);
@@ -3073,5 +3074,5 @@ public sealed class DotRocksEfCoreIntegrationTests
             Parameters.Select(parameter => parameter.Value).ToArray();
     }
 
-    private sealed record CapturedParameter(string Name, object? Value, System.Data.DbType DbType);
+    private sealed record CapturedParameter(string Name, object? Value, DbType DbType);
 }

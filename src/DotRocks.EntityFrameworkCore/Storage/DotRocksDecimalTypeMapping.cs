@@ -1,5 +1,6 @@
 using DotRocks.Data;
 using Microsoft.EntityFrameworkCore.Storage;
+using DataDbType = System.Data.DbType;
 
 namespace DotRocks.EntityFrameworkCore.Storage;
 
@@ -15,7 +16,7 @@ internal sealed class DotRocksDecimalTypeMapping : RelationalTypeMapping
                 new CoreTypeMappingParameters(typeof(DotRocksDecimal)),
                 storeType,
                 StoreTypePostfix.PrecisionAndScale,
-                System.Data.DbType.Decimal,
+                DataDbType.Decimal,
                 precision: precision,
                 scale: scale
             )

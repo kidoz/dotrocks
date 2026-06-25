@@ -180,7 +180,7 @@ public sealed class ParameterBinderFuzzTests
 
     private static void AddParameter(DotRocksCommand command, string name, object value)
     {
-        DbParameter parameter = command.CreateParameter();
+        var parameter = command.CreateParameter();
         parameter.ParameterName = name;
         parameter.Value = value;
         command.Parameters.Add(parameter);
