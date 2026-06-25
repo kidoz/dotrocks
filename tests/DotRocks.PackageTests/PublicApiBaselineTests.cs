@@ -385,7 +385,9 @@ public sealed class PublicApiBaselineTests
         type.IsNestedPublic ? "public" : "protected";
 
     private static string NormalizeLineEndings(string value) =>
-        value.Replace("\r\n", "\n", StringComparison.Ordinal);
+        // Normalize CRLF and trailing blank lines so an editor that trims the final newline does
+        // not cause a spurious baseline mismatch.
+        value.Replace("\r\n", "\n", StringComparison.Ordinal).TrimEnd('\n') + "\n";
 
     private static string FindRepositoryRoot()
     {
