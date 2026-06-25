@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
@@ -83,6 +84,95 @@ public sealed class DotRocksStreamLoadClientTests
         Assert.Equal("text/csv", request.Content!.Headers.ContentType!.MediaType);
         Assert.True(result.IsSuccess);
         Assert.Equal(1, result.NumberLoadedRows);
+    }
+
+    [Fact]
+    public async Task LoadCsvAsync_WithPartitions_SendsPartitionsHeader()
+    {
+        using var handler = new RecordingHandler(static (_, _) => Task.FromResult(JsonResponse()));
+        using var httpClient = new HttpClient(handler);
+        using var client = CreateClient(httpClient);
+        using var payload = new MemoryStream(Encoding.UTF8.GetBytes("1,one"));
+
+        await client
+            .LoadCsvAsync(
+                "warehouse",
+                "events",
+                payload,
+                new DotRocksStreamLoadOptions { Partitions = ["p20240101", "p20240102"] },
+                TestContext.Current.CancellationToken
+            )
+            .ConfigureAwait(true);
+
+        Assert.NotNull(handler.Request);
+        AssertHeader(handler.Request.Headers, "partitions", "p20240101,p20240102");
+    }
+
+    [Fact]
+    public async Task LoadCsvAsync_WithInvalidPartitionName_Throws()
+    {
+        using var handler = new RecordingHandler(static (_, _) => Task.FromResult(JsonResponse()));
+        using var httpClient = new HttpClient(handler);
+        using var client = CreateClient(httpClient);
+        using var payload = new MemoryStream(Encoding.UTF8.GetBytes("1,one"));
+
+        await Assert
+            .ThrowsAsync<ArgumentException>(async () =>
+                await client
+                    .LoadCsvAsync(
+                        "warehouse",
+                        "events",
+                        payload,
+                        new DotRocksStreamLoadOptions { Partitions = ["good", "bad,name"] },
+                        TestContext.Current.CancellationToken
+                    )
+                    .ConfigureAwait(true)
+            )
+            .ConfigureAwait(true);
+    }
+
+    [Fact]
+    public async Task LoadCsvAsync_WithGzip_CompressesBodyAndSetsCompressionHeader()
+    {
+        byte[]? receivedBody = null;
+        using var handler = new RecordingHandler(
+            async (request, cancellationToken) =>
+            {
+                receivedBody = await request
+                    .Content!.ReadAsByteArrayAsync(cancellationToken)
+                    .ConfigureAwait(true);
+                return JsonResponse();
+            }
+        );
+        using var httpClient = new HttpClient(handler);
+        using var client = CreateClient(httpClient);
+        byte[] original = Encoding.UTF8.GetBytes("1,one\n2,two\n3,three\n");
+        using var payload = new MemoryStream(original);
+
+        await client
+            .LoadCsvAsync(
+                "warehouse",
+                "events",
+                payload,
+                new DotRocksStreamLoadOptions { Compression = DotRocksStreamLoadCompression.Gzip },
+                TestContext.Current.CancellationToken
+            )
+            .ConfigureAwait(true);
+
+        Assert.NotNull(handler.Request);
+        AssertHeader(handler.Request.Headers, "compression", "gzip");
+        Assert.NotNull(receivedBody);
+        Assert.NotEqual(original, receivedBody);
+        Assert.Equal(original, Decompress(receivedBody));
+    }
+
+    private static byte[] Decompress(byte[] compressed)
+    {
+        using var source = new MemoryStream(compressed);
+        using var gzip = new GZipStream(source, CompressionMode.Decompress);
+        using var destination = new MemoryStream();
+        gzip.CopyTo(destination);
+        return destination.ToArray();
     }
 
     [Fact]

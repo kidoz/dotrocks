@@ -235,6 +235,10 @@ public sealed class DotRocks.Data.Loading.DotRocksStreamLoadClient System.IDispo
   public method System.Threading.Tasks.Task<DotRocks.Data.Loading.DotRocksStreamLoadTransaction> BeginTransactionAsync(System.String databaseName, System.String tableName, DotRocks.Data.Loading.DotRocksStreamLoadTransactionOptions options, System.Threading.CancellationToken cancellationToken)
   public virtual method System.Void Dispose()
 
+public enum DotRocks.Data.Loading.DotRocksStreamLoadCompression
+  public static field DotRocks.Data.Loading.DotRocksStreamLoadCompression Gzip
+  public static field DotRocks.Data.Loading.DotRocksStreamLoadCompression None
+
 public sealed class DotRocks.Data.Loading.DotRocksStreamLoadException DotRocks.Data.DotRocksException
   public DotRocks.Data.Loading.DotRocksStreamLoadException()
   public DotRocks.Data.Loading.DotRocksStreamLoadException(System.String message)
@@ -246,9 +250,11 @@ public sealed class DotRocks.Data.Loading.DotRocksStreamLoadOptions
   public DotRocks.Data.Loading.DotRocksStreamLoadOptions()
   public property System.String ColumnSeparator { get; set; }
   public property System.String Columns { get; set; }
+  public property DotRocks.Data.Loading.DotRocksStreamLoadCompression Compression { get; set; }
   public property System.String JsonPaths { get; set; }
   public property System.String Label { get; set; }
   public property System.Double? MaxFilterRatio { get; set; }
+  public property System.Collections.Generic.IReadOnlyList<System.String> Partitions { get; set; }
   public property System.String RowDelimiter { get; set; }
   public property System.Boolean? StrictMode { get; set; }
   public property System.Boolean? StripOuterArray { get; set; }
