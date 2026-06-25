@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -14,9 +15,10 @@ namespace DotRocks.EntityFrameworkCore.Query;
 internal sealed class DotRocksDateMethodTranslator(ISqlExpressionFactory sqlExpressionFactory)
     : IMethodCallTranslator
 {
-    private static readonly Dictionary<string, string> DateTimeFunctions = new(
-        StringComparer.Ordinal
-    )
+    private static readonly FrozenDictionary<string, string> DateTimeFunctions = new Dictionary<
+        string,
+        string
+    >(StringComparer.Ordinal)
     {
         [nameof(DateTime.AddYears)] = "years_add",
         [nameof(DateTime.AddMonths)] = "months_add",
@@ -24,16 +26,17 @@ internal sealed class DotRocksDateMethodTranslator(ISqlExpressionFactory sqlExpr
         [nameof(DateTime.AddHours)] = "hours_add",
         [nameof(DateTime.AddMinutes)] = "minutes_add",
         [nameof(DateTime.AddSeconds)] = "seconds_add",
-    };
+    }.ToFrozenDictionary(StringComparer.Ordinal);
 
-    private static readonly Dictionary<string, string> DateOnlyFunctions = new(
-        StringComparer.Ordinal
-    )
+    private static readonly FrozenDictionary<string, string> DateOnlyFunctions = new Dictionary<
+        string,
+        string
+    >(StringComparer.Ordinal)
     {
         [nameof(DateOnly.AddYears)] = "years_add",
         [nameof(DateOnly.AddMonths)] = "months_add",
         [nameof(DateOnly.AddDays)] = "days_add",
-    };
+    }.ToFrozenDictionary(StringComparer.Ordinal);
 
     public SqlExpression? Translate(
         SqlExpression? instance,
@@ -49,7 +52,7 @@ internal sealed class DotRocksDateMethodTranslator(ISqlExpressionFactory sqlExpr
             return null;
         }
 
-        Dictionary<string, string>? table = method.DeclaringType switch
+        FrozenDictionary<string, string>? table = method.DeclaringType switch
         {
             { } type when type == typeof(DateTime) => DateTimeFunctions,
             { } type when type == typeof(DateOnly) => DateOnlyFunctions,
