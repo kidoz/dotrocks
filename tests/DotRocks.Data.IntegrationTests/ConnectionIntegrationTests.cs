@@ -86,6 +86,139 @@ public sealed class ConnectionIntegrationTests
     }
 
     [Fact]
+    public async Task ServerPrepared_ReusesCachedStatementAcrossExecutions()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
+        }
+
+        using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
+        await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+        using var command = (DotRocksCommand)connection.CreateCommand();
+        command.CommandText = "SELECT ? + ? AS total";
+        command.ParameterMode = DotRocksParameterMode.ServerPrepared;
+        System.Data.Common.DbParameter first = command.CreateParameter();
+        System.Data.Common.DbParameter second = command.CreateParameter();
+        command.Parameters.Add(first);
+        command.Parameters.Add(second);
+
+        first.Value = 1;
+        second.Value = 1;
+        object? firstResult = await command
+            .ExecuteScalarAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+        Assert.Equal(2L, Convert.ToInt64(firstResult, CultureInfo.InvariantCulture));
+
+        // The second execution reuses the cached prepared statement on the same physical connection.
+        first.Value = 10;
+        second.Value = 20;
+        object? secondResult = await command
+            .ExecuteScalarAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+        Assert.Equal(30L, Convert.ToInt64(secondResult, CultureInfo.InvariantCulture));
+    }
+
+    [Fact]
+    [SuppressMessage(
+        "Security",
+        "CA2100:Review SQL queries for security vulnerabilities",
+        Justification = "DDL is composed from fixed sanitized identifiers; DML uses server-prepared parameters."
+    )]
+    public async Task ServerPrepared_WriteDml_IsRejectedByStarRocks()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
+        }
+
+        // Characterization: StarRocks 4.0.7 only allows SELECT in the binary prepared-statement
+        // protocol; a prepared INSERT/UPDATE/DELETE is rejected by the server. DotRocks surfaces the
+        // server error. Use DotRocksParameterMode.Auto (text protocol) for parameterized writes.
+        const string database = "dotrocks_prepared_dml";
+        using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
+        await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+        await ExecuteAsync(connection, $"CREATE DATABASE IF NOT EXISTS `{database}`")
+            .ConfigureAwait(true);
+        await ExecuteAsync(connection, $"DROP TABLE IF EXISTS `{database}`.`t`")
+            .ConfigureAwait(true);
+        await ExecuteAsync(
+                connection,
+                $"CREATE TABLE `{database}`.`t` (id INT NOT NULL, name VARCHAR(32) NOT NULL) "
+                    + "PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES('replication_num'='1')"
+            )
+            .ConfigureAwait(true);
+
+        try
+        {
+            DotRocksException exception = await Assert
+                .ThrowsAsync<DotRocksException>(async () =>
+                    await ExecutePreparedDmlAsync(
+                            connection,
+                            $"INSERT INTO `{database}`.`t` (id, name) VALUES (?, ?)",
+                            [1, "alice"]
+                        )
+                        .ConfigureAwait(true)
+                )
+                .ConfigureAwait(true);
+            Assert.Contains(
+                "prepared statement",
+                exception.Message,
+                StringComparison.OrdinalIgnoreCase
+            );
+        }
+        finally
+        {
+            await ExecuteAsync(connection, $"DROP TABLE IF EXISTS `{database}`.`t`")
+                .ConfigureAwait(true);
+        }
+    }
+
+    [SuppressMessage(
+        "Security",
+        "CA2100:Review SQL queries for security vulnerabilities",
+        Justification = "Fixed sanitized DDL identifiers."
+    )]
+    private static async Task ExecuteAsync(DotRocksConnection connection, string sql)
+    {
+        using System.Data.Common.DbCommand command = connection.CreateCommand();
+        command.CommandText = sql;
+        await command
+            .ExecuteNonQueryAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+    }
+
+    [SuppressMessage(
+        "Security",
+        "CA2100:Review SQL queries for security vulnerabilities",
+        Justification = "Server-prepared parameters."
+    )]
+    private static async Task ExecutePreparedDmlAsync(
+        DotRocksConnection connection,
+        string sql,
+        object[] values
+    )
+    {
+        using var command = (DotRocksCommand)connection.CreateCommand();
+        command.CommandText = sql;
+        command.ParameterMode = DotRocksParameterMode.ServerPrepared;
+        foreach (object value in values)
+        {
+            System.Data.Common.DbParameter parameter = command.CreateParameter();
+            parameter.Value = value;
+            command.Parameters.Add(parameter);
+        }
+
+        await command
+            .ExecuteNonQueryAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+    }
+
+    [Fact]
     public async Task ServerPrepared_ExecutesParameterizedQueryWithBinaryProtocol()
     {
         if (!IntegrationTestEnvironment.IsEnabled)

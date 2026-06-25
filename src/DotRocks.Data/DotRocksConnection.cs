@@ -320,8 +320,11 @@ public sealed class DotRocksConnection : DbConnection
         try
         {
             DotRocksPhysicalConnection physical = lease.PhysicalConnection;
+
+            // Reuse a cached server-prepared statement for this connection when possible; the
+            // statement stays open and session-scoped, so it is not closed after each execution.
             StatementPrepareResult prepared = await physical
-                .PrepareAsync(commandText, cancellationToken)
+                .PrepareCachedAsync(commandText, cancellationToken)
                 .ConfigureAwait(false);
 
             if (prepared.ParameterCount != parameterValues.Count)
@@ -331,18 +334,9 @@ public sealed class DotRocksConnection : DbConnection
                 );
             }
 
-            try
-            {
-                return await physical
-                    .ExecutePreparedAsync(prepared.StatementId, parameterValues, cancellationToken)
-                    .ConfigureAwait(false);
-            }
-            finally
-            {
-                await physical
-                    .ClosePreparedStatementAsync(prepared.StatementId, cancellationToken)
-                    .ConfigureAwait(false);
-            }
+            return await physical
+                .ExecutePreparedAsync(prepared.StatementId, parameterValues, cancellationToken)
+                .ConfigureAwait(false);
         }
         catch
         {

@@ -16,7 +16,9 @@ version is derived from the release tag at publish time.
   `COM_STMT_PREPARE` / `COM_STMT_EXECUTE` / `COM_STMT_CLOSE` protocol with binary parameter encoding
   and binary result-row decoding, verified end to end against StarRocks 4.0.7. Use positional `?`
   placeholders and add parameters in order. Unsupported parameter value types fail with
-  `DotRocksUnsupportedFeatureException`.
+  `DotRocksUnsupportedFeatureException`. Prepared statements are cached and reused per physical
+  connection. StarRocks 4.0.7 allows only `SELECT` in the prepared protocol — prepared writes are
+  rejected by the server, so use the text protocol (`Auto`) for parameterized DML.
 - `DotRocksJson`, an immutable lossless wrapper for StarRocks `JSON` values, readable via
   `reader.GetFieldValue<DotRocksJson>(ordinal)`. It preserves the server's exact bytes and offers
   `Parse()` for a caller-owned `JsonDocument`. Verified against StarRocks 4.0.7, which returns JSON
