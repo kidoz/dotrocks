@@ -228,6 +228,65 @@ public sealed class DotRocksEfCoreIntegrationTests
     }
 
     [Fact]
+    public async Task DateAndMathTranslators_ExecuteAgainstStarRocks()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
+        }
+
+        await using var context = CreateLiveContext();
+        await EnsureWidgetTableAsync(context).ConfigureAwait(true);
+
+        try
+        {
+            // Seeded widgets all have CreatedAt 2026-06-19 at hours 10, 11, 12; amounts 12.34/23.45/34.56.
+            Assert.Equal(
+                3,
+                await context
+                    .Widgets.CountAsync(
+                        widget => widget.CreatedAt.Year == 2026,
+                        TestContext.Current.CancellationToken
+                    )
+                    .ConfigureAwait(true)
+            );
+
+            List<int> hourIds = await context
+                .Widgets.Where(widget => widget.CreatedAt.Hour == 10)
+                .Select(widget => widget.Id)
+                .ToListAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+            Assert.Equal([1], hourIds);
+
+            Assert.Equal(
+                2,
+                await context
+                    .Widgets.CountAsync(
+                        widget => Math.Abs(widget.Amount) > 20m,
+                        TestContext.Current.CancellationToken
+                    )
+                    .ConfigureAwait(true)
+            );
+
+            Assert.Equal(
+                3,
+                await context
+                    .Widgets.CountAsync(
+                        widget => widget.CreatedAt.AddDays(1).Day == 20,
+                        TestContext.Current.CancellationToken
+                    )
+                    .ConfigureAwait(true)
+            );
+        }
+        finally
+        {
+            await DropWidgetTableAsync(context).ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
     public async Task DbSet_MaterializesCommonStarRocksTypes()
     {
         if (!IntegrationTestEnvironment.IsEnabled)
