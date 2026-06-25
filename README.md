@@ -132,6 +132,9 @@ Supported EF Core query surface:
   backslash-escaped; StarRocks does not accept an `ESCAPE` clause and is not emitted one).
 - `FirstOrDefaultAsync`, `SingleAsync`, `ToListAsync`, `CountAsync`, `AnyAsync`.
 - Aggregate basics: `Min`, `Max`, `Sum`, `Average`.
+- Explicit relational joins via `Join` and `GroupJoin`/`SelectMany`+`DefaultIfEmpty`
+  (`INNER JOIN` / `LEFT JOIN`) and cross joins, translated to StarRocks SQL.
+- `GroupBy` with key projection, `HAVING` predicates, and the aggregate functions above.
 - Projection into anonymous objects and simple DTOs.
 - `SaveChangesAsync` for a constrained single-table write model: explicit primary key,
   scalar properties only, single-column keys, `ValueGeneratedNever()`, no navigations, no
@@ -163,7 +166,8 @@ Unsupported EF Core behavior is explicit:
 - idempotent migration scripts.
 - composite-key writes, and multi-row `SaveChanges` to a single table (StarRocks error 5303).
 - `SAVEPOINT` (unsupported by StarRocks; EF savepoints are disabled).
-- joins, `Include`, navigation materialization, and `GroupBy`.
+- `Include`, navigation materialization, and navigation-based joins: relationships are
+  rejected at model validation, so joins must be expressed explicitly across `DbSet`s.
 - binary/varbinary EF mapping until byte-array query translation and materialization are
   broader than the verified ADO.NET reader path.
 

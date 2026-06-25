@@ -8,6 +8,13 @@ version is derived from the release tag at publish time.
 
 ## [Unreleased]
 
+### Added
+- EF Core query translation now emits SQL for explicit relational joins (`Join`,
+  `GroupJoin`/`SelectMany`+`DefaultIfEmpty`, cross joins) and for `GroupBy` with `HAVING`
+  predicates and aggregate functions, instead of throwing `NotSupportedException`.
+  Navigation-based joins and `Include` remain unsupported because relationships are still
+  rejected at model validation.
+
 ## [1.1.0] - 2026-06-24
 
 ### Changed
