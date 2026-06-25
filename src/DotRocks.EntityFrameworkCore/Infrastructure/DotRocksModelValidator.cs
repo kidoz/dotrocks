@@ -206,22 +206,7 @@ internal sealed class DotRocksModelValidator(
     private static void ValidateKeyModel(IEntityType entityType)
     {
         object? value = entityType.FindAnnotation(DotRocksAnnotationNames.KeyModel)?.Value;
-        if (value is null)
-        {
-            return;
-        }
-
-        if (
-            value is DotRocksTableKeyModel.DuplicateKey
-            || value is DotRocksTableKeyModel.PrimaryKey
-            || value is DotRocksTableKeyModel.UniqueKey
-            || value is string text
-                && (
-                    string.Equals(text, "DUPLICATE KEY", StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(text, "PRIMARY KEY", StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(text, "UNIQUE KEY", StringComparison.OrdinalIgnoreCase)
-                )
-        )
+        if (value is null || DotRocksTableKeyModels.TryParse(value, out _))
         {
             return;
         }
