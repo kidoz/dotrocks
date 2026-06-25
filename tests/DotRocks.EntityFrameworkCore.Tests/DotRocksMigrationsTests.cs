@@ -337,6 +337,43 @@ public sealed class DotRocksMigrationsTests
         );
     }
 
+    [Fact]
+    public void DistributedRandomly_ReplacesHashDistributionColumns()
+    {
+        var builder = new ModelBuilder();
+        var entity = builder.Entity<TableShapeWidget>();
+
+        entity.HasStarRocksHashDistribution(4, "id");
+        entity.DistributedRandomly(7);
+
+        Assert.True(entity.Metadata.FindAnnotation("DotRocks:RandomDistribution")?.Value as bool?);
+        Assert.Equal(7, entity.Metadata.FindAnnotation("DotRocks:DistributionBuckets")?.Value);
+        Assert.Null(entity.Metadata.FindAnnotation("DotRocks:DistributionColumns"));
+    }
+
+    [Fact]
+    public void EntityTypeBuilderExtensions_SetSortKeyAndMergeTableProperties()
+    {
+        var builder = new ModelBuilder();
+        var entity = builder.Entity<TableShapeWidget>();
+
+        entity.HasSortKey("name");
+        entity.HasStarRocksProperty("compression", "LZ4");
+        entity.HasStarRocksProperty("bloom_filter_columns", "name");
+
+        Assert.Equal(
+            NameColumn,
+            Assert.IsType<string[]>(
+                entity.Metadata.FindAnnotation("DotRocks:SortKeyColumns")?.Value
+            )
+        );
+        IReadOnlyDictionary<string, string> properties = Assert.IsAssignableFrom<
+            IReadOnlyDictionary<string, string>
+        >(entity.Metadata.FindAnnotation("DotRocks:Properties")?.Value);
+        Assert.Equal("LZ4", properties["compression"]);
+        Assert.Equal("name", properties["bloom_filter_columns"]);
+    }
+
     [Theory]
     [MemberData(nameof(UnsupportedOperations))]
     public void Generate_UnsupportedMigrationOperation_ThrowsNotSupportedException(
