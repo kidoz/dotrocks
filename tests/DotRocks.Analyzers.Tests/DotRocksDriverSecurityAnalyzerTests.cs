@@ -192,6 +192,33 @@ public sealed class DotRocksDriverSecurityAnalyzerTests
     }
 
     [Fact]
+    public async Task MissingCancellationToken_ReportsInsideLocalFunctionWhenTokenAvailable()
+    {
+        Diagnostic[] diagnostics = await AnalyzeAsync(
+                """
+                internal static class Sample
+                {
+                    public static void Run(
+                        DotRocks.Data.DotRocksCommand command,
+                        System.Threading.CancellationToken cancellationToken)
+                    {
+                        async System.Threading.Tasks.Task QueryAsync()
+                        {
+                            await command.ExecuteNonQueryAsync();
+                        }
+                    }
+                }
+                """
+            )
+            .ConfigureAwait(true);
+
+        AssertHasDiagnostic(
+            diagnostics,
+            DotRocksDiagnosticDescriptors.MissingCancellationTokenDiagnosticId
+        );
+    }
+
+    [Fact]
     public async Task BlockingResult_ReportsSyncOverAsync()
     {
         Diagnostic[] diagnostics = await AnalyzeAsync(
@@ -288,6 +315,25 @@ public sealed class DotRocksDriverSecurityAnalyzerTests
     }
 
     [Fact]
+    public async Task LiteralPasswordAlias_ReportsDiagnostic()
+    {
+        Diagnostic[] diagnostics = await AnalyzeAsync(
+                """
+                internal static class Sample
+                {
+                    public static void Run()
+                    {
+                        _ = new DotRocks.Data.DotRocksConnection("Server=127.0.0.1;User ID=root;Pwd=secret");
+                    }
+                }
+                """
+            )
+            .ConfigureAwait(true);
+
+        AssertHasDiagnostic(diagnostics, DotRocksDiagnosticDescriptors.LiteralPasswordDiagnosticId);
+    }
+
+    [Fact]
     public async Task LiteralPasswordLocalVariable_ReportsDiagnostic()
     {
         Diagnostic[] diagnostics = await AnalyzeAsync(
@@ -305,6 +351,25 @@ public sealed class DotRocksDriverSecurityAnalyzerTests
             .ConfigureAwait(true);
 
         AssertHasDiagnostic(diagnostics, DotRocksDiagnosticDescriptors.LiteralPasswordDiagnosticId);
+    }
+
+    [Fact]
+    public async Task EmptyLiteralPassword_DoesNotReport()
+    {
+        Diagnostic[] diagnostics = await AnalyzeAsync(
+                """
+                internal static class Sample
+                {
+                    public static void Run()
+                    {
+                        _ = new DotRocks.Data.DotRocksConnection("Server=127.0.0.1;User ID=root;Password= ");
+                    }
+                }
+                """
+            )
+            .ConfigureAwait(true);
+
+        AssertNoDiagnostic(diagnostics, DotRocksDiagnosticDescriptors.LiteralPasswordDiagnosticId);
     }
 
     [Fact]
