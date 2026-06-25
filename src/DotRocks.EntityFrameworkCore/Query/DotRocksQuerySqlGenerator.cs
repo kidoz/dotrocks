@@ -14,28 +14,11 @@ namespace DotRocks.EntityFrameworkCore.Query;
 internal sealed class DotRocksQuerySqlGenerator(QuerySqlGeneratorDependencies dependencies)
     : QuerySqlGenerator(dependencies)
 {
-    protected override Expression VisitSelect(SelectExpression selectExpression)
-    {
-        if (selectExpression.GroupBy.Count > 0)
-        {
-            throw CreateUnsupportedQueryException("GROUP BY");
-        }
-
-        return base.VisitSelect(selectExpression);
-    }
-
-    protected override Expression VisitCrossJoin(CrossJoinExpression crossJoinExpression) =>
-        throw CreateUnsupportedQueryException("CROSS JOIN");
-
-    protected override Expression VisitInnerJoin(InnerJoinExpression innerJoinExpression) =>
-        throw CreateUnsupportedQueryException("JOIN");
-
-    protected override Expression VisitLeftJoin(LeftJoinExpression leftJoinExpression) =>
-        throw CreateUnsupportedQueryException("LEFT JOIN");
-
-    protected override Expression VisitRightJoin(RightJoinExpression rightJoinExpression) =>
-        throw CreateUnsupportedQueryException("RIGHT JOIN");
-
+    // StarRocks is an MPP analytics engine; INNER/LEFT/RIGHT/CROSS JOIN and
+    // GROUP BY/HAVING are first-class SQL and are emitted by the base relational
+    // generator unchanged. Only set-modifying LINQ (ExecuteUpdate/ExecuteDelete)
+    // remains unsupported, because StarRocks does not accept the UPDATE/DELETE
+    // shapes EF Core produces for arbitrary key models.
     protected override Expression VisitDelete(DeleteExpression deleteExpression) =>
         throw CreateUnsupportedQueryException("LINQ DELETE");
 

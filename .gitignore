@@ -19,3 +19,11 @@ coverage*.xml
 
 # OS
 .DS_Store
+
+/.agents/
+/.claude/
+/.codex/
+AGENTS.md
+CLAUDE.md
+
+.gitignore
