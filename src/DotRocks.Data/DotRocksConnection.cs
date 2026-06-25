@@ -252,6 +252,21 @@ public sealed class DotRocksConnection : DbConnection
     /// <inheritdoc />
     protected override DbCommand CreateDbCommand() => new DotRocksCommand(this);
 
+    /// <summary>Returns the list of supported schema metadata collections.</summary>
+    public override DataTable GetSchema() =>
+        Metadata.DotRocksSchema.GetSchema(this, collectionName: null, restrictions: null);
+
+    /// <summary>Returns the named schema metadata collection from StarRocks INFORMATION_SCHEMA.</summary>
+    /// <param name="collectionName">The metadata collection name (for example "Tables" or "Columns").</param>
+    public override DataTable GetSchema(string collectionName) =>
+        Metadata.DotRocksSchema.GetSchema(this, collectionName, restrictions: null);
+
+    /// <summary>Returns the named schema metadata collection filtered by the given restrictions.</summary>
+    /// <param name="collectionName">The metadata collection name.</param>
+    /// <param name="restrictionValues">Restriction values applied in the collection's documented order.</param>
+    public override DataTable GetSchema(string collectionName, string?[] restrictionValues) =>
+        Metadata.DotRocksSchema.GetSchema(this, collectionName, restrictionValues);
+
     /// <inheritdoc />
     public override bool CanCreateBatch => true;
 

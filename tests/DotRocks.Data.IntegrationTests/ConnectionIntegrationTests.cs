@@ -31,6 +31,61 @@ public sealed class ConnectionIntegrationTests
     }
 
     [Fact]
+    public async Task GetSchema_ReadsDatabasesTablesAndColumnsFromInformationSchema()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            Assert.Skip(
+                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
+            );
+        }
+
+        using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
+        await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        DataTable databases = await connection
+            .GetSchemaAsync("Databases", TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+        Assert.Contains(
+            databases.Rows.Cast<DataRow>(),
+            row =>
+                string.Equals(
+                    (string)row["database_name"],
+                    "information_schema",
+                    StringComparison.OrdinalIgnoreCase
+                )
+        );
+
+        // The information_schema.tables view is always present; query its columns with restrictions.
+        DataTable columns = await connection
+            .GetSchemaAsync(
+                "Columns",
+                [null, "information_schema", "tables", null],
+                TestContext.Current.CancellationToken
+            )
+            .ConfigureAwait(true);
+        Assert.True(columns.Rows.Count >= 1);
+        Assert.Contains(
+            columns.Rows.Cast<DataRow>(),
+            row =>
+                string.Equals(
+                    (string)row["column_name"],
+                    "TABLE_NAME",
+                    StringComparison.OrdinalIgnoreCase
+                )
+        );
+
+        DataTable views = await connection
+            .GetSchemaAsync(
+                "Views",
+                [null, "information_schema", "tables"],
+                TestContext.Current.CancellationToken
+            )
+            .ConfigureAwait(true);
+        Assert.True(views.Rows.Count >= 1);
+    }
+
+    [Fact]
     public async Task ServerPrepared_ExecutesParameterizedQueryWithBinaryProtocol()
     {
         if (!IntegrationTestEnvironment.IsEnabled)

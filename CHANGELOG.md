@@ -9,6 +9,9 @@ version is derived from the release tag at publish time.
 ## [Unreleased]
 
 ### Added
+- `DbConnection.GetSchema()` metadata collections over StarRocks `INFORMATION_SCHEMA`:
+  `MetaDataCollections`, `Databases`, `Tables`, `Views`, and `Columns`, with restriction filtering.
+  Verified against StarRocks 4.0.7.
 - Server-side prepared statements via `DotRocksParameterMode.ServerPrepared`: the binary
   `COM_STMT_PREPARE` / `COM_STMT_EXECUTE` / `COM_STMT_CLOSE` protocol with binary parameter encoding
   and binary result-row decoding, verified end to end against StarRocks 4.0.7. Use positional `?`
