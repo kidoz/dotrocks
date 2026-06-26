@@ -1,34 +1,33 @@
 # StarRocks 3.x Driver Developer Notes
 
-Source snapshot: 2026-06-20. Live validation: 2026-06-21 against
+Source snapshot: 2026-06-25. Live validation: 2026-06-25 against
 `starrocks/allin1-ubuntu:3.5.5` and `4.0.7` (sections marked "verified live" reflect
 observed image behavior, which in places differs from the published docs).
 
 This document summarizes StarRocks 3.x behavior that matters when building and
 maintaining DotRocks against older lines. It is research guidance, not a
 replacement for live compatibility tests. Treat observed behavior from a pinned
-StarRocks 3.x image as authoritative when it differs from documentation. 3.x
-support should mean live compatibility tests, documented feature gates, and
-explicit unsupported errors when a 3.x server lacks a capability that exists in
-4.x.
+StarRocks 3.x image as authoritative when it differs from documentation. DotRocks
+supports a 3.x feature only when live tests, capability gates, and explicit
+unsupported errors exist for that line.
 
 ## Primary Baseline
 
-DotRocks should target 3.x lines in this order, treating 3.5 as the only line
-that gets near-parity with the current 4.0 baseline:
+DotRocks targets 3.x lines in this order, with 3.5 as the only line near the 4.0
+baseline:
 
 | Target | Driver status |
 | --- | --- |
 | 3.5 latest patch | First 3.x target. Near-parity with the 4.0 baseline. |
-| 3.4 latest patch | Read/query, Stream Load, type, and EF DDL smoke target. SQL transactions and MySQL-protocol SSL should be feature-gated or explicitly unsupported unless live tests prove otherwise. |
+| 3.4 latest patch | Read/query, Stream Load, type, and EF DDL smoke target. SQL transactions and MySQL-protocol SSL require live proof or explicit unsupported errors. |
 | 3.3 latest patch | Same as 3.4, lower priority. Keep as compatibility smoke and query/load characterization. |
 | 3.2 latest patch | Optional read/query target only. Prepared statements and HTTP SQL API begin here, but transaction/TLS behavior is not a safe baseline. |
 | 3.1 and 3.0 | Best-effort only unless there is user demand. Do not promise full support. |
 
 The StarRocks release guide says the project maintains the three latest minor
-versions. With latest docs currently showing 4.1, 4.0, and Stable-3.5, DotRocks
-should treat 3.5 as the production-relevant 3.x line and keep older 3.x support
-as compatibility/backport scope.
+versions. With latest docs showing 4.1, 4.0, and Stable-3.5, DotRocks treats 3.5
+as the production-relevant 3.x line and keeps older 3.x support as
+compatibility/backport scope.
 
 3.5 adds several driver-visible capabilities over earlier 3.x lines:
 
@@ -45,7 +44,7 @@ as compatibility/backport scope.
 StarRocks uses a MySQL-compatible protocol for the FE query port, and DotRocks
 must implement only the StarRocks subset it verifies on each 3.x line.
 
-Driver support should be explicit for:
+Driver support is explicit for:
 
 - Handshake protocol version 10.
 - Capability negotiation used by StarRocks FE.
@@ -56,7 +55,7 @@ Driver support should be explicit for:
   warnings, affected rows, and last insert id where surfaced.
 - `KILL`-based or connection-close cancellation characterization.
 
-Driver limitations should remain explicit for:
+Driver limitations remain explicit for:
 
 - Unsupported authentication plugins.
 - Authentication switch requests if not implemented.
@@ -95,7 +94,7 @@ Driver requirements where TLS is available:
 
 ## SQL Execution
 
-Text SQL is the safest execution path on every 3.x line. DotRocks should keep
+Text SQL is the safest execution path on every 3.x line. DotRocks keeps
 named parameter binding as client-side literal formatting unless and until
 StarRocks binary prepared statements are characterized per version.
 
@@ -106,7 +105,7 @@ characterized for that version. MySQL Connector/J behavior is not DotRocks
 protocol behavior.
 
 HTTP SQL API is documented from 3.2.0, initially for internal tables only; from
-3.2.1 it can query external catalogs. It should remain an optional future query
+3.2.1 it can query external catalogs. It remains an optional future query
 transport, not a replacement for the ADO.NET MySQL-protocol driver, and is not
 required for ADO.NET support.
 
@@ -148,7 +147,7 @@ Important 3.x type notes:
   support in complex types and generated columns.
 - Binary types are not general string types, and Stream Load CSV uses hex input
   for binary values while JSON Stream Load does not support `BINARY`.
-- `ARRAY`, `MAP`, `STRUCT`, `BITMAP`, `HLL`, and `VARIANT` should remain
+- `ARRAY`, `MAP`, `STRUCT`, `BITMAP`, `HLL`, and `VARIANT` remain
   unsupported or raw-string/opaque until their result metadata and text
   encodings are characterized on each line.
 
@@ -182,9 +181,9 @@ DotRocks requirements:
 
 - `BeginTransaction()` can be supported only with a 3.5-specific transaction
   capability profile and documentation that it is not OLTP-style support.
-- `UPDATE` and `DELETE` inside explicit transactions should be rejected or
+- `UPDATE` and `DELETE` inside explicit transactions are rejected or
   characterized as unsupported on 3.5.
-- `DotRocksTransaction` should fail explicitly on 3.4/3.3/3.2 unless live tests
+- `DotRocksTransaction` fails explicitly on 3.4/3.3/3.2 unless live tests
   prove the exact SQL transaction contract.
 - Never return a pooled physical connection with an active transaction.
 - Reject foreign, completed, or mismatched transaction objects immediately.
@@ -257,7 +256,7 @@ Driver and EF provider requirements:
   expects them.
 - Generate StarRocks table shapes explicitly: key model, key columns,
   distribution columns, bucket count, and replication number.
-- Default DDL should be conservative.
+- Keep default DDL conservative.
 - Reject unsupported schema mutations before sending partial SQL.
 - Do not pretend general EF migrations are supported.
 
@@ -280,37 +279,37 @@ System and DDL limits:
 
 ## EF Core Provider Boundaries
 
-The EF provider should be even more conservative on 3.x than on 4.0:
+The EF provider stays narrower on 3.x than on 4.0:
 
-- Query support can grow by verified translation slices.
-- Writes should be single-table, explicit-primary-key, scalar-only, and
+- Query support grows by verified translation slices.
+- Writes are single-table, explicit-primary-key, scalar-only, and
   parameterized.
-- `SaveChanges` must remain one row per `SaveChanges` on 3.5 and should not
+- `SaveChanges` remains one row per `SaveChanges` on 3.5 and does not
   assume 4.0 transaction behavior.
-- On 3.4/3.3, EF writes should avoid explicit SQL transactions by default, or be
+- On 3.4/3.3, EF writes avoid explicit SQL transactions by default, or are
   rejected if the provider cannot safely execute the write pattern without them.
 - Generated values, navigations, owned types, concurrency tokens, and
-  composite-key writes should remain unsupported until designed.
-- Savepoints must be disabled or rejected.
-- Migrations should start with database creation, table creation/drop, and
+  composite-key writes remain unsupported until designed.
+- Savepoints are disabled or rejected.
+- Migrations start with database creation, table creation/drop, and
   migration history only.
 - DDL mutation operations such as add/drop/alter column, rename, foreign keys,
-  indexes, defaults, computed columns, and destructive database rollback should
-  be explicit failures unless implemented and live-tested.
+  indexes, defaults, computed columns, and destructive database rollback are
+  explicit failures unless implemented and live-tested.
 
 ## Observability And Cancellation
 
 3.x lacks the 4.0 global connection IDs and richer query observability, so
-DotRocks should not depend on them. The driver should:
+DotRocks does not depend on them. The driver:
 
-- Expose sanitized connection and command diagnostics.
-- Keep query ID / connection ID capture as a future capability and not rely on
+- Exposes sanitized connection and command diagnostics.
+- Keeps query ID / connection ID capture as a future capability and does not rely on
   4.0-only identifiers.
-- Cancel by closing the physical connection when protocol state cannot be
+- Cancels by closing the physical connection when protocol state cannot be
   recovered.
-- Discard pooled connections after timeout, cancellation during I/O, malformed
+- Discards pooled connections after timeout, cancellation during I/O, malformed
   packets, partial reads, auth failure, or active-reader abandonment.
-- Keep fake-server tests for malformed handshake, auth result, result metadata,
+- Keeps fake-server tests for malformed handshake, auth result, result metadata,
   OK/ERR packets, and row payloads.
 
 ## Capability Gates

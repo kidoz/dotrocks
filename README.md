@@ -22,12 +22,12 @@ Roslyn analyzer suite built specifically for [StarRocks](https://www.starrocks.i
 
 ## Status
 
-The latest tagged release is DotRocks 1.1.0. The `main` branch is post-1.1.0; this
+The latest tagged release is DotRocks 1.2.0. The `main` branch is post-1.2.0; this
 README tracks `main`, and unreleased changes are listed in [CHANGELOG.md](CHANGELOG.md).
 The ADO.NET driver (`DotRocks.Data`), EF Core provider (`DotRocks.EntityFrameworkCore`),
 and analyzer suite (`DotRocks.Analyzers`) are validated against live StarRocks 3.5.5 and
-4.0.7 in CI. Features are documented as supported only when they are implemented and
-covered by tests; unsupported behavior fails explicitly.
+4.0.7 in CI. Supported features are implemented and tested; unsupported behavior fails
+explicitly.
 
 DotRocks implements **its own** managed StarRocks client protocol. It takes no runtime
 dependency on MySqlConnector, Oracle MySQL Connector/NET, Pomelo, or any other MySQL
@@ -37,6 +37,15 @@ driver, and it is not a general-purpose MySQL driver.
 
 - .NET 10 SDK (pinned via `global.json`)
 - C# 14
+- StarRocks FE reachable on the MySQL protocol port (default 9030); Stream Load also
+  needs the FE HTTP endpoint (default 8030)
+
+## Documentation
+
+- [Getting started](docs/articles/getting-started.md)
+- [EF Core entity mapping](docs/articles/ef-core-entity-mapping.md)
+- [StarRocks 3.x driver developer notes](docs/starrocks-3x-driver-developer-notes.md)
+- [StarRocks 4.x driver developer notes](docs/starrocks-4x-driver-developer-notes.md)
 
 ## ADO.NET usage
 
@@ -55,15 +64,14 @@ object? value = await command.ExecuteScalarAsync();
 
 `DotRocksCommand.ParameterMode` selects the parameter binding and execution path:
 
-- `Auto` (the default) and `TextProtocol` perform conservative client-side preparation for text
-  commands — named `@` placeholders and parameter metadata are validated up front, and execution
-  sends StarRocks text SQL with safely formatted parameter values. `Prepare()` / `PrepareAsync()`
-  validate the command and parameter shape for these modes.
+- `Auto` (the default) and `TextProtocol` validate named `@` placeholders and parameter
+  metadata before executing StarRocks text SQL with formatted parameter values.
+  `Prepare()` / `PrepareAsync()` validate the command shape for these modes.
 - `ServerPrepared` uses the StarRocks server-side prepared (binary) protocol —
   `COM_STMT_PREPARE` / `COM_STMT_EXECUTE` / `COM_STMT_CLOSE`, verified against StarRocks 4.0.7. Use
   positional `?` placeholders and add parameters in order; values are sent with the binary
-  parameter encoding and results are decoded from binary rows. A value type the binary encoder does
-  not support fails with a `DotRocksUnsupportedFeatureException` (which derives from
+  parameter encoding and results are decoded from binary rows. Unsupported binary parameter types
+  fail with a `DotRocksUnsupportedFeatureException` (which derives from
   `DotRocksException`). Prepared statements are cached and reused per physical connection, so
   re-executing the same SQL avoids re-preparing. StarRocks 4.0.7 allows only `SELECT` in the
   prepared protocol — a prepared `INSERT` / `UPDATE` / `DELETE` is rejected by the server, so use
@@ -78,8 +86,7 @@ command.Parameters.Add(new DotRocksParameter { Value = true });
 await using var reader = await command.ExecuteReaderAsync(cancellationToken);
 ```
 
-Use `DotRocksDataSource` when one normalized configuration should create many logical
-connections and participate in DotRocks pooling:
+Use `DotRocksDataSource` for shared configuration and DotRocks pooling:
 
 ```csharp
 await using var dataSource = new DotRocksDataSource(
@@ -119,8 +126,8 @@ specific capability set. When unset, DotRocks detects the version per connection
 
 ## Entity Framework Core
 
-`DotRocks.EntityFrameworkCore` provides the current EF Core provider surface for
-StarRocks: `UseStarRocks`, EF-managed relational connections, raw SQL commands,
+`DotRocks.EntityFrameworkCore` provides the EF Core provider surface for StarRocks:
+`UseStarRocks`, EF-managed relational connections, raw SQL commands,
 `FromSqlRaw`, and the LINQ query subset verified against StarRocks.
 Pin the target server with `starRocks => starRocks.ServerVersion(new StarRocksServerVersion(4, 0, 7))`;
 building the options never contacts the server. To discover the version once at startup, call
@@ -198,12 +205,11 @@ Unsupported EF Core behavior is explicit:
 - binary/varbinary EF mapping until byte-array query translation and materialization are
   broader than the verified ADO.NET reader path.
 
-These constraints are enforced at **model validation** (when the model is first built), not only
-at `SaveChanges`. DotRocks requires the whole mapped model to be write-safe: any keyed entity with
-a navigation, complex property, composite key, concurrency token, generated/default/computed value,
-or binary property is rejected up front, even for a query-only `DbContext`. Configure mapped
-properties accordingly (for example `ValueGeneratedNever()` on keys) regardless of whether you
-intend to write.
+These constraints are enforced at **model validation**, when the model is first built.
+DotRocks requires the whole mapped model to be write-safe: any keyed entity with a
+navigation, complex property, composite key, concurrency token, generated/default/computed
+value, or binary property is rejected up front, even for a query-only `DbContext`.
+Configure mapped properties accordingly, for example `ValueGeneratedNever()` on keys.
 
 A compilable EF Core sample lives at
 [`samples/DotRocks.Samples.EntityFrameworkCore`](samples/DotRocks.Samples.EntityFrameworkCore).
@@ -279,11 +285,11 @@ output.
 Package consumption:
 
 ```xml
-<PackageReference Include="DotRocks.Data" Version="1.1.0" />
-<PackageReference Include="DotRocks.EntityFrameworkCore" Version="1.1.0" />
-<PackageReference Include="DotRocks.EntityFrameworkCore.Design" Version="1.1.0" PrivateAssets="all" />
-<PackageReference Include="DotRocks.Analyzers" Version="1.1.0" PrivateAssets="all" />
-<PackageReference Include="DotRocks.Analyzers.CodeFixes" Version="1.1.0" PrivateAssets="all" />
+<PackageReference Include="DotRocks.Data" Version="1.2.0" />
+<PackageReference Include="DotRocks.EntityFrameworkCore" Version="1.2.0" />
+<PackageReference Include="DotRocks.EntityFrameworkCore.Design" Version="1.2.0" PrivateAssets="all" />
+<PackageReference Include="DotRocks.Analyzers" Version="1.2.0" PrivateAssets="all" />
+<PackageReference Include="DotRocks.Analyzers.CodeFixes" Version="1.2.0" PrivateAssets="all" />
 ```
 
 The test suite validates these packages through a local NuGet-source consumer project
@@ -310,11 +316,11 @@ Current diagnostics:
 Disposal of connections, commands, readers, and transactions is covered by the built-in
 .NET analyzer `CA2000`; DotRocks does not duplicate that rule.
 
-Analyzer limits: diagnostics currently inspect source-visible constants, local string
-assignments, `DotRocksConnectionStringBuilder` initializers, and local method bodies.
-They do not perform interprocedural data-flow analysis, inspect runtime-built connection
-strings, prove transaction state across method boundaries, or prove whether a range change
-contains only one entity at runtime.
+Analyzer limits: diagnostics inspect source-visible constants, local string assignments,
+`DotRocksConnectionStringBuilder` initializers, and local method bodies. They do not perform
+interprocedural data-flow analysis, inspect runtime-built connection strings, prove transaction
+state across method boundaries, or prove whether a range change contains only one entity at
+runtime.
 
 ## Stream Load
 
@@ -423,9 +429,8 @@ builder.Services.AddOpenTelemetry()
 The command metrics carry only bounded labels: `outcome` (`success`, `error`, `canceled`,
 `timeout`) and `operation` (a low-cardinality operation name such as `SELECT`/`INSERT`). SQL text,
 parameter values, connection strings, user names, host names, and database names are never used as
-metric labels. DotRocks keeps its native metric names (`dotrocks.command.duration` in ms); a stable
-`db.client.operation.duration` (seconds) is not emitted in parallel, to avoid duplicate
-dashboards. It could be added in a future major version.
+metric labels. DotRocks keeps native metric names such as `dotrocks.command.duration` in ms and
+does not emit a parallel `db.client.operation.duration` metric.
 
 Spans carry safe attributes aligned with the OpenTelemetry database semantic conventions:
 `db.system.name` (`other_sql`), `db.operation.name` and `db.query.summary` (a low-cardinality
@@ -441,11 +446,10 @@ idle is discarded rather than handed out. Set `Connection Lifetime` (seconds; `0
 the default) to retire a physical connection once it reaches that age, with a small per-connection
 jitter so connections opened together do not all expire at once.
 
-DotRocks does not yet perform a verified per-lease session reset, so a connection that ran a
-session-mutating statement (`USE` or `SET`) is **discarded on return instead of reused**. This
-keeps session state — the current database and session variables — from leaking into the next
-lease. Pure query and DML workloads pool and reuse connections normally; a verified
-connection-reset path may relax this in a future release.
+DotRocks does not perform a verified per-lease session reset. A connection that ran a
+session-mutating statement (`USE` or `SET`) is **discarded on return instead of reused** so
+the current database and session variables cannot leak into the next lease. Pure query and
+DML workloads pool and reuse connections normally.
 
 Pool activity is observable through the `DotRocks.Data` `Meter`: `dotrocks.pool.connections.idle`
 and `dotrocks.pool.connections.active` (gauges), `dotrocks.pool.lease.wait_time` (histogram), and

@@ -4,6 +4,9 @@ DotRocks is a native .NET driver, Entity Framework Core provider, and Roslyn ana
 built specifically for [StarRocks](https://www.starrocks.io/). It implements its own managed
 StarRocks client protocol and takes no dependency on any MySQL driver.
 
+The latest tagged release is 1.2.0. The `main` branch is post-1.2.0; use the repository
+README and changelog for unreleased behavior.
+
 ## Packages
 
 | Package | Description |
@@ -22,5 +25,18 @@ StarRocks client protocol and takes no dependency on any MySQL driver.
 - [StarRocks 4.x driver developer notes](starrocks-4x-driver-developer-notes.md)
 - [API reference](xref:DotRocks.Data.DotRocksConnection)
 
-See the repository [README](https://github.com/kidoz/dotrocks) for status, the supported
-ADO.NET and EF Core surface, StarRocks compatibility notes, and security posture.
+## Compatibility
+
+The live integration matrix runs against StarRocks 3.5.5 and 4.0.7. Version-specific
+behavior is gated from `SELECT current_version()` or the `Server Compatibility Level`
+connection-string override.
+
+Build this site locally with:
+
+```bash
+dotnet tool restore
+dotnet docfx docs/docfx.json
+```
+
+See the repository [README](https://github.com/kidoz/dotrocks) for the full supported
+ADO.NET, EF Core, Stream Load, analyzer, and observability surface.
