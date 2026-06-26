@@ -10,7 +10,7 @@ namespace DotRocks.Analyzers.EntityFrameworkCore;
 /// <summary>
 /// Reports EF Core entities configured with a composite primary key, which DotRocks EF Core
 /// rejects at model validation. Writable entities require a single-column primary key; read-only
-/// entities should be mapped with HasNoKey().
+/// entities use HasNoKey().
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class EfCompositePrimaryKeyAnalyzer : DiagnosticAnalyzer
