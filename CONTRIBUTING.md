@@ -13,14 +13,11 @@ analyzer suite for StarRocks.
 
 ```bash
 dotnet tool restore
-dotnet csharpier check .                                  # formatting gate (CI runs this)
-dotnet restore DotRocks.slnx --locked-mode
-dotnet build DotRocks.slnx --configuration Release
-dotnet test tests/DotRocks.Protocol.Tests                 # server-free unit tests
-dotnet test tests/DotRocks.EntityFrameworkCore.Tests
-dotnet test tests/DotRocks.Analyzers.Tests
-dotnet test tests/DotRocks.Benchmarks.Tests
-dotnet test tests/DotRocks.PackageTests
+dotnet restore --locked-mode
+dotnet csharpier check .
+dotnet build --configuration Release --no-restore
+dotnet test --configuration Release --no-build
+dotnet pack --configuration Release --no-build
 ```
 
 Integration tests require a live StarRocks and run via `just integration-test` (or the
@@ -38,9 +35,8 @@ not silently passed.
   prefixes (e.g. `Add connection pooling`). Do not commit `.gitignore` as part of a feature.
 - **Tests:** new behavior ships with tests. "Nothing is described as working unless it is
   built and tested."
-- **Benchmarks:** hot-path changes should run `dotnet run --project benchmarks/DotRocks.Benchmarks
-  --configuration Release -- --filter '*'`; the benchmark executable enforces configured
-  mean-time and allocation budgets.
+- **Benchmarks:** hot-path changes should run `just bench`; the benchmark executable enforces
+  configured mean-time and allocation budgets.
 
 ## Pull requests
 

@@ -6,8 +6,8 @@ fixes for validation errors.
 
 > Authoritative API surface lives in the
 > [README EF Core section](https://github.com/kidoz/dotrocks#entity-framework-core). This
-> article expands it with the why, decision rules, and worked examples. When the two
-> disagree, the README and source win.
+> article expands it with mapping rules and examples. When the two disagree, the README and
+> source win.
 
 ## Model Validation Timing
 
@@ -60,8 +60,8 @@ Do you call SaveChanges for this entity?
 
 ## Read-only / query entities
 
-This is the right mapping for reports, aggregates, and any StarRocks table whose key is not a
-single column (DUPLICATE KEY and AGGREGATE KEY tables almost always have multi-column keys).
+Use this mapping for reports, aggregates, and any StarRocks table whose key is not a
+single column.
 
 ```csharp
 public sealed class MonthlyMetricSummary
@@ -177,7 +177,10 @@ columns, **one** bucket, `replication_num = 1`.
 | `HasStarRocksPrimaryKey(params cols)` | `PRIMARY KEY (...)` | Required for writable entities |
 | `HasStarRocksUniqueKey(params cols)` | `UNIQUE KEY (...)` | |
 | `HasStarRocksHashDistribution(int buckets, params cols)` | `DISTRIBUTED BY HASH (...) BUCKETS n` | `buckets` must be `> 0` |
-| `HasStarRocksReplicationNum(int n)` | `PROPERTIES("replication_num" = "n")` | `n` must be `> 0` |
+| `DistributedRandomly(int buckets)` | `DISTRIBUTED BY RANDOM BUCKETS n` | Clears hash-distribution columns; `buckets` must be `> 0` |
+| `HasSortKey(params cols)` | `ORDER BY (...)` | Uses store column names |
+| `HasStarRocksProperty(string name, string value)` | Adds a `PROPERTIES` entry | Property names and values are validated against quote injection |
+| `HasStarRocksReplicationNum(int n)` | `PROPERTIES("replication_num" = "n")` | `n` must be `> 0`; overrides a custom `replication_num` property |
 
 The column names passed here are **store column names** (the actual table columns), and they
 must exist on the entity's table — the validator rejects unknown columns. When several
@@ -242,7 +245,7 @@ dotnet_diagnostic.DTR0008.severity = error
 The runtime `DotRocksModelValidator` always rejects these configurations regardless of analyzer
 severity.
 
-## AI-agent checklist
+## Mapping checklist
 
 When mapping or debugging an entity for DotRocks, verify in order:
 

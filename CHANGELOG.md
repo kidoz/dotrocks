@@ -8,6 +8,10 @@ version is derived from the release tag at publish time.
 
 ## [Unreleased]
 
+### Changed
+- Refreshed README, DocFX docs, security notes, and project agent context for the 1.2.0
+  release state; tightened wording around tested support boundaries and local validation.
+
 ## [1.2.0] - 2026-06-25
 
 ### Added

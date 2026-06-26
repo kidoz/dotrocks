@@ -1,6 +1,7 @@
 # StarRocks 4.x Driver Developer Notes
 
-Source snapshot: 2026-06-20.
+Source snapshot: 2026-06-25. Live validation: 2026-06-25 against
+`starrocks/allin1-ubuntu:4.0.7` and compatibility checks against `3.5.5`.
 
 This document summarizes StarRocks 4.x behavior that matters when building and
 maintaining DotRocks. It is research guidance, not a replacement for live
@@ -9,9 +10,9 @@ authoritative when it differs from documentation.
 
 ## Primary Baseline
 
-DotRocks should target StarRocks 4.0 first, with 4.0.7+ as the practical test
+DotRocks targets StarRocks 4.0 first, with 4.0.7+ as the practical test
 baseline already used by the project. StarRocks 4.1 exists, but the first
-compatibility surface should be 4.0.x because it introduced several driver-visible
+compatibility surface is 4.0.x because it introduced several driver-visible
 changes:
 
 - SQL transactions and Stream Load transactions gain broader multi-table behavior.
@@ -28,7 +29,7 @@ changes:
 StarRocks uses a MySQL-compatible protocol for the FE query port, but DotRocks
 must implement only the StarRocks subset it verifies.
 
-Driver support should be explicit for:
+Driver support is explicit for:
 
 - Handshake protocol version 10.
 - Capability negotiation used by StarRocks FE.
@@ -39,7 +40,7 @@ Driver support should be explicit for:
   warnings, affected rows, and last insert id where surfaced.
 - `KILL`-based or connection-close cancellation characterization.
 
-Driver limitations should remain explicit for:
+Driver limitations remain explicit for:
 
 - Unsupported authentication plugins.
 - Authentication switch requests if not implemented.
@@ -55,7 +56,7 @@ Driver limitations should remain explicit for:
 StarRocks supports native password authentication and `mysql_native_password`.
 StarRocks also documents LDAP, JWT, and OAuth 2.0 authentication methods. Those
 external methods may require clear-password or custom plugin behavior in MySQL
-clients, so DotRocks should fail explicitly until each method is designed and
+clients, so DotRocks fails explicitly until each method is designed and
 tested.
 
 TLS is available for MySQL-protocol connections from StarRocks 3.4.1 onward.
@@ -78,7 +79,7 @@ path through `DotRocksParameterMode.ServerPrepared`.
 Prepared statements in StarRocks 4.0 are session-scoped. The SQL documentation
 states that placeholders are `?`, variables are passed with `EXECUTE ... USING`,
 and the prepared statement is dropped at session end. The syntax section says only
-`SELECT` is currently supported as a preparable statement, while later examples
+`SELECT` is supported as a preparable statement, while later examples
 and JDBC notes mention broader usage. Treat this as a documentation conflict.
 `SELECT`, `INSERT`, `UPDATE`, and `DELETE` must be tested independently; MySQL
 Connector/J behavior is not DotRocks protocol behavior.
@@ -135,7 +136,7 @@ Important 4.x type notes:
   or in `ORDER BY`, `GROUP BY`, and `JOIN` clauses.
 - Stream Load CSV uses hex input for binary values; JSON Stream Load does not
   support `BINARY`.
-- `ARRAY`, `MAP`, `STRUCT`, `BITMAP`, `HLL`, and `VARIANT` should remain
+- `ARRAY`, `MAP`, `STRUCT`, `BITMAP`, `HLL`, and `VARIANT` remain
   unsupported or raw-string/opaque until their MySQL-protocol result metadata and
   text encodings are characterized.
 
@@ -242,7 +243,7 @@ Driver and EF provider requirements:
   expects them.
 - Generate StarRocks table shapes explicitly: key model, key columns,
   distribution columns, bucket count, and replication number.
-- Default DDL should be conservative.
+- Keep default DDL conservative.
 - Reject unsupported schema mutations before sending partial SQL.
 - Do not pretend general EF migrations are supported.
 
@@ -265,33 +266,33 @@ System and DDL limits:
 
 ## EF Core Provider Boundaries
 
-The EF provider should continue to be explicit and conservative:
+The EF provider stays explicit and conservative:
 
-- Query support can grow by verified translation slices.
-- Writes should be single-table, explicit-primary-key, scalar-only, and
+- Query support grows by verified translation slices.
+- Writes are single-table, explicit-primary-key, scalar-only, and
   parameterized.
 - Generated values, navigations, owned types, concurrency tokens, and composite-key
-  writes should remain unsupported until designed.
+  writes remain unsupported until designed.
 - Multi-row `SaveChanges` to one table is unsafe because StarRocks transaction
   semantics are not OLTP-like.
-- Savepoints must be disabled or rejected.
-- Migrations should start with database creation, table creation/drop, and
+- Savepoints are disabled or rejected.
+- Migrations start with database creation, table creation/drop, and
   migration history only.
 - DDL mutation operations such as add/drop/alter column, rename, foreign keys,
-  indexes, defaults, computed columns, and destructive database rollback should be
+  indexes, defaults, computed columns, and destructive database rollback are
   explicit failures unless implemented and live-tested.
 
 ## Observability And Cancellation
 
 StarRocks 4.0 includes global connection IDs and improved query observability.
-DotRocks should:
+DotRocks:
 
-- Expose sanitized connection and command diagnostics.
-- Keep query ID / connection ID capture as a future capability.
-- Cancel by closing the physical connection when protocol state cannot be recovered.
-- Discard pooled connections after timeout, cancellation during I/O, malformed
+- Exposes sanitized connection and command diagnostics.
+- Keeps query ID / connection ID capture as a future capability.
+- Cancels by closing the physical connection when protocol state cannot be recovered.
+- Discards pooled connections after timeout, cancellation during I/O, malformed
   packets, partial reads, auth failure, or active-reader abandonment.
-- Keep fake-server tests for malformed handshake, auth result, result metadata,
+- Keeps fake-server tests for malformed handshake, auth result, result metadata,
   OK/ERR packets, and row payloads.
 
 ## Version Compatibility Plan
