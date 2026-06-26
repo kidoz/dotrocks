@@ -12,7 +12,7 @@ public sealed class DotRocksDbContextOptionsBuilder(DbContextOptionsBuilder opti
     )
 {
     /// <summary>
-    /// Configures the StarRocks server version the provider should target. The version is recorded
+    /// Configures the StarRocks server version the provider targets. The version is recorded
     /// in the options only; constructing the options never contacts the server. Discover it once
     /// with <see cref="StarRocksServerVersion.DetectAsync(string, System.Threading.CancellationToken)"/>.
     /// </summary>

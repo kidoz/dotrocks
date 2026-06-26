@@ -57,9 +57,9 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
     /// </summary>
     public string ServerVersion { get; }
 
-    // A connection whose session state may have been mutated (USE / SET) is not reused: DotRocks
-    // does not yet perform a verified session reset, so reusing it could leak the current database
-    // or session variables into the next lease. Such connections are discarded on return instead.
+    // A connection whose session state may have been mutated (USE / SET) is not reused because
+    // session reset is not verified. Reusing it could leak the current database or session
+    // variables into the next lease, so the pool discards it on return.
     // A connection past its (jittered) maximum lifetime is likewise retired rather than reused.
     public bool IsReusable =>
         !_isDisposed
@@ -720,9 +720,7 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
 
     public void MarkBroken() => _isBroken = true;
 
-    // Conservative session-state guard: DotRocks does not yet perform a verified per-lease session
-    // reset, so a connection that ran a statement which can change the current database or session
-    // variables (USE / SET) must not be returned to the pool for reuse.
+    // Discard connections after USE / SET because per-lease session reset is not verified.
     private void MarkSessionDirtyIfMutating(string commandText)
     {
         if (IsSessionMutatingStatement(commandText))
