@@ -8,9 +8,61 @@ version is derived from the release tag at publish time.
 
 ## [Unreleased]
 
+### Added
+- `DotRocksStreamLoadException.ResponseBody` carries the raw server response body on
+  Stream Load HTTP failures so diagnostic detail (auth, label, format errors) is no longer
+  discarded; the exception message itself still never embeds untrusted server text.
+
 ### Changed
 - Refreshed README, DocFX docs, security notes, and project agent context for the 1.2.0
   release state; tightened wording around tested support boundaries and local validation.
+- `DotRocks.Analyzers.CodeFixes` now declares a NuGet dependency on `DotRocks.Analyzers`,
+  so installing the code-fix package alone no longer produces a code-fix assembly whose
+  analyzer dependency cannot load in the IDE.
+- The release workflow validates the tag format and matching `CHANGELOG.md` section, and
+  gates publishing on the full StarRocks integration matrix; all GitHub Actions are pinned
+  to commit SHAs.
+
+### Fixed
+- Commands whose payload spans multiple protocol packets (≥ 16 MiB) no longer fail with an
+  out-of-order sequence error: the response reader now continues from the writer's final
+  sequence id.
+- Disposing a partially-read data reader drains the remaining result set and leaves the
+  connection open and usable instead of closing the logical connection.
+  `CommandBehavior.SingleRow` and `CommandBehavior.SchemaOnly` are now honored.
+- A benign server error (for example a SQL typo) no longer closes the logical connection
+  when the session has run `SET`/`USE` or the physical connection has exceeded its
+  lifetime; only genuinely broken connections are closed.
+- A server error arriving mid result set on the prepared (binary) protocol now surfaces
+  the real server error code and message instead of a malformed-protocol failure, and the
+  connection stays usable.
+- `TIME` values outside `TimeSpan.Parse` range (up to MySQL's `838:59:59`, including
+  negative and fractional values) parse correctly on the text protocol.
+- `GetString` and `GetFieldValue<string>` on binary columns throw `InvalidCastException`
+  instead of silently returning `"System.Byte[]"`.
+- Binary-protocol `YEAR` values box as `int`, matching `GetFieldType` and the text path.
+- Cancellation during `COM_STMT_CLOSE` marks the physical connection broken so a
+  desynchronized connection can never return to the pool.
+- A pool-creation race no longer leaks the losing pool's idle-eviction timer.
+- `DotRocksDataSource.ConnectionString` returns the redacted connection string (password
+  omitted), matching `DotRocksConnection.ConnectionString`; created connections still
+  authenticate with the original credentials.
+- Connection-string values containing `;`, quotes, or `=` are serialized with proper
+  `DbConnectionStringBuilder` quoting instead of a backslash escape the parser does not
+  understand, closing an option-injection hole on the serialize→reparse round-trip.
+- EF Core string literals (string/varchar/json, and the defensive string branch of the
+  `Guid` mapping) and migration `PROPERTIES` keys/values escape backslashes and control
+  characters the same way the driver's literal formatter does; single quotes in table
+  properties are now escaped rather than rejected.
+- A plain `decimal` property with precision beyond the native range maps through a
+  `decimal` ↔ `DotRocksDecimal` value converter instead of a converter-less mapping with a
+  mismatched CLR type.
+- Scaffolding round-trips no longer lose table shape: the design-time annotation code
+  generator emits `DistributedRandomly(...)` for random distribution (previously a broken
+  zero-column hash-distribution call), `HasSortKey(...)`, and `HasStarRocksProperty(...)`.
+- The multi-row `SaveChanges` analyzer (DTR0007) only pairs a range operation with a
+  `SaveChanges` call on the same `DbContext` instance and ignores mutually exclusive
+  branches, removing false positives.
 
 ## [1.2.0] - 2026-06-25
 
