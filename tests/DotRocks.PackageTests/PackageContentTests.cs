@@ -89,8 +89,17 @@ public sealed class PackageContentTests
                 entries,
                 entry => entry.StartsWith("ref/", StringComparison.Ordinal)
             );
-            await AssertPackageMetadataAsync(archive, packageId, expectDependencies: false)
+            await AssertPackageMetadataAsync(
+                    archive,
+                    packageId,
+                    expectDependencies: packageId == "DotRocks.Analyzers.CodeFixes"
+                )
                 .ConfigureAwait(true);
+            if (packageId == "DotRocks.Analyzers.CodeFixes")
+            {
+                await AssertCodeFixesDependOnlyOnAnalyzersAsync(archive).ConfigureAwait(true);
+            }
+
             Assert.Empty(Directory.GetFiles(packageDirectory, packageId + ".*.snupkg"));
         }
     }
@@ -182,6 +191,31 @@ public sealed class PackageContentTests
                 element => element.Name.LocalName == "dependency"
             );
         }
+    }
+
+    private static async Task AssertCodeFixesDependOnlyOnAnalyzersAsync(ZipArchive archive)
+    {
+        ZipArchiveEntry nuspecEntry = Assert.Single(
+            archive.Entries,
+            entry => entry.FullName.EndsWith(".nuspec", StringComparison.OrdinalIgnoreCase)
+        );
+        using Stream nuspecStream = await nuspecEntry
+            .OpenAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+        XDocument nuspec = XDocument.Load(nuspecStream);
+        string[] dependencyIds = nuspec
+            .Descendants()
+            .Where(element => element.Name.LocalName == "dependency")
+            .Select(element => element.Attribute("id")?.Value)
+            .OfType<string>()
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        // The code-fix assembly loads DotRocks.Analyzers.dll in the IDE host, so the package
+        // must depend on DotRocks.Analyzers and on nothing else (no NETStandard.Library, no
+        // Microsoft.CodeAnalysis.* runtime dependencies).
+        Assert.Equal(["DotRocks.Analyzers"], dependencyIds);
     }
 
     private static async Task AssertPackageReadmeAsync(ZipArchive archive)

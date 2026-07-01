@@ -269,7 +269,10 @@
         "type": "Project"
       },
       "dotrocks.analyzers.codefixes": {
-        "type": "Project"
+        "type": "Project",
+        "dependencies": {
+          "DotRocks.Analyzers": "[1.0.0, )"
+        }
       },
       "Microsoft.CodeAnalysis.Analyzers": {
         "type": "CentralTransitive",
