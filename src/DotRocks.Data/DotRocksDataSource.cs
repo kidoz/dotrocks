@@ -24,7 +24,13 @@ public sealed class DotRocksDataSource : DbDataSource
     }
 
     /// <inheritdoc />
-    public override string ConnectionString => _options.ConnectionString;
+    /// <remarks>
+    /// Returns the redacted form (the password is omitted, matching
+    /// <see cref="DotRocksConnection.ConnectionString"/>), so logging or echoing this property
+    /// cannot leak the secret. Connections created by this data source still carry the full
+    /// credentials internally.
+    /// </remarks>
+    public override string ConnectionString => _options.ToRedactedConnectionString();
 
     /// <inheritdoc />
     protected override DbConnection CreateDbConnection()
@@ -106,7 +112,9 @@ public sealed class DotRocksDataSource : DbDataSource
     private DotRocksConnection CreateDotRocksConnection()
     {
         ThrowIfDisposed();
-        return new DotRocksConnection(ConnectionString);
+        // Pass the parsed options directly: round-tripping through the public (redacted)
+        // ConnectionString would silently drop the password.
+        return new DotRocksConnection(_options);
     }
 
     private void ThrowIfDisposed()
