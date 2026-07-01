@@ -8,8 +8,10 @@
     <PackageTags>starrocks;dotrocks;roslyn;analyzers;code-fixes</PackageTags>
     <IsRoslynComponent>true</IsRoslynComponent>
     <IncludeBuildOutput>false</IncludeBuildOutput>
-    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
     <IncludeSymbols>false</IncludeSymbols>
+    <!-- Analyzer packages ship no lib/ assemblies by design, so the DotRocks.Analyzers
+         dependency group has no matching lib target framework. -->
+    <NoWarn>$(NoWarn);NU5128</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -30,9 +32,10 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" PrivateAssets="all" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" PrivateAssets="all" />
-    <ProjectReference
-      Include="../DotRocks.Analyzers/DotRocks.Analyzers.csproj"
-      PrivateAssets="all"
-    />
+    <!-- Keep the SDK's implicit NETStandard.Library reference out of the packed dependencies. -->
+    <PackageReference Update="NETStandard.Library" PrivateAssets="all" />
+    <!-- The code-fix assembly loads DotRocks.Analyzers.dll in the IDE host, so the package
+         must declare a NuGet dependency on DotRocks.Analyzers (packed at the same version). -->
+    <ProjectReference Include="../DotRocks.Analyzers/DotRocks.Analyzers.csproj" />
   </ItemGroup>
 </Project>
