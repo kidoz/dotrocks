@@ -32,12 +32,14 @@ public sealed class DotRocksStreamLoadException : DotRocksException
     internal DotRocksStreamLoadException(
         string message,
         HttpStatusCode? httpStatusCode,
-        DotRocksStreamLoadResult? result
+        DotRocksStreamLoadResult? result,
+        string? responseBody = null
     )
         : base(message)
     {
         HttpStatusCode = httpStatusCode;
         Result = result;
+        ResponseBody = responseBody;
     }
 
     /// <summary>
@@ -49,4 +51,12 @@ public sealed class DotRocksStreamLoadException : DotRocksException
     /// Gets the parsed Stream Load result, when StarRocks returned one.
     /// </summary>
     public DotRocksStreamLoadResult? Result { get; }
+
+    /// <summary>
+    /// Gets the raw HTTP response body for a non-success status, when one was available. Like
+    /// <see cref="Result"/>, this is deliberately a structured property rather than part of the
+    /// exception message: server text is untrusted and may carry row data, so it must not flow
+    /// into logs implicitly via <see cref="Exception.ToString"/>.
+    /// </summary>
+    public string? ResponseBody { get; }
 }

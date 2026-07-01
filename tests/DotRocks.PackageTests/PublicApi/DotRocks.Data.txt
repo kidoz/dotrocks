@@ -257,6 +257,7 @@ public sealed class DotRocks.Data.Loading.DotRocksStreamLoadException DotRocks.D
   public DotRocks.Data.Loading.DotRocksStreamLoadException(System.String message)
   public DotRocks.Data.Loading.DotRocksStreamLoadException(System.String message, System.Exception innerException)
   public property System.Net.HttpStatusCode? HttpStatusCode { get; }
+  public property System.String ResponseBody { get; }
   public property DotRocks.Data.Loading.DotRocksStreamLoadResult Result { get; }
 
 public sealed class DotRocks.Data.Loading.DotRocksStreamLoadOptions

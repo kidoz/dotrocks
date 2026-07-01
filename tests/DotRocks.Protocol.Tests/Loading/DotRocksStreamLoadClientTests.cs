@@ -717,6 +717,10 @@ public sealed class DotRocksStreamLoadClientTests
         Assert.Equal(HttpStatusCode.Unauthorized, exception.HttpStatusCode);
         Assert.Null(exception.Result);
         Assert.DoesNotContain("secret diagnostic", exception.ToString(), StringComparison.Ordinal);
+
+        // The server's diagnostic detail must still be reachable for deliberate handling — as a
+        // structured property (like Result.Message), never as part of the logged exception text.
+        Assert.Equal("secret diagnostic", exception.ResponseBody);
     }
 
     [Fact]

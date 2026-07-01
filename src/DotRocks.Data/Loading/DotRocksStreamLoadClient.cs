@@ -376,10 +376,15 @@ public sealed class DotRocksStreamLoadClient : IDisposable
 
                 if (!response.IsSuccessStatusCode)
                 {
+                    // The body carries the server's diagnostic detail (auth failures, label
+                    // conflicts, ...). Expose it via the structured ResponseBody property; the
+                    // exception message stays sanitized because untrusted server text can carry
+                    // row data and exception messages flow into logs implicitly.
                     throw new DotRocksStreamLoadException(
                         $"StarRocks Stream Load request failed with HTTP status {(int)response.StatusCode}.",
                         response.StatusCode,
-                        null
+                        result: null,
+                        responseBody: responseText
                     );
                 }
 

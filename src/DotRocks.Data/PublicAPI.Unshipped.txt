@@ -17,6 +17,7 @@ DotRocks.Data.DotRocksUnsupportedFeatureException.DotRocksUnsupportedFeatureExce
 DotRocks.Data.DotRocksUnsupportedFeatureException.DotRocksUnsupportedFeatureException(string! message, System.Exception! innerException) -> void
 DotRocks.Data.Loading.DotRocksStreamLoadCompression
 DotRocks.Data.Loading.DotRocksStreamLoadCompression.Gzip = 1 -> DotRocks.Data.Loading.DotRocksStreamLoadCompression
+DotRocks.Data.Loading.DotRocksStreamLoadException.ResponseBody.get -> string?
 DotRocks.Data.Loading.DotRocksStreamLoadCompression.None = 0 -> DotRocks.Data.Loading.DotRocksStreamLoadCompression
 DotRocks.Data.Loading.DotRocksStreamLoadOptions.Compression.get -> DotRocks.Data.Loading.DotRocksStreamLoadCompression
 DotRocks.Data.Loading.DotRocksStreamLoadOptions.Compression.set -> void
