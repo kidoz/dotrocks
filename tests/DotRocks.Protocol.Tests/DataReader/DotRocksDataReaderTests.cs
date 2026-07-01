@@ -376,6 +376,119 @@ public sealed class DotRocksDataReaderTests
     }
 
     [Fact]
+    public void GetString_BinaryColumn_ThrowsInvalidCast()
+    {
+        using var reader = new DotRocksDataReader(
+            QueryResult.FromRows(
+                [Column("bytes", (byte)ColumnType.Blob)],
+                [
+                    [new byte[] { 0x00, 0xFF }],
+                ]
+            )
+        );
+        Assert.True(reader.Read());
+
+        // Convert.ToString(byte[]) would silently return "System.Byte[]"; binary values must
+        // fail explicitly instead.
+        Assert.Throws<InvalidCastException>(() => reader.GetString(0));
+        Assert.Throws<InvalidCastException>(() => reader.GetFieldValue<string>(0));
+    }
+
+    [Fact]
+    public void Read_SingleRowBehavior_SurfacesAtMostOneRow()
+    {
+        using var reader = new DotRocksDataReader(
+            QueryResult.FromRows(
+                [Column("value")],
+                [
+                    ["1"],
+                    ["2"],
+                ]
+            ),
+            connection: null,
+            CommandBehavior.SingleRow
+        );
+
+        Assert.True(reader.Read());
+        Assert.Equal("1", reader.GetValue(0));
+        Assert.False(reader.Read());
+        Assert.Throws<InvalidOperationException>(() => reader.GetValue(0));
+    }
+
+    [Fact]
+    public void Read_SchemaOnlyBehavior_ExposesMetadataWithoutRows()
+    {
+        using var reader = new DotRocksDataReader(
+            QueryResult.FromRows(
+                [Column("id", (byte)ColumnType.Long)],
+                [
+                    [7],
+                ]
+            ),
+            connection: null,
+            CommandBehavior.SchemaOnly
+        );
+
+        Assert.Equal(1, reader.FieldCount);
+        Assert.Equal(typeof(int), reader.GetFieldType(0));
+        Assert.Single(reader.GetColumnSchema());
+        Assert.False(reader.HasRows);
+        Assert.False(reader.Read());
+    }
+
+    [Fact]
+    public void Close_PartiallyReadStreamingResult_DrainsRemainingRows()
+    {
+        using var stream = BuildStreamingRows(
+            BuildTextRow("1"),
+            BuildTextRow("2"),
+            BuildTextRow("3"),
+            EofPayload()
+        );
+        var rowReader = new TextResultRowReader(
+            new PacketReader(stream),
+            [Column("value", (byte)ColumnType.Long)],
+            connectionId: null
+        );
+        var reader = new DotRocksDataReader(
+            StreamingQueryResult.FromRows(rowReader.Columns, rowReader)
+        );
+
+        Assert.True(reader.Read());
+        Assert.Equal(1, reader.GetInt32(0));
+        reader.Close();
+
+        // Closing after a partial read must consume the remaining rows and the EOF terminator so
+        // the connection is left at a clean packet boundary.
+        Assert.True(rowReader.IsConsumed);
+        Assert.Equal(stream.Length, stream.Position);
+    }
+
+    [Fact]
+    public void Read_StreamingSingleRowBehavior_LeavesRemainingRowsForCloseToDrain()
+    {
+        using var stream = BuildStreamingRows(BuildTextRow("1"), BuildTextRow("2"), EofPayload());
+        var rowReader = new TextResultRowReader(
+            new PacketReader(stream),
+            [Column("value", (byte)ColumnType.Long)],
+            connectionId: null
+        );
+        var reader = new DotRocksDataReader(
+            StreamingQueryResult.FromRows(rowReader.Columns, rowReader),
+            connection: null,
+            CommandBehavior.SingleRow
+        );
+
+        Assert.True(reader.Read());
+        Assert.Equal(1, reader.GetInt32(0));
+        Assert.False(reader.Read());
+
+        reader.Close();
+        Assert.True(rowReader.IsConsumed);
+        Assert.Equal(stream.Length, stream.Position);
+    }
+
+    [Fact]
     public void Read_BeforeRow_Throws()
     {
         using var reader = new DotRocksDataReader(
