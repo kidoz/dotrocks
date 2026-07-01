@@ -1550,7 +1550,7 @@ public sealed class ConnectionIntegrationTests
     }
 
     [Fact]
-    public async Task ClosingReaderBeforeExhaustion_DiscardsPhysicalConnection()
+    public async Task ClosingReaderBeforeExhaustion_DrainsAndKeepsConnectionUsable()
     {
         if (!IntegrationTestEnvironment.IsEnabled)
         {
@@ -1568,18 +1568,31 @@ public sealed class ConnectionIntegrationTests
             await first.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
             firstConnectionId = await ReadConnectionIdAsync(first).ConfigureAwait(true);
 
-            using DbCommand command = first.CreateCommand();
-            command.CommandText = "SELECT 1 UNION ALL SELECT 2";
-            using DbDataReader reader = await command
-                .ExecuteReaderAsync(TestContext.Current.CancellationToken)
+            using (DbCommand command = first.CreateCommand())
+            {
+                command.CommandText = "SELECT 1 UNION ALL SELECT 2";
+                using DbDataReader reader = await command
+                    .ExecuteReaderAsync(TestContext.Current.CancellationToken)
+                    .ConfigureAwait(true);
+                Assert.True(
+                    await reader
+                        .ReadAsync(TestContext.Current.CancellationToken)
+                        .ConfigureAwait(true)
+                );
+
+                // Closing before exhaustion drains the remaining rows; the logical
+                // connection stays open and the physical connection stays clean.
+                await reader.CloseAsync().ConfigureAwait(true);
+            }
+
+            Assert.Equal(ConnectionState.Open, first.State);
+
+            using DbCommand followUp = first.CreateCommand();
+            followUp.CommandText = "SELECT 3";
+            object? value = await followUp
+                .ExecuteScalarAsync(TestContext.Current.CancellationToken)
                 .ConfigureAwait(true);
-            Assert.True(
-                await reader.ReadAsync(TestContext.Current.CancellationToken).ConfigureAwait(true)
-            );
-
-            await reader.CloseAsync().ConfigureAwait(true);
-
-            Assert.Equal(ConnectionState.Closed, first.State);
+            Assert.Equal(3, Convert.ToInt32(value, CultureInfo.InvariantCulture));
         }
 
         using (var second = new DotRocksConnection(connectionString))
@@ -1587,7 +1600,7 @@ public sealed class ConnectionIntegrationTests
             await second.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
             long secondConnectionId = await ReadConnectionIdAsync(second).ConfigureAwait(true);
 
-            Assert.NotEqual(firstConnectionId, secondConnectionId);
+            Assert.Equal(firstConnectionId, secondConnectionId);
             await second.CloseAsync().ConfigureAwait(true);
         }
 
