@@ -682,6 +682,124 @@ public sealed class DotRocksUsageAnalyzerTests
     }
 
     [Fact]
+    public async Task RangeChangeAndSaveChangesOnDifferentContexts_DoesNotReportDiagnostic()
+    {
+        Diagnostic[] diagnostics = await AnalyzeAsync(
+                EfStubs
+                    + """
+
+                    internal sealed class Widget
+                    {
+                        public int Id { get; set; }
+                    }
+
+                    internal sealed class SampleContext : Microsoft.EntityFrameworkCore.DbContext
+                    {
+                        public Microsoft.EntityFrameworkCore.DbSet<Widget> Widgets { get; } = new();
+                    }
+
+                    internal static class Sample
+                    {
+                        public static void Run(SampleContext first, SampleContext second, Widget a, Widget b)
+                        {
+                            first.Widgets.AddRange(a, b);
+                            second.SaveChanges();
+                        }
+                    }
+                    """
+            )
+            .ConfigureAwait(true);
+
+        // The range change and the save target different DbContext instances, so they never share a
+        // unit of work; pairing them would be a false positive.
+        Assert.DoesNotContain(
+            diagnostics,
+            diagnostic =>
+                diagnostic.Id == DotRocksDiagnosticDescriptors.MultiRowSaveChangesDiagnosticId
+        );
+    }
+
+    [Fact]
+    public async Task RangeChangeAndSaveChangesInExclusiveBranches_DoesNotReportDiagnostic()
+    {
+        Diagnostic[] diagnostics = await AnalyzeAsync(
+                EfStubs
+                    + """
+
+                    internal sealed class Widget
+                    {
+                        public int Id { get; set; }
+                    }
+
+                    internal sealed class SampleContext : Microsoft.EntityFrameworkCore.DbContext
+                    {
+                        public Microsoft.EntityFrameworkCore.DbSet<Widget> Widgets { get; } = new();
+                    }
+
+                    internal static class Sample
+                    {
+                        public static void Run(SampleContext context, Widget a, Widget b, bool flag)
+                        {
+                            if (flag)
+                            {
+                                context.Widgets.AddRange(a, b);
+                            }
+                            else
+                            {
+                                context.SaveChanges();
+                            }
+                        }
+                    }
+                    """
+            )
+            .ConfigureAwait(true);
+
+        // The range change and the save are in mutually-exclusive branches; at most one runs.
+        Assert.DoesNotContain(
+            diagnostics,
+            diagnostic =>
+                diagnostic.Id == DotRocksDiagnosticDescriptors.MultiRowSaveChangesDiagnosticId
+        );
+    }
+
+    [Fact]
+    public async Task RangeChangeAndSaveChangesOnSameContext_ReportsDiagnostic()
+    {
+        Diagnostic[] diagnostics = await AnalyzeAsync(
+                EfStubs
+                    + """
+
+                    internal sealed class Widget
+                    {
+                        public int Id { get; set; }
+                    }
+
+                    internal sealed class SampleContext : Microsoft.EntityFrameworkCore.DbContext
+                    {
+                        public Microsoft.EntityFrameworkCore.DbSet<Widget> Widgets { get; } = new();
+                    }
+
+                    internal static class Sample
+                    {
+                        public static void Run(SampleContext context, Widget a, Widget b)
+                        {
+                            context.Widgets.AddRange(a, b);
+                            context.SaveChanges();
+                        }
+                    }
+                    """
+            )
+            .ConfigureAwait(true);
+
+        // Same DbContext, sequential statements: the receiver-identity check must still fire.
+        Assert.Contains(
+            diagnostics,
+            diagnostic =>
+                diagnostic.Id == DotRocksDiagnosticDescriptors.MultiRowSaveChangesDiagnosticId
+        );
+    }
+
+    [Fact]
     public async Task NonDotRocksTransactionDoubleCompletion_DoesNotReportDiagnostic()
     {
         Diagnostic[] diagnostics = await AnalyzeAsync(
