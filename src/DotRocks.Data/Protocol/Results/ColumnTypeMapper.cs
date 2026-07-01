@@ -149,10 +149,7 @@ internal static class ColumnTypeMapper
                     CultureInfo.InvariantCulture,
                     DateTimeStyles.None
                 ),
-                ColumnType.Time => TimeSpan.Parse(
-                    Encoding.UTF8.GetString(bytes),
-                    CultureInfo.InvariantCulture
-                ),
+                ColumnType.Time => ParseTime(bytes),
                 ColumnType.Null
                 or ColumnType.VarChar
                 or ColumnType.Json
@@ -173,6 +170,74 @@ internal static class ColumnTypeMapper
             );
         }
     }
+
+    // The MySQL TIME range is -838:59:59 to 838:59:59; a value outside it is not a legal wire value.
+    private const int MaxTimeHours = 838;
+
+    // TIME text follows the MySQL duration convention `[-]H..H:MM:SS[.ffffff]`: the hour component
+    // can exceed 23 (e.g. a timediff() spanning days, up to 838:59:59), which TimeSpan.Parse
+    // rejects. Parse the components explicitly and culture-invariantly from the ASCII bytes.
+    private static TimeSpan ParseTime(ReadOnlySpan<byte> bytes)
+    {
+        ReadOnlySpan<byte> text = bytes;
+        bool negative = text.Length > 0 && text[0] == (byte)'-';
+        if (negative)
+        {
+            text = text[1..];
+        }
+
+        int firstColon = text.IndexOf((byte)':');
+        if (firstColon < 1)
+        {
+            throw new FormatException("TIME value does not contain an hour component.");
+        }
+
+        int hours = ParseTimeComponent(text[..firstColon]);
+        // Rejecting out-of-range hours also keeps the tick arithmetic below far from overflow.
+        if (hours > MaxTimeHours)
+        {
+            throw new FormatException($"TIME hours must be between 0 and {MaxTimeHours}.");
+        }
+
+        text = text[(firstColon + 1)..];
+        if (text.Length < 5 || text[2] != (byte)':')
+        {
+            throw new FormatException("TIME value does not contain minute and second components.");
+        }
+
+        int minutes = ParseTimeComponent(text[..2]);
+        int seconds = ParseTimeComponent(text.Slice(3, 2));
+        if (minutes > 59 || seconds > 59)
+        {
+            throw new FormatException("TIME minutes and seconds must be between 0 and 59.");
+        }
+
+        long microseconds = 0;
+        if (text.Length > 5)
+        {
+            ReadOnlySpan<byte> fraction = text[5] == (byte)'.' ? text[6..] : default;
+            if (fraction.IsEmpty || fraction.Length > 6)
+            {
+                throw new FormatException("TIME value has a malformed fractional-second part.");
+            }
+
+            microseconds = ParseTimeComponent(fraction);
+            for (int i = fraction.Length; i < 6; i++)
+            {
+                microseconds *= 10;
+            }
+        }
+
+        long ticks =
+            (hours * TimeSpan.TicksPerHour)
+            + (minutes * TimeSpan.TicksPerMinute)
+            + (seconds * TimeSpan.TicksPerSecond)
+            + (microseconds * (TimeSpan.TicksPerMillisecond / 1000));
+        return new TimeSpan(negative ? -ticks : ticks);
+    }
+
+    private static int ParseTimeComponent(ReadOnlySpan<byte> digits) =>
+        int.Parse(digits, NumberStyles.None, CultureInfo.InvariantCulture);
 
     private static bool ParseBoolean(ReadOnlySpan<byte> bytes)
     {

@@ -48,8 +48,11 @@ internal static class BinaryResultRowDecoder
                 byte tiny = reader.ReadByte();
                 return column.ColumnLength == 1 ? tiny != 0 : (sbyte)tiny;
             case ColumnType.Short:
-            case ColumnType.Year:
                 return (short)reader.ReadFixedInteger(2);
+            case ColumnType.Year:
+                // YEAR is a 2-byte unsigned wire value; box it as int to match GetFieldType and
+                // the text protocol, which both expose YEAR as System.Int32.
+                return (int)(ushort)reader.ReadFixedInteger(2);
             case ColumnType.Long:
             case ColumnType.Int24:
                 return (int)(uint)reader.ReadFixedInteger(4);

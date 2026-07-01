@@ -103,4 +103,55 @@ public sealed class ColumnTypeMapperTests
 
         Assert.Equal((short)1234, Assert.IsType<short>(value));
     }
+
+    public static TheoryData<string, TimeSpan> TimeValues =>
+        new()
+        {
+            { "00:00:00", TimeSpan.Zero },
+            { "13:14:15", new TimeSpan(13, 14, 15) },
+            { "1:02:03", new TimeSpan(1, 2, 3) },
+            // The MySQL TIME convention is a duration: hours can exceed 23 (e.g. timediff()).
+            { "48:00:00", TimeSpan.FromHours(48) },
+            { "838:59:59", new TimeSpan(0, 838, 59, 59) },
+            { "-01:30:00", new TimeSpan(1, 30, 0).Negate() },
+            { "-838:59:59", new TimeSpan(0, 838, 59, 59).Negate() },
+            // Fractional seconds are left-aligned microseconds (".25" is 250 ms).
+            { "13:14:15.500000", new TimeSpan(13, 14, 15) + TimeSpan.FromMilliseconds(500) },
+            { "10:00:00.25", TimeSpan.FromHours(10) + TimeSpan.FromMilliseconds(250) },
+            { "00:00:00.000001", TimeSpan.FromTicks(10) },
+            { "-00:00:00.250000", TimeSpan.FromMilliseconds(-250) },
+        };
+
+    [Theory]
+    [MemberData(nameof(TimeValues))]
+    public void ParseTextValue_TimeColumn_ParsesMySqlDurationText(string text, TimeSpan expected)
+    {
+        object value = ColumnTypeMapper.ParseTextValue(
+            (byte)ColumnType.Time,
+            0,
+            Encoding.UTF8.GetBytes(text)
+        );
+
+        Assert.Equal(expected, Assert.IsType<TimeSpan>(value));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("aa:bb:cc")]
+    [InlineData("12:34")]
+    [InlineData("12:60:00")]
+    [InlineData("12:00:60")]
+    [InlineData("839:00:00")]
+    [InlineData("12:00:00.")]
+    [InlineData("12:00:00.1234567")]
+    [InlineData("12:00:00x")]
+    [InlineData(":00:00")]
+    public void ParseTextValue_MalformedTime_ThrowsMalformedPacketException(string text)
+    {
+        byte[] bytes = Encoding.UTF8.GetBytes(text);
+
+        Assert.Throws<MalformedPacketException>(() =>
+            ColumnTypeMapper.ParseTextValue((byte)ColumnType.Time, 0, bytes)
+        );
+    }
 }
