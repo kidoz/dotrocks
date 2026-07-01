@@ -73,6 +73,22 @@ public sealed class BinaryProtocolTests
     }
 
     [Fact]
+    public void Decode_YearColumn_BoxesIntMatchingGetFieldType()
+    {
+        ColumnDefinition yearColumn = Column(0x0D); // YEAR
+
+        var row = new List<byte> { 0x00, 0x00 }; // header + 1-column NULL bitmap (nothing null)
+        row.AddRange([0xE8, 0x07]); // 2024 little-endian
+
+        object?[] values = BinaryResultRowDecoder.Decode(row.ToArray(), [yearColumn]);
+
+        // The boxed runtime type must match GetFieldType (int) so consumers can unbox GetValue.
+        int year = Assert.IsType<int>(values[0]);
+        Assert.Equal(2024, year);
+        Assert.Equal(typeof(int), ColumnTypeMapper.GetFieldType(0x0D, 4));
+    }
+
+    [Fact]
     public void Decode_DateTimeWithOutOfRangeComponents_ThrowsMalformedPacket()
     {
         ColumnDefinition dateTimeColumn = Column(0x0C); // DATETIME
