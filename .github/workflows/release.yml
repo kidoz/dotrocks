@@ -16,7 +16,49 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Fail fast on a malformed tag or a missing changelog entry before anything builds.
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Validate release tag and changelog
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_EVENT_NAME}" != "release" ]; then
+            echo "Manual dispatch: skipping tag validation; packages are versioned 0.0.0-manual and never published."
+            exit 0
+          fi
+          tag="${GITHUB_REF_NAME}"
+          if [[ ! "${tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Release tag '${tag}' is not strict semver. Expected vMAJOR.MINOR.PATCH with an optional -prerelease suffix (for example v1.2.0 or v1.3.0-rc.1)."
+            exit 1
+          fi
+          version="${tag#v}"
+          if ! grep -qF "## [${version}]" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no '## [${version}]' section for release tag '${tag}'. Move the [Unreleased] notes to a [${version}] section before releasing."
+            exit 1
+          fi
+          echo "Release tag '${tag}' is well-formed and CHANGELOG.md documents ${version}."
+
+  # Gate publishing on the full live StarRocks integration matrix at the tagged commit.
+  integration:
+    needs: validate
+    permissions:
+      contents: read
+    uses: ./.github/workflows/integration.yml
+
   nuget:
+    needs:
+      - validate
+      - integration
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: nuget
@@ -28,12 +70,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           fetch-depth: 0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
         with:
           global-json-file: global.json
 
@@ -77,14 +119,14 @@ jobs:
         run: dotnet pack DotRocks.slnx --configuration Release --no-build --output artifacts/packages -p:Version=${{ steps.version.outputs.version }}
 
       - name: Attest package provenance
-        uses: actions/attest-build-provenance@v4
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4
         with:
           subject-path: |
             artifacts/packages/*.nupkg
             artifacts/packages/*.snupkg
 
       - name: Upload package artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: dotrocks-release-packages
           path: |
@@ -98,7 +140,7 @@ jobs:
       - name: NuGet login (trusted publishing)
         id: nuget-login
         if: github.event_name == 'release'
-        uses: NuGet/login@v1
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1
         with:
           # The nuget.org account username (profile name), not an email address. Kept in a secret
           # so it is masked in logs, per the NuGet Trusted Publishing guidance.

@@ -5,14 +5,18 @@ on:
   push:
     branches:
       - main
+  # Reusable entry point so release.yml can gate publishing on this matrix.
+  workflow_call:
   workflow_dispatch:
 
 permissions:
   contents: read
 
+# Scope the group by event so a release-triggered (workflow_call) run never shares a
+# group with pull_request/push runs, and only those fast-feedback runs are cancellable.
 concurrency:
-  group: integration-${{ github.ref }}
-  cancel-in-progress: true
+  group: integration-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
 
 jobs:
   starrocks:
@@ -36,12 +40,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           fetch-depth: 0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
         with:
           global-json-file: global.json
 
@@ -99,7 +103,7 @@ jobs:
 
       - name: Upload StarRocks logs
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: starrocks-logs-${{ matrix.starrocks-version }}
           path: artifacts/integration/starrocks.log
