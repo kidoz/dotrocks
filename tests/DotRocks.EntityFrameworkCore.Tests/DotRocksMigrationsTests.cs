@@ -84,7 +84,7 @@ public sealed class DotRocksMigrationsTests
     }
 
     [Fact]
-    public void Generate_CreateTableWithInjectingProperty_Throws()
+    public void Generate_CreateTableWithQuoteInProperty_EscapesInsteadOfInjecting()
     {
         using var context = CreateContext();
         var generator = context.GetService<IMigrationsSqlGenerator>();
@@ -92,6 +92,41 @@ public sealed class DotRocksMigrationsTests
         operation.AddAnnotation(
             "DotRocks:Properties",
             new Dictionary<string, string>(StringComparer.Ordinal) { ["x"] = "a' DROP" }
+        );
+
+        string sql = GenerateSql(generator, operation);
+
+        // The single quote is doubled inside the literal, so it cannot break out of the value.
+        Assert.Contains("'x' = 'a'' DROP'", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Generate_CreateTableWithBackslashInProperty_EscapesBackslash()
+    {
+        using var context = CreateContext();
+        var generator = context.GetService<IMigrationsSqlGenerator>();
+        CreateTableOperation operation = CreateWidgetsTable();
+        operation.AddAnnotation(
+            "DotRocks:Properties",
+            new Dictionary<string, string>(StringComparer.Ordinal) { ["path"] = "a\\" }
+        );
+
+        string sql = GenerateSql(generator, operation);
+
+        // StarRocks treats backslash as an escape character, so a trailing backslash must be
+        // doubled; otherwise 'a\' would consume the closing quote and corrupt the DDL.
+        Assert.Contains("'path' = 'a\\\\'", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Generate_CreateTableWithEmptyPropertyName_Throws()
+    {
+        using var context = CreateContext();
+        var generator = context.GetService<IMigrationsSqlGenerator>();
+        CreateTableOperation operation = CreateWidgetsTable();
+        operation.AddAnnotation(
+            "DotRocks:Properties",
+            new Dictionary<string, string>(StringComparer.Ordinal) { ["  "] = "value" }
         );
 
         Assert.Throws<NotSupportedException>(() => GenerateSql(generator, operation));
