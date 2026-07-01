@@ -8,6 +8,8 @@ version is derived from the release tag at publish time.
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-07-02
+
 ### Added
 - `DotRocksStreamLoadException.ResponseBody` carries the raw server response body on
   Stream Load HTTP failures so diagnostic detail (auth, label, format errors) is no longer
@@ -207,7 +209,8 @@ version is derived from the release tag at publish time.
 - Stream Load refuses to forward credentials over a downgraded (HTTPS→HTTP) redirect.
 - NuGet vulnerability auditing and CodeQL analysis in CI.
 
-[Unreleased]: https://github.com/kidoz/dotrocks/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/kidoz/dotrocks/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/kidoz/dotrocks/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/kidoz/dotrocks/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/kidoz/dotrocks/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/kidoz/dotrocks/compare/v1.0.0...v1.0.1
