@@ -31,8 +31,10 @@ internal sealed class DotRocksGuidTypeMapping : RelationalTypeMapping
     protected override string GenerateNonNullSqlLiteral(object value) =>
         value switch
         {
+            // A GUID never contains an escapable character, so quoting is enough; a string routed
+            // through this mapping is arbitrary and must be fully escaped the StarRocks way.
             Guid guid => "'" + guid.ToString("D", CultureInfo.InvariantCulture) + "'",
-            string text => "'" + text.Replace("'", "''", StringComparison.Ordinal) + "'",
+            string text => DotRocksStringLiteral.Generate(text),
             _ => throw new InvalidOperationException(
                 $"Cannot generate a GUID literal for value type '{value.GetType().FullName}'."
             ),

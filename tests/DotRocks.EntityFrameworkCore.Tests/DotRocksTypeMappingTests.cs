@@ -114,6 +114,71 @@ public sealed class DotRocksTypeMappingTests
         Assert.Null(source.FindMapping("varbinary"));
     }
 
+    [Theory]
+    [InlineData("varchar")]
+    [InlineData("json")]
+    public void StringMapping_EscapesBackslashInLiteral(string storeType)
+    {
+        IRelationalTypeMappingSource source = CreateMappingSource();
+        RelationalTypeMapping mapping = source.FindMapping(typeof(string), storeType)!;
+
+        // StarRocks treats backslash as an escape character; a trailing backslash must be doubled
+        // or 'a\' would consume the closing quote (literal corruption / injection).
+        Assert.Equal("'a\\\\'", mapping.GenerateSqlLiteral("a\\"));
+    }
+
+    [Fact]
+    public void StringMapping_EscapesQuotesAndControlCharactersInLiteral()
+    {
+        IRelationalTypeMappingSource source = CreateMappingSource();
+        RelationalTypeMapping mapping = source.FindMapping(typeof(string), "varchar")!;
+
+        Assert.Equal("'a''b'", mapping.GenerateSqlLiteral("a'b"));
+        Assert.Equal("'line\\nbreak'", mapping.GenerateSqlLiteral("line\nbreak"));
+    }
+
+    [Fact]
+    public void GuidMapping_GeneratesQuotedLiteral()
+    {
+        IRelationalTypeMappingSource source = CreateMappingSource();
+        RelationalTypeMapping mapping = source.FindMapping(typeof(Guid))!;
+
+        var value = Guid.Parse("9f4f591e-3db2-4879-856c-1c54b4241b76");
+        Assert.Equal("'9f4f591e-3db2-4879-856c-1c54b4241b76'", mapping.GenerateSqlLiteral(value));
+    }
+
+    [Fact]
+    public void HighPrecisionDecimalProperty_AddsDecimalConverter()
+    {
+        IRelationalTypeMappingSource source = CreateMappingSource();
+
+        // A model property typed System.Decimal must carry a decimal<->DotRocksDecimal converter so
+        // reads materialize into the decimal property instead of failing on a type mismatch.
+        RelationalTypeMapping mapping = source.FindMapping(typeof(decimal), "decimal(38, 18)")!;
+
+        Assert.Equal(typeof(decimal), mapping.ClrType);
+        Assert.NotNull(mapping.Converter);
+        Assert.Equal(typeof(decimal), mapping.Converter!.ModelClrType);
+        Assert.Equal(typeof(DotRocksDecimal), mapping.Converter.ProviderClrType);
+        Assert.Equal("28.90", mapping.GenerateSqlLiteral(28.90m));
+    }
+
+    [Fact]
+    public void HighPrecisionDotRocksDecimalProperty_HasNoConverter()
+    {
+        IRelationalTypeMappingSource source = CreateMappingSource();
+
+        // A DotRocksDecimal-typed property already matches the provider type; it must not get a
+        // converter (that would double-convert).
+        RelationalTypeMapping mapping = source.FindMapping(
+            typeof(DotRocksDecimal),
+            "decimal(38, 18)"
+        )!;
+
+        Assert.Equal(typeof(DotRocksDecimal), mapping.ClrType);
+        Assert.Null(mapping.Converter);
+    }
+
     private static IRelationalTypeMappingSource CreateMappingSource()
     {
         using var context = CreateContext();

@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using DotRocks.EntityFrameworkCore.Metadata;
+using DotRocks.EntityFrameworkCore.Storage;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Migrations.Operations;
@@ -321,14 +322,10 @@ internal sealed class DotRocksMigrationsSqlGenerator(
         {
             foreach (KeyValuePair<string, string> entry in custom)
             {
-                if (
-                    string.IsNullOrWhiteSpace(entry.Key)
-                    || entry.Key.Contains('\'', StringComparison.Ordinal)
-                    || entry.Value.Contains('\'', StringComparison.Ordinal)
-                )
+                if (string.IsNullOrWhiteSpace(entry.Key))
                 {
                     throw new NotSupportedException(
-                        $"DotRocks EF Core migrations reject the StarRocks table property '{entry.Key}'; names and values must not be empty or contain a single quote."
+                        "DotRocks EF Core migrations reject an empty StarRocks table property name."
                     );
                 }
 
@@ -350,12 +347,12 @@ internal sealed class DotRocksMigrationsSqlGenerator(
             }
 
             first = false;
+            // Both name and value are emitted as escaped StarRocks string literals so a quote,
+            // backslash, or control character cannot break out of or corrupt the literal.
             builder
-                .Append("'")
-                .Append(property.Key)
-                .Append("' = '")
-                .Append(property.Value)
-                .Append("'");
+                .Append(DotRocksStringLiteral.Generate(property.Key))
+                .Append(" = ")
+                .Append(DotRocksStringLiteral.Generate(property.Value));
         }
 
         builder.Append(")");

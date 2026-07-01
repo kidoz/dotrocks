@@ -40,7 +40,7 @@ internal sealed class DotRocksTypeMappingSource(
                 scale: 9
             ),
             [typeof(DotRocksDecimal)] = new DotRocksDecimalTypeMapping(),
-            [typeof(string)] = new StringTypeMapping(
+            [typeof(string)] = new DotRocksStringTypeMapping(
                 "varchar",
                 DbType.String,
                 unicode: true,
@@ -52,7 +52,7 @@ internal sealed class DotRocksTypeMappingSource(
             [typeof(Guid)] = new DotRocksGuidTypeMapping(),
         }.ToFrozenDictionary();
 
-    private static readonly RelationalTypeMapping JsonStringMapping = new StringTypeMapping(
+    private static readonly RelationalTypeMapping JsonStringMapping = new DotRocksStringTypeMapping(
         "json",
         DbType.String,
         unicode: true,
@@ -158,7 +158,14 @@ internal sealed class DotRocksTypeMappingSource(
             : Nullable.GetUnderlyingType(mappingClrType) ?? mappingClrType;
         if (clrType == typeof(DotRocksDecimal) || precision > MaxExactDecimalPrecision)
         {
-            return new DotRocksDecimalTypeMapping(storeType, precision, mappingInfo.Scale);
+            // A model property typed System.Decimal needs a converter to bridge to the
+            // DotRocksDecimal the provider reads and writes; a DotRocksDecimal property does not.
+            return new DotRocksDecimalTypeMapping(
+                storeType,
+                precision,
+                mappingInfo.Scale,
+                modelIsDecimal: clrType == typeof(decimal)
+            );
         }
 
         return new DecimalTypeMapping(storeType, DbType.Decimal, precision, mappingInfo.Scale);
