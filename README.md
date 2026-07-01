@@ -1,8 +1,8 @@
 # DotRocks
 
 [![Language](https://img.shields.io/badge/language-C%23-512BD4)](https://learn.microsoft.com/dotnet/csharp/)
-[![.NET SDK](https://img.shields.io/badge/.NET%20SDK-10.0.301-512BD4)](global.json)
-[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![.NET SDK](https://img.shields.io/badge/.NET%20SDK-10.0.301-512BD4)](https://github.com/kidoz/dotrocks/blob/main/global.json)
+[![License](https://img.shields.io/badge/license-MIT-blue)](https://github.com/kidoz/dotrocks/blob/main/LICENSE)
 
 **DotRocks for StarRocks** — a native .NET driver, Entity Framework Core provider, and
 Roslyn analyzer suite built specifically for [StarRocks](https://www.starrocks.io/).
@@ -23,7 +23,8 @@ Roslyn analyzer suite built specifically for [StarRocks](https://www.starrocks.i
 ## Status
 
 The latest tagged release is DotRocks 1.2.0. The `main` branch is post-1.2.0; this
-README tracks `main`, and unreleased changes are listed in [CHANGELOG.md](CHANGELOG.md).
+README tracks `main`, and unreleased changes are listed in
+[CHANGELOG.md](https://github.com/kidoz/dotrocks/blob/main/CHANGELOG.md).
 The ADO.NET driver (`DotRocks.Data`), EF Core provider (`DotRocks.EntityFrameworkCore`),
 and analyzer suite (`DotRocks.Analyzers`) are validated against live StarRocks 3.5.5 and
 4.0.7 in CI. Supported features are implemented and tested; unsupported behavior fails
@@ -42,10 +43,10 @@ driver, and it is not a general-purpose MySQL driver.
 
 ## Documentation
 
-- [Getting started](docs/articles/getting-started.md)
-- [EF Core entity mapping](docs/articles/ef-core-entity-mapping.md)
-- [StarRocks 3.x driver developer notes](docs/starrocks-3x-driver-developer-notes.md)
-- [StarRocks 4.x driver developer notes](docs/starrocks-4x-driver-developer-notes.md)
+- [Getting started](https://github.com/kidoz/dotrocks/blob/main/docs/articles/getting-started.md)
+- [EF Core entity mapping](https://github.com/kidoz/dotrocks/blob/main/docs/articles/ef-core-entity-mapping.md)
+- [StarRocks 3.x driver developer notes](https://github.com/kidoz/dotrocks/blob/main/docs/starrocks-3x-driver-developer-notes.md)
+- [StarRocks 4.x driver developer notes](https://github.com/kidoz/dotrocks/blob/main/docs/starrocks-4x-driver-developer-notes.md)
 
 ## ADO.NET usage
 
@@ -212,19 +213,20 @@ value, or binary property is rejected up front, even for a query-only `DbContext
 Configure mapped properties accordingly, for example `ValueGeneratedNever()` on keys.
 
 A compilable EF Core sample lives at
-[`samples/DotRocks.Samples.EntityFrameworkCore`](samples/DotRocks.Samples.EntityFrameworkCore).
+[`samples/DotRocks.Samples.EntityFrameworkCore`](https://github.com/kidoz/dotrocks/tree/main/samples/DotRocks.Samples.EntityFrameworkCore).
 It demonstrates `UseStarRocks`, `ServerVersion(...)`, `ValueGeneratedNever()`, `SaveChangesAsync`
 insert/update/delete, and a minimal hand-authored migration.
 
 Other compilable samples cover the rest of the surface:
 
-- [`DotRocks.Samples.AdoNet`](samples/DotRocks.Samples.AdoNet) — `DotRocksDataSource`, a
-  parameterized query, and streaming a reader.
-- [`DotRocks.Samples.DependencyInjection`](samples/DotRocks.Samples.DependencyInjection) —
+- [`DotRocks.Samples.AdoNet`](https://github.com/kidoz/dotrocks/tree/main/samples/DotRocks.Samples.AdoNet) —
+  `DotRocksDataSource`, a parameterized query, and streaming a reader.
+- [`DotRocks.Samples.DependencyInjection`](https://github.com/kidoz/dotrocks/tree/main/samples/DotRocks.Samples.DependencyInjection) —
   registering the dependency-free `DotRocksDataSource` with `Microsoft.Extensions.DependencyInjection`.
-- [`DotRocks.Samples.Dapper`](samples/DotRocks.Samples.Dapper) — Dapper over a `DotRocksConnection`.
-- [`DotRocks.Samples.StreamLoad`](samples/DotRocks.Samples.StreamLoad) — streaming CSV Stream Load
-  without buffering the payload in memory.
+- [`DotRocks.Samples.Dapper`](https://github.com/kidoz/dotrocks/tree/main/samples/DotRocks.Samples.Dapper) —
+  Dapper over a `DotRocksConnection`.
+- [`DotRocks.Samples.StreamLoad`](https://github.com/kidoz/dotrocks/tree/main/samples/DotRocks.Samples.StreamLoad) —
+  streaming CSV Stream Load without buffering the payload in memory.
 
 StarRocks transaction behavior is characterized by live tests. `COMMIT WORK` makes EF
 `SaveChangesAsync` rows visible. Some StarRocks builds accept `ROLLBACK WORK` for DML
@@ -539,4 +541,4 @@ and writes a sanitized JSON report (authentication challenge bytes are never rec
 
 ## License
 
-Licensed under the [MIT License](LICENSE).
+Licensed under the [MIT License](https://github.com/kidoz/dotrocks/blob/main/LICENSE).
