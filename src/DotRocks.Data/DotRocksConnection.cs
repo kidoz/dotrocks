@@ -45,6 +45,14 @@ public sealed class DotRocksConnection : DbConnection
         ConnectionString = connectionString;
     }
 
+    // Used by DotRocksDataSource so credentialed options flow without a round trip through the
+    // public ConnectionString property, which is redacted and would drop the password.
+    internal DotRocksConnection(DotRocksConnectionOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        _options = options;
+    }
+
     /// <summary>
     /// Closes and removes all idle physical connections from all DotRocks connection pools.
     /// </summary>
@@ -313,7 +321,11 @@ public sealed class DotRocksConnection : DbConnection
         }
         catch
         {
-            if (!lease.PhysicalConnection.IsReusable)
+            // Close only when the protocol state is broken (I/O failure, malformed packet,
+            // cancellation mid-command). A plain server error leaves the connection at a clean
+            // packet boundary and must not close it, even when pool policy (session dirtiness,
+            // lifetime) would decline to reuse the physical connection later.
+            if (lease.PhysicalConnection.IsBroken)
             {
                 CloseCore(reusable: false);
             }
@@ -359,7 +371,8 @@ public sealed class DotRocksConnection : DbConnection
         }
         catch
         {
-            if (!lease.PhysicalConnection.IsReusable)
+            // See ExecuteQueryAsync: close only on broken protocol state, not on pool policy.
+            if (lease.PhysicalConnection.IsBroken)
             {
                 CloseCore(reusable: false);
             }
@@ -389,7 +402,8 @@ public sealed class DotRocksConnection : DbConnection
         }
         catch
         {
-            if (!lease.PhysicalConnection.IsReusable)
+            // See ExecuteQueryAsync: close only on broken protocol state, not on pool policy.
+            if (lease.PhysicalConnection.IsBroken)
             {
                 CloseCore(reusable: false);
             }

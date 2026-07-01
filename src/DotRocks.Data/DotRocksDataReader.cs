@@ -5,6 +5,7 @@ using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using DotRocks.Data.Protocol.Results;
+using DotRocks.Data.Protocol.Serialization;
 
 namespace DotRocks.Data;
 
@@ -77,6 +78,14 @@ public sealed class DotRocksDataReader
             ? _bufferedResults[_bufferedIndex]
             : null;
 
+    // SchemaOnly surfaces column metadata but no rows; SingleRow surfaces at most one row per
+    // result set. Rows the server sends beyond these limits are drained when the reader closes so
+    // the connection is left at a clean packet boundary.
+    private bool SuppressesRows => (_behavior & CommandBehavior.SchemaOnly) != 0;
+
+    private bool IsRowLimitReached =>
+        (_behavior & CommandBehavior.SingleRow) != 0 && _rowIndex >= 0;
+
     /// <inheritdoc />
     public override object this[int ordinal] => GetValue(ordinal);
 
@@ -91,7 +100,12 @@ public sealed class DotRocksDataReader
 
     /// <inheritdoc />
     public override bool HasRows =>
-        _bufferedResults is not null ? CurrentBufferedResult?.Rows.Count > 0 : HasStreamingRows();
+        !SuppressesRows
+        && (
+            _bufferedResults is not null
+                ? CurrentBufferedResult?.Rows.Count > 0
+                : HasStreamingRows()
+        );
 
     /// <inheritdoc />
     public override bool IsClosed => _isClosed;
@@ -284,9 +298,26 @@ public sealed class DotRocksDataReader
     }
 
     /// <inheritdoc />
-    public override string GetString(int ordinal) =>
-        Convert.ToString(GetNonNullValue(ordinal), CultureInfo.InvariantCulture)
-        ?? throw new InvalidCastException("Column value cannot be converted to string.");
+    public override string GetString(int ordinal)
+    {
+        object value = GetNonNullValue(ordinal);
+        if (value is string text)
+        {
+            return text;
+        }
+
+        // Convert.ToString(byte[]) would silently return the type name "System.Byte[]"; binary
+        // values must fail explicitly and be read with GetBytes or GetFieldValue<byte[]>.
+        if (value is byte[])
+        {
+            throw new InvalidCastException(
+                "Binary column values cannot be read with GetString; use GetBytes or GetFieldValue<byte[]>."
+            );
+        }
+
+        return Convert.ToString(value, CultureInfo.InvariantCulture)
+            ?? throw new InvalidCastException("Column value cannot be converted to string.");
+    }
 
     /// <inheritdoc />
     public override object GetValue(int ordinal)
@@ -421,6 +452,14 @@ public sealed class DotRocksDataReader
 
         if (_bufferedResults is not null)
         {
+            if (SuppressesRows || IsRowLimitReached)
+            {
+                _currentRow = null;
+                _isConsumed = true;
+                ReportConnectionCompletion(reusable: true);
+                return false;
+            }
+
             QueryResult? current = CurrentBufferedResult;
             if (current is null || _rowIndex + 1 >= current.Rows.Count)
             {
@@ -468,6 +507,14 @@ public sealed class DotRocksDataReader
             _isConsumed = true;
             ReportConnectionCompletion(reusable: false);
             cancellationToken.ThrowIfCancellationRequested();
+        }
+
+        // Rows past the behavior's limit are not fetched here; they stay on the wire and are
+        // drained when the reader closes, keeping the connection at a clean packet boundary.
+        if (SuppressesRows || IsRowLimitReached)
+        {
+            _currentRow = null;
+            return false;
         }
 
         if (_hasPrefetchedRow)
@@ -527,7 +574,7 @@ public sealed class DotRocksDataReader
 
     private bool HasStreamingRows()
     {
-        if (_streamingResult?.HasResultSet != true || _isConsumed)
+        if (_streamingResult?.HasResultSet != true || _isConsumed || SuppressesRows)
         {
             return false;
         }
@@ -570,14 +617,64 @@ public sealed class DotRocksDataReader
             return;
         }
 
-        bool reusable =
-            _isConsumed || _bufferedResults is not null || _streamingResult?.HasResultSet != true;
+        // Standard ADO.NET behavior: closing a reader whose streaming result set is not fully
+        // consumed drains the remaining rows so the connection stays at a clean packet boundary
+        // and remains open and usable. Only a drain failure (I/O or protocol fault) retires the
+        // connection.
+        bool reusable = true;
+        if (
+            !_isConsumed
+            && !_connectionCompletionReported
+            && _streamingResult?.HasResultSet == true
+        )
+        {
+            reusable = TryDrainStreamingRows();
+        }
+
         _isClosed = true;
         _isConsumed = true;
         ReportConnectionCompletion(reusable);
         if ((_behavior & CommandBehavior.CloseConnection) != 0)
         {
             _connection?.Close();
+        }
+    }
+
+    private bool TryDrainStreamingRows()
+    {
+        if (_rowReader is null || _rowReader.IsConsumed)
+        {
+            return true;
+        }
+
+        try
+        {
+            while (true)
+            {
+                object?[]? row = _rowReader
+                    .ReadRowAsync(CancellationToken.None)
+                    .AsTask()
+                    .ConfigureAwait(false)
+                    .GetAwaiter()
+                    .GetResult();
+                if (row is null)
+                {
+                    return true;
+                }
+            }
+        }
+        catch (DotRocksException)
+        {
+            // An ERR packet terminates the result set at a clean packet boundary; the caller
+            // abandoned the remaining rows, so the deferred server error is dropped and the
+            // connection stays usable.
+            return true;
+        }
+        catch (Exception ex)
+            when (ex is MalformedPacketException or IOException or ObjectDisposedException)
+        {
+            // The wire state is undefined; the connection must be retired, not reused.
+            return false;
         }
     }
 

@@ -71,22 +71,37 @@ internal sealed class DotRocksConnectionPool : IDisposable
         DotRocksConnectionPoolKey key = options.CreatePoolKey();
         while (true)
         {
-            DotRocksConnectionPool pool = Pools.GetOrAdd(
-                key,
-                _ => new DotRocksConnectionPool(options)
-            );
-            if (!pool._isDisposed)
+            if (Pools.TryGetValue(key, out DotRocksConnectionPool? existing))
             {
-                return pool;
+                if (!existing._isDisposed)
+                {
+                    return existing;
+                }
+
+                // A concurrent ClearAllPools() disposed the cached pool; evict that exact
+                // instance (only if it is still the cached one) and try again with a fresh pool.
+                (
+                    (ICollection<KeyValuePair<DotRocksConnectionPoolKey, DotRocksConnectionPool>>)
+                        Pools
+                ).Remove(
+                    new KeyValuePair<DotRocksConnectionPoolKey, DotRocksConnectionPool>(
+                        key,
+                        existing
+                    )
+                );
+                continue;
             }
 
-            // A concurrent ClearAllPools() disposed the cached pool; evict that exact instance
-            // (only if it is still the cached one) and try again with a fresh pool.
-            (
-                (ICollection<KeyValuePair<DotRocksConnectionPoolKey, DotRocksConnectionPool>>)Pools
-            ).Remove(
-                new KeyValuePair<DotRocksConnectionPoolKey, DotRocksConnectionPool>(key, pool)
-            );
+            var created = new DotRocksConnectionPool(options);
+            if (Pools.TryAdd(key, created))
+            {
+                return created;
+            }
+
+            // Another thread registered a pool for this key first. Dispose the losing instance:
+            // its periodic eviction timer roots it, so an undisposed loser would keep firing
+            // (and stay reachable) forever.
+            created.Dispose();
         }
     }
 

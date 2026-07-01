@@ -57,6 +57,14 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
     /// </summary>
     public string ServerVersion { get; }
 
+    /// <summary>
+    /// True when the connection's protocol state is unusable: disposed, or broken mid-command
+    /// (I/O failure, malformed packet, cancellation). Distinct from <see cref="IsReusable"/>,
+    /// which additionally applies pool-reuse policy (session dirtiness, lifetime); a healthy
+    /// connection that merely received a server error packet is not broken.
+    /// </summary>
+    public bool IsBroken => _isDisposed || _isBroken;
+
     // A connection whose session state may have been mutated (USE / SET) is not reused because
     // session reset is not verified. Reusing it could leak the current database or session
     // variables into the next lease, so the pool discards it on return.
@@ -313,7 +321,9 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
             await writer.WritePayloadAsync(payload, cancellationToken).ConfigureAwait(false);
 
             var reader = new PacketReader(_stream);
-            reader.ResetSequence(1);
+            // A command payload of 16 MiB or more spans several request packets, so the response
+            // continues from the writer's next sequence id, not a fixed 1.
+            reader.ResetSequence(writer.SequenceId);
             byte[] firstPayload = await reader
                 .ReadPayloadAsync(cancellationToken)
                 .ConfigureAwait(false);
@@ -380,7 +390,8 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
             await writer.WritePayloadAsync(payload, cancellationToken).ConfigureAwait(false);
 
             var reader = new PacketReader(_stream);
-            reader.ResetSequence(1);
+            // The response sequence continues from the request's last packet (see ExecuteQueryAsync).
+            reader.ResetSequence(writer.SequenceId);
             byte[] firstPayload = await reader
                 .ReadPayloadAsync(cancellationToken)
                 .ConfigureAwait(false);
@@ -497,7 +508,8 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
             await writer.WritePayloadAsync(payload, cancellationToken).ConfigureAwait(false);
 
             var reader = new PacketReader(_stream);
-            reader.ResetSequence(1);
+            // The response sequence continues from the request's last packet (see ExecuteQueryAsync).
+            reader.ResetSequence(writer.SequenceId);
             byte[] firstPayload = await reader
                 .ReadPayloadAsync(cancellationToken)
                 .ConfigureAwait(false);
@@ -519,6 +531,11 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
                 byte[] columnPayload = await reader
                     .ReadPayloadAsync(cancellationToken)
                     .ConfigureAwait(false);
+                if (ResultPacket.IsError(columnPayload))
+                {
+                    throw ResultPacket.ReadError(columnPayload, connectionId: null);
+                }
+
                 columns.Add(TextResultParser.ReadColumnDefinition(columnPayload));
             }
 
@@ -538,6 +555,14 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
                 byte[] rowPayload = await reader
                     .ReadPayloadAsync(cancellationToken)
                     .ConfigureAwait(false);
+
+                // A server that aborts the query mid-stream (timeout, kill) sends an ERR packet in
+                // place of a row; surface the real server error rather than a malformed-row failure.
+                if (ResultPacket.IsError(rowPayload))
+                {
+                    throw ResultPacket.ReadError(rowPayload, connectionId: null);
+                }
+
                 if (ResultPacket.IsEndOfResultSet(rowPayload))
                 {
                     break;
@@ -589,6 +614,13 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
             var writer = new PacketWriter(_stream);
             writer.ResetSequence();
             await writer.WritePayloadAsync(payload, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // A cancellation that lands mid-write can leave a partial COM_STMT_CLOSE frame on the
+            // wire; the connection is no longer at a packet boundary and must not be reused.
+            MarkBroken();
+            throw;
         }
         catch (Exception ex) when (ex is IOException or ObjectDisposedException)
         {
@@ -674,7 +706,8 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
             await writer.WritePayloadAsync(payload, cancellationToken).ConfigureAwait(false);
 
             var reader = new PacketReader(_stream);
-            reader.ResetSequence(1);
+            // The response sequence continues from the request's last packet (see ExecuteQueryAsync).
+            reader.ResetSequence(writer.SequenceId);
             byte[] firstPayload = await reader
                 .ReadPayloadAsync(cancellationToken)
                 .ConfigureAwait(false);
