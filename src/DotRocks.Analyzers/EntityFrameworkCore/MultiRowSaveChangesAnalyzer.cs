@@ -68,7 +68,8 @@ public sealed class MultiRowSaveChangesAnalyzer : DiagnosticAnalyzer
                 continue;
             }
 
-            if (!HasLaterSaveChangesInvocation(context, invocations, index + 1))
+            ISymbol? rangeContext = GetContextSymbol(context, invocation);
+            if (!HasLaterSaveChangesInvocation(context, invocations, index + 1, rangeContext))
             {
                 continue;
             }
@@ -86,23 +87,137 @@ public sealed class MultiRowSaveChangesAnalyzer : DiagnosticAnalyzer
     private static bool HasLaterSaveChangesInvocation(
         SyntaxNodeAnalysisContext context,
         InvocationExpressionSyntax[] invocations,
-        int startIndex
+        int startIndex,
+        ISymbol? rangeContext
     )
     {
         for (int index = startIndex; index < invocations.Length; index++)
         {
             InvocationExpressionSyntax invocation = invocations[index];
             if (
-                TryGetMemberInvocationName(invocation, out string? methodName)
-                && SaveChangesMethods.Contains(methodName)
-                && IsEfSaveChangesInvocation(context, invocation)
+                !TryGetMemberInvocationName(invocation, out string? methodName)
+                || !SaveChangesMethods.Contains(methodName)
+                || !IsEfSaveChangesInvocation(context, invocation)
             )
             {
-                return true;
+                continue;
+            }
+
+            // Only pair a range change with a SaveChanges on the *same* DbContext. When both
+            // receivers resolve to a symbol, require them to match; otherwise fall back to the
+            // positional pairing so an unresolved receiver does not silence a real warning.
+            ISymbol? saveContext = GetContextSymbol(context, invocation);
+            if (
+                rangeContext is not null
+                && saveContext is not null
+                && !SymbolEqualityComparer.Default.Equals(rangeContext, saveContext)
+            )
+            {
+                continue;
+            }
+
+            // Skip pairs that live in mutually-exclusive branches (different arms of the same
+            // if/else or switch); they never run in one unit of work.
+            if (AreInMutuallyExclusiveBranches(invocations[startIndex - 1], invocation))
+            {
+                continue;
+            }
+
+            return true;
+        }
+
+        return false;
+    }
+
+    // Returns the DbContext instance symbol behind a range-change or SaveChanges invocation, whether
+    // it is called directly on the context (context.AddRange/context.SaveChanges) or on one of its
+    // sets (context.Widgets.AddRange). Returns null when it cannot be resolved.
+    private static ISymbol? GetContextSymbol(
+        SyntaxNodeAnalysisContext context,
+        InvocationExpressionSyntax invocation
+    )
+    {
+        if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess)
+        {
+            return null;
+        }
+
+        ExpressionSyntax receiver = memberAccess.Expression;
+        ITypeSymbol? receiverType = context.SemanticModel.GetTypeInfo(receiver).Type;
+
+        // A range change on a DbSet: the owning context is the expression before the set access.
+        if (
+            IsEfDbSet(receiverType)
+            && receiver is MemberAccessExpressionSyntax setAccess
+            && IsDbContextTyped(context, setAccess.Expression)
+        )
+        {
+            return context.SemanticModel.GetSymbolInfo(setAccess.Expression).Symbol;
+        }
+
+        return IsDbContextTyped(context, receiver)
+            ? context.SemanticModel.GetSymbolInfo(receiver).Symbol
+            : null;
+    }
+
+    private static bool IsDbContextTyped(
+        SyntaxNodeAnalysisContext context,
+        ExpressionSyntax expression
+    ) => IsEfDbContext(context.SemanticModel.GetTypeInfo(expression).Type);
+
+    // True when the two nodes sit in different arms of the same if/else or switch, so at most one
+    // of them executes on any path.
+    private static bool AreInMutuallyExclusiveBranches(SyntaxNode first, SyntaxNode second)
+    {
+        foreach (SyntaxNode ancestor in first.Ancestors())
+        {
+            switch (ancestor)
+            {
+                case IfStatementSyntax ifStatement when ifStatement.Else is { } elseClause:
+                    if (ifStatement.Statement.Contains(first) && elseClause.Contains(second))
+                    {
+                        return true;
+                    }
+
+                    if (elseClause.Contains(first) && ifStatement.Statement.Contains(second))
+                    {
+                        return true;
+                    }
+
+                    break;
+                case SwitchStatementSyntax switchStatement:
+                    SwitchSectionSyntax? firstSection = FindSection(switchStatement, first);
+                    SwitchSectionSyntax? secondSection = FindSection(switchStatement, second);
+                    if (
+                        firstSection is not null
+                        && secondSection is not null
+                        && firstSection != secondSection
+                    )
+                    {
+                        return true;
+                    }
+
+                    break;
             }
         }
 
         return false;
+    }
+
+    private static SwitchSectionSyntax? FindSection(
+        SwitchStatementSyntax switchStatement,
+        SyntaxNode node
+    )
+    {
+        foreach (SwitchSectionSyntax section in switchStatement.Sections)
+        {
+            if (section.Contains(node))
+            {
+                return section;
+            }
+        }
+
+        return null;
     }
 
     private static bool IsEfRangeChangeInvocation(
