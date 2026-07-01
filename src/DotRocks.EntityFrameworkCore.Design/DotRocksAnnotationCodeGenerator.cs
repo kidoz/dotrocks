@@ -16,6 +16,9 @@ public sealed class DotRocksAnnotationCodeGenerator(
     private const string KeyColumnsAnnotation = "DotRocks:KeyColumns";
     private const string DistributionColumnsAnnotation = "DotRocks:DistributionColumns";
     private const string DistributionBucketsAnnotation = "DotRocks:DistributionBuckets";
+    private const string RandomDistributionAnnotation = "DotRocks:RandomDistribution";
+    private const string SortKeyColumnsAnnotation = "DotRocks:SortKeyColumns";
+    private const string PropertiesAnnotation = "DotRocks:Properties";
     private const string ReplicationNumAnnotation = "DotRocks:ReplicationNum";
 
     /// <inheritdoc />
@@ -39,6 +42,12 @@ public sealed class DotRocksAnnotationCodeGenerator(
             DistributionColumnsAnnotation
         );
         int? distributionBuckets = RemoveIntAnnotation(annotations, DistributionBucketsAnnotation);
+        bool randomDistribution = RemoveBoolAnnotation(annotations, RandomDistributionAnnotation);
+        string[]? sortKeyColumns = RemoveStringArrayAnnotation(
+            annotations,
+            SortKeyColumnsAnnotation
+        );
+        IReadOnlyDictionary<string, string>? properties = RemovePropertiesAnnotation(annotations);
         int? replicationNum = RemoveIntAnnotation(annotations, ReplicationNumAnnotation);
 
         if (keyModel is not null)
@@ -51,7 +60,15 @@ public sealed class DotRocksAnnotationCodeGenerator(
             );
         }
 
-        if (distributionColumns is not null || distributionBuckets is not null)
+        // Random distribution is configured with its own fluent call; emitting a hash-distribution
+        // call here would drop the RANDOM shape (and, with no columns, produce code that throws).
+        if (randomDistribution)
+        {
+            fragments.Add(
+                new MethodCallCodeFragment("DistributedRandomly", distributionBuckets ?? 1)
+            );
+        }
+        else if (distributionColumns is not null || distributionBuckets is not null)
         {
             fragments.Add(
                 new MethodCallCodeFragment(
@@ -59,6 +76,21 @@ public sealed class DotRocksAnnotationCodeGenerator(
                     ToObjectArray(distributionBuckets ?? 1, distributionColumns ?? [])
                 )
             );
+        }
+
+        if (sortKeyColumns is not null)
+        {
+            fragments.Add(new MethodCallCodeFragment("HasSortKey", ToObjectArray(sortKeyColumns)));
+        }
+
+        if (properties is not null)
+        {
+            foreach (KeyValuePair<string, string> property in properties)
+            {
+                fragments.Add(
+                    new MethodCallCodeFragment("HasStarRocksProperty", property.Key, property.Value)
+                );
+            }
         }
 
         if (replicationNum is not null)
@@ -132,6 +164,37 @@ public sealed class DotRocksAnnotationCodeGenerator(
             int intValue => intValue,
             _ => throw new NotSupportedException(
                 $"DotRocks EF Core design-time services require '{annotationName}' to be an integer."
+            ),
+        };
+    }
+
+    private static bool RemoveBoolAnnotation(
+        IDictionary<string, IAnnotation> annotations,
+        string annotationName
+    )
+    {
+        object? value = RemoveAnnotation(annotations, annotationName);
+        return value switch
+        {
+            null => false,
+            bool boolValue => boolValue,
+            _ => throw new NotSupportedException(
+                $"DotRocks EF Core design-time services require '{annotationName}' to be a boolean."
+            ),
+        };
+    }
+
+    private static IReadOnlyDictionary<string, string>? RemovePropertiesAnnotation(
+        IDictionary<string, IAnnotation> annotations
+    )
+    {
+        object? value = RemoveAnnotation(annotations, PropertiesAnnotation);
+        return value switch
+        {
+            null => null,
+            IReadOnlyDictionary<string, string> map => map,
+            _ => throw new NotSupportedException(
+                $"DotRocks EF Core design-time services require '{PropertiesAnnotation}' to be a string dictionary."
             ),
         };
     }
