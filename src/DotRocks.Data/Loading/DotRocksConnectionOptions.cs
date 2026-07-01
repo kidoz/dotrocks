@@ -566,17 +566,13 @@ internal sealed record DotRocksConnectionOptions(
         return builder.ToString();
     }
 
-    private static void Append(StringBuilder builder, string key, string value)
-    {
-        if (builder.Length > 0)
-        {
-            builder.Append(';');
-        }
-
-        builder.Append(key);
-        builder.Append('=');
-        builder.Append(value.Replace(";", "\\;", StringComparison.Ordinal));
-    }
+    // Delegate quoting to DbConnectionStringBuilder so serialization matches the parser exactly:
+    // it double-quotes values containing delimiters, quotes, or edge whitespace. The previous
+    // hand-rolled backslash escape ("\;") is not a DbConnectionStringBuilder construct, so an
+    // escaped value reparsed as separate keywords (option injection — e.g. a Database value could
+    // smuggle "...;Ssl Mode=Disabled" into the canonical string and downgrade TLS).
+    private static void Append(StringBuilder builder, string key, string value) =>
+        DbConnectionStringBuilder.AppendKeyValuePair(builder, key, value);
 }
 
 internal sealed record DotRocksConnectionPoolKey(

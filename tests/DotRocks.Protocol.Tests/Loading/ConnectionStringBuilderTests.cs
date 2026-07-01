@@ -409,4 +409,53 @@ public sealed class ConnectionStringBuilderTests
                 .CreatePoolKey()
         );
     }
+
+    // The canonical string must reparse to the exact same values: serialization delegates quoting
+    // to DbConnectionStringBuilder, which is also the parser. A hand-rolled escape (the old "\;")
+    // is not a DbConnectionStringBuilder construct and reparsed as separate keywords.
+    [Theory]
+    [InlineData("pass;word")]
+    [InlineData("pass\"word")]
+    [InlineData("pass'word")]
+    [InlineData("pass=word")]
+    [InlineData(" pass word ")]
+    [InlineData("x;Ssl Mode=Disabled")]
+    public void CanonicalConnectionString_RoundTripsSpecialCharacterValues(string password)
+    {
+        var builder = new System.Data.Common.DbConnectionStringBuilder
+        {
+            ["Server"] = "h",
+            ["User ID"] = "alice",
+            ["Password"] = password,
+        };
+        DotRocksConnectionOptions options = DotRocksConnectionOptions.Parse(builder);
+
+        DotRocksConnectionOptions reparsed = DotRocksConnectionOptions.Parse(
+            options.ConnectionString
+        );
+
+        Assert.Equal(password, reparsed.Password);
+        Assert.Equal(options.CreatePoolKey(), reparsed.CreatePoolKey());
+    }
+
+    [Fact]
+    public void CanonicalConnectionString_ValueWithEmbeddedKeywords_DoesNotInjectOptions()
+    {
+        // A value smuggling ";Ssl Mode=Disabled" must survive the serialize/reparse cycle as a
+        // single value; splitting it would inject keywords (here: a silent TLS downgrade).
+        var builder = new System.Data.Common.DbConnectionStringBuilder
+        {
+            ["Server"] = "h",
+            ["User ID"] = "alice",
+            ["Database"] = "x;Ssl Mode=Disabled",
+        };
+        DotRocksConnectionOptions options = DotRocksConnectionOptions.Parse(builder);
+
+        DotRocksConnectionOptions reparsed = DotRocksConnectionOptions.Parse(
+            options.ConnectionString
+        );
+
+        Assert.Equal("x;Ssl Mode=Disabled", reparsed.Database);
+        Assert.Equal(DotRocksSslMode.Preferred, reparsed.SslMode);
+    }
 }

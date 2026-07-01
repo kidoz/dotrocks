@@ -44,6 +44,33 @@ public sealed class DotRocksDataSourceTests
     }
 
     [Fact]
+    public void ConnectionString_RedactsPassword()
+    {
+        using var dataSource = new DotRocksDataSource(
+            "Host=starrocks.local;User=alice;Password=s3cr3t-value"
+        );
+
+        Assert.DoesNotContain(
+            "s3cr3t-value",
+            dataSource.ConnectionString,
+            StringComparison.Ordinal
+        );
+        Assert.Contains(
+            "Server=starrocks.local",
+            dataSource.ConnectionString,
+            StringComparison.Ordinal
+        );
+
+        // Created connections must not leak the password through their public surface either.
+        using DbConnection connection = dataSource.CreateConnection();
+        Assert.DoesNotContain(
+            "s3cr3t-value",
+            connection.ConnectionString,
+            StringComparison.Ordinal
+        );
+    }
+
+    [Fact]
     public void CreateCommand_AttachesClosedDotRocksConnection()
     {
         using var dataSource = new DotRocksDataSource("Host=starrocks.local;User=alice");
