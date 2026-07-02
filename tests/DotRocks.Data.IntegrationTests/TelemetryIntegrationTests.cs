@@ -58,11 +58,26 @@ public sealed class TelemetryIntegrationTests
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(
             TestContext.Current.CancellationToken
         );
+
+        // Open outside the cancellation budget: a cold OpenAsync on a busy runner can
+        // exceed it, and a token canceled before the command starts short-circuits in
+        // DbCommand without ever creating the command span this test asserts on.
+        using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
+        await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+#pragma warning disable CA2100 // Integration test SQL is fixed, not user input.
+        using DbCommand command = connection.CreateCommand();
+        command.CommandText = "SELECT SLEEP(3)";
+#pragma warning restore CA2100
+        command.CommandTimeout = 0;
+
         cancellation.CancelAfter(TimeSpan.FromMilliseconds(100));
 
+        // The cancellation contract is the OperationCanceledException family; the exact
+        // subtype depends on which awaited primitive observes the token.
         await Assert
-            .ThrowsAsync<OperationCanceledException>(() =>
-                ExecuteScalarAsync("SELECT SLEEP(3)", cancellation.Token, timeout: 0)
+            .ThrowsAnyAsync<OperationCanceledException>(() =>
+                command.ExecuteScalarAsync(cancellation.Token)
             )
             .ConfigureAwait(true);
 
