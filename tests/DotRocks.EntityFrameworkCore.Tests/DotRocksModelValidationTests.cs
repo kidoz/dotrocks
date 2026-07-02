@@ -11,6 +11,7 @@ public sealed class DotRocksModelValidationTests
 {
     private static readonly string[] IdStoreColumn = ["id"];
     private static readonly string[] EquivalentIdStoreColumn = ["id"];
+    private static readonly string[] IdKindStoreColumns = ["id", "kind"];
 
     [Fact]
     public void GeneratedKey_ThrowsNotSupportedException()
@@ -132,6 +133,73 @@ public sealed class DotRocksModelValidationTests
                 annotations.Single(annotation => annotation.Name == "DotRocks:KeyColumns").Value
             )
         );
+    }
+
+    [Fact]
+    public void SortKeyColumnThatDoesNotMapToStoreColumn_ThrowsNotSupportedException()
+    {
+        using var context = CreateContext<SortKeyMissingStoreColumnContext>();
+
+        NotSupportedException exception = Assert.Throws<NotSupportedException>(() => context.Model);
+
+        Assert.Contains(
+            "unknown store column",
+            exception.Message,
+            StringComparison.OrdinalIgnoreCase
+        );
+        Assert.Contains("sort key", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void SharedTableWithConflictingSortKeyAnnotations_ThrowsNotSupportedException()
+    {
+        using var context = CreateContext<ConflictingSharedSortKeyContext>();
+
+        NotSupportedException exception = Assert.Throws<NotSupportedException>(() => context.Model);
+
+        Assert.Contains("conflicting", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("DotRocks:SortKeyColumns", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SharedTableWithEquivalentPropertiesAnnotations_ProvidesTableAnnotations()
+    {
+        using var context = CreateContext<EquivalentSharedPropertiesContext>();
+        var provider = context.GetService<IRelationalAnnotationProvider>();
+        ITable table = Assert.Single(
+            context.GetService<IDesignTimeModel>().Model.GetRelationalModel().Tables
+        );
+
+        IAnnotation[] annotations = provider.For(table, designTime: true).ToArray();
+
+        IReadOnlyDictionary<string, string> properties = Assert.IsAssignableFrom<
+            IReadOnlyDictionary<string, string>
+        >(annotations.Single(annotation => annotation.Name == "DotRocks:Properties").Value);
+        Assert.Equal("LZ4", properties["compression"]);
+    }
+
+    [Fact]
+    public void AnnotationProvider_ForwardsSortKeyRandomDistributionAndProperties()
+    {
+        using var context = CreateContext<FullTableShapeContext>();
+        var provider = context.GetService<IRelationalAnnotationProvider>();
+        ITable table = Assert.Single(
+            context.GetService<IDesignTimeModel>().Model.GetRelationalModel().Tables
+        );
+
+        IAnnotation[] annotations = provider.For(table, designTime: true).ToArray();
+
+        Assert.Equal(
+            true,
+            annotations.Single(annotation => annotation.Name == "DotRocks:RandomDistribution").Value
+        );
+        Assert.Equal(
+            IdStoreColumn,
+            Assert.IsType<string[]>(
+                annotations.Single(annotation => annotation.Name == "DotRocks:SortKeyColumns").Value
+            )
+        );
+        Assert.Contains(annotations, annotation => annotation.Name == "DotRocks:Properties");
     }
 
     private static TContext CreateContext<TContext>()
@@ -379,6 +447,121 @@ public sealed class DotRocksModelValidationTests
                     DotRocksTableKeyModel.PrimaryKey
                 );
                 entity.Metadata.SetAnnotation("DotRocks:KeyColumns", EquivalentIdStoreColumn);
+            });
+        }
+    }
+
+    [SuppressMessage(
+        "Performance",
+        "CA1812:Avoid uninstantiated internal classes",
+        Justification = "The test methods instantiate this nested context through reflection."
+    )]
+    private sealed class SortKeyMissingStoreColumnContext(
+        DbContextOptions<SortKeyMissingStoreColumnContext> options
+    ) : DbContext(options)
+    {
+        public DbSet<TableShapeEntity> Entities => Set<TableShapeEntity>();
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<TableShapeEntity>(entity =>
+            {
+                entity.ToTable("sort_key_entities", "unit_db");
+                entity.HasKey(value => value.Id);
+                entity.Property(value => value.Id).ValueGeneratedNever().HasColumnName("id");
+                // "Id" is the CLR property name; the store column is "id".
+                entity.HasStarRocksSortKey("Id");
+            });
+        }
+    }
+
+    [SuppressMessage(
+        "Performance",
+        "CA1812:Avoid uninstantiated internal classes",
+        Justification = "The test methods instantiate this nested context through reflection."
+    )]
+    private sealed class ConflictingSharedSortKeyContext(
+        DbContextOptions<ConflictingSharedSortKeyContext> options
+    ) : DbContext(options)
+    {
+        public DbSet<SharedTableBase> Entities => Set<SharedTableBase>();
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<SharedTableBase>(entity =>
+            {
+                entity.ToTable("shared_sort_key_entities", "unit_db");
+                entity.HasKey(value => value.Id);
+                entity.Property(value => value.Id).ValueGeneratedNever().HasColumnName("id");
+                entity.HasDiscriminator<string>("kind");
+                entity.HasStarRocksSortKey("id");
+            });
+
+            modelBuilder.Entity<SharedTableDerived>(entity =>
+            {
+                entity.HasBaseType<SharedTableBase>();
+                entity.Metadata.SetAnnotation("DotRocks:SortKeyColumns", IdKindStoreColumns);
+            });
+        }
+    }
+
+    [SuppressMessage(
+        "Performance",
+        "CA1812:Avoid uninstantiated internal classes",
+        Justification = "The test methods instantiate this nested context through reflection."
+    )]
+    private sealed class EquivalentSharedPropertiesContext(
+        DbContextOptions<EquivalentSharedPropertiesContext> options
+    ) : DbContext(options)
+    {
+        public DbSet<SharedTableBase> Entities => Set<SharedTableBase>();
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<SharedTableBase>(entity =>
+            {
+                entity.ToTable("shared_properties_entities", "unit_db");
+                entity.HasKey(value => value.Id);
+                entity.Property(value => value.Id).ValueGeneratedNever().HasColumnName("id");
+                entity.HasDiscriminator<string>("kind");
+                entity.HasStarRocksProperty("compression", "LZ4");
+            });
+
+            modelBuilder.Entity<SharedTableDerived>(entity =>
+            {
+                entity.HasBaseType<SharedTableBase>();
+                // A distinct dictionary instance with equal content must not count as a conflict.
+                entity.Metadata.SetAnnotation(
+                    "DotRocks:Properties",
+                    new Dictionary<string, string>(StringComparer.Ordinal)
+                    {
+                        ["compression"] = "LZ4",
+                    }
+                );
+            });
+        }
+    }
+
+    [SuppressMessage(
+        "Performance",
+        "CA1812:Avoid uninstantiated internal classes",
+        Justification = "The test methods instantiate this nested context through reflection."
+    )]
+    private sealed class FullTableShapeContext(DbContextOptions<FullTableShapeContext> options)
+        : DbContext(options)
+    {
+        public DbSet<TableShapeEntity> Entities => Set<TableShapeEntity>();
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<TableShapeEntity>(entity =>
+            {
+                entity.ToTable("full_table_shape_entities", "unit_db");
+                entity.HasKey(value => value.Id);
+                entity.Property(value => value.Id).ValueGeneratedNever().HasColumnName("id");
+                entity.HasStarRocksRandomDistribution(3);
+                entity.HasStarRocksSortKey("id");
+                entity.HasStarRocksProperty("compression", "LZ4");
             });
         }
     }

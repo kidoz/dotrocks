@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using DotRocks.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore;
@@ -131,29 +132,73 @@ internal sealed class DotRocksModelValidator(
             .OfType<string>()
             .ToHashSet(StringComparer.Ordinal);
 
-        ValidateKeyModel(entityType);
-        ValidateColumnAnnotation(
-            entityType,
-            DotRocksAnnotationNames.KeyColumns,
-            storeColumns,
-            "table key"
-        );
-        ValidateColumnAnnotation(
-            entityType,
-            DotRocksAnnotationNames.DistributionColumns,
-            storeColumns,
-            "hash distribution"
-        );
-        ValidatePositiveIntAnnotation(
-            entityType,
-            DotRocksAnnotationNames.DistributionBuckets,
-            "hash distribution bucket count"
-        );
-        ValidatePositiveIntAnnotation(
-            entityType,
-            DotRocksAnnotationNames.ReplicationNum,
-            "replication number"
-        );
+        string target = entityType.DisplayName();
+        foreach (DotRocksTableShapeAnnotation annotation in DotRocksTableShapeAnnotations.All)
+        {
+            object? value = entityType.FindAnnotation(annotation.Name)?.Value;
+            if (value is null)
+            {
+                continue;
+            }
+
+            switch (annotation.ValueKind)
+            {
+                case DotRocksTableShapeValueKind.KeyModel:
+                    _ = DotRocksTableShapeAnnotations.CoerceKeyModel(value);
+                    break;
+                case DotRocksTableShapeValueKind.ColumnList:
+                    string[] columns = DotRocksTableShapeAnnotations.CoerceColumnList(
+                        value,
+                        annotation.Description,
+                        target
+                    )!;
+                    if (annotation.ColumnsMustExist)
+                    {
+                        ValidateColumnsExist(columns, storeColumns, annotation.Description, target);
+                    }
+
+                    break;
+                case DotRocksTableShapeValueKind.PositiveInt:
+                    _ = DotRocksTableShapeAnnotations.CoercePositiveInt(
+                        value,
+                        annotation.Description,
+                        target
+                    );
+                    break;
+                case DotRocksTableShapeValueKind.Flag:
+                    _ = DotRocksTableShapeAnnotations.CoerceFlag(
+                        value,
+                        annotation.Description,
+                        target
+                    );
+                    break;
+                case DotRocksTableShapeValueKind.PropertyMap:
+                    _ = DotRocksTableShapeAnnotations.CoercePropertyMap(value, target);
+                    break;
+                default:
+                    throw new UnreachableException(
+                        $"Unknown table-shape annotation value kind '{annotation.ValueKind}'."
+                    );
+            }
+        }
+    }
+
+    private static void ValidateColumnsExist(
+        string[] columns,
+        HashSet<string> storeColumns,
+        string description,
+        string target
+    )
+    {
+        foreach (string column in columns)
+        {
+            if (!storeColumns.Contains(column))
+            {
+                throw new NotSupportedException(
+                    $"DotRocks EF Core migrations cannot use unknown store column '{column}' in the StarRocks {description} clause for '{target}'."
+                );
+            }
+        }
     }
 
     private static void ValidateSharedTableShapeAnnotations(IModel model)
@@ -165,11 +210,10 @@ internal sealed class DotRocksModelValidator(
                 .GroupBy(entityType => (entityType.GetSchema(), entityType.GetTableName()!))
         )
         {
-            ValidateSharedTableAnnotation(tableGroup, DotRocksAnnotationNames.KeyModel);
-            ValidateSharedTableAnnotation(tableGroup, DotRocksAnnotationNames.KeyColumns);
-            ValidateSharedTableAnnotation(tableGroup, DotRocksAnnotationNames.DistributionColumns);
-            ValidateSharedTableAnnotation(tableGroup, DotRocksAnnotationNames.DistributionBuckets);
-            ValidateSharedTableAnnotation(tableGroup, DotRocksAnnotationNames.ReplicationNum);
+            foreach (DotRocksTableShapeAnnotation annotation in DotRocksTableShapeAnnotations.All)
+            {
+                ValidateSharedTableAnnotation(tableGroup, annotation.Name);
+            }
         }
     }
 
@@ -200,84 +244,6 @@ internal sealed class DotRocksModelValidator(
             }
 
             firstAnnotation = annotation;
-        }
-    }
-
-    private static void ValidateKeyModel(IEntityType entityType)
-    {
-        object? value = entityType.FindAnnotation(DotRocksAnnotationNames.KeyModel)?.Value;
-        if (value is null || DotRocksTableKeyModels.TryParse(value, out _))
-        {
-            return;
-        }
-
-        throw new NotSupportedException(
-            $"DotRocks EF Core migrations do not support StarRocks table key model '{value}'."
-        );
-    }
-
-    private static void ValidateColumnAnnotation(
-        IEntityType entityType,
-        string annotationName,
-        HashSet<string> storeColumns,
-        string description
-    )
-    {
-        object? value = entityType.FindAnnotation(annotationName)?.Value;
-        string[]? columns = value switch
-        {
-            null => null,
-            string[] stringArray => stringArray,
-            IReadOnlyList<string> stringList => stringList.ToArray(),
-            _ => throw new NotSupportedException(
-                $"DotRocks EF Core migrations require {description} columns for '{entityType.DisplayName()}' to be configured as string store column names."
-            ),
-        };
-
-        if (columns is null)
-        {
-            return;
-        }
-
-        if (columns.Length == 0 || columns.Any(string.IsNullOrWhiteSpace))
-        {
-            throw new NotSupportedException(
-                $"DotRocks EF Core migrations require at least one non-empty {description} column for '{entityType.DisplayName()}'."
-            );
-        }
-
-        foreach (string column in columns)
-        {
-            if (!storeColumns.Contains(column))
-            {
-                throw new NotSupportedException(
-                    $"DotRocks EF Core migrations cannot use unknown store column '{column}' in the StarRocks {description} clause for '{entityType.DisplayName()}'."
-                );
-            }
-        }
-    }
-
-    private static void ValidatePositiveIntAnnotation(
-        IEntityType entityType,
-        string annotationName,
-        string description
-    )
-    {
-        object? value = entityType.FindAnnotation(annotationName)?.Value;
-        int? number = value switch
-        {
-            null => null,
-            int intValue => intValue,
-            _ => throw new NotSupportedException(
-                $"DotRocks EF Core migrations require {description} for '{entityType.DisplayName()}' to be configured as a positive integer."
-            ),
-        };
-
-        if (number <= 0)
-        {
-            throw new NotSupportedException(
-                $"DotRocks EF Core migrations require {description} for '{entityType.DisplayName()}' to be greater than zero."
-            );
         }
     }
 }

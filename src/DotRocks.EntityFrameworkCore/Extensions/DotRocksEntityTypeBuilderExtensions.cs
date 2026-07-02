@@ -95,9 +95,9 @@ public static class DotRocksEntityTypeBuilderExtensions
     /// <param name="entityTypeBuilder">The entity type builder.</param>
     /// <param name="buckets">The positive bucket count for the <c>DISTRIBUTED BY RANDOM</c> clause.</param>
     /// <returns>The same builder so calls can be chained.</returns>
-    public static EntityTypeBuilder DistributedRandomly(
+    public static EntityTypeBuilder HasStarRocksRandomDistribution(
         this EntityTypeBuilder entityTypeBuilder,
-        int buckets
+        int buckets = 1
     )
     {
         ArgumentNullException.ThrowIfNull(entityTypeBuilder);
@@ -112,12 +112,24 @@ public static class DotRocksEntityTypeBuilderExtensions
     }
 
     /// <summary>
+    /// Configures StarRocks random distribution for migrations generated for this entity. This is
+    /// an alias for <see cref="HasStarRocksRandomDistribution"/>, the canonical name.
+    /// </summary>
+    /// <param name="entityTypeBuilder">The entity type builder.</param>
+    /// <param name="buckets">The positive bucket count for the <c>DISTRIBUTED BY RANDOM</c> clause.</param>
+    /// <returns>The same builder so calls can be chained.</returns>
+    public static EntityTypeBuilder DistributedRandomly(
+        this EntityTypeBuilder entityTypeBuilder,
+        int buckets
+    ) => HasStarRocksRandomDistribution(entityTypeBuilder, buckets);
+
+    /// <summary>
     /// Configures the StarRocks sort key (<c>ORDER BY</c>) for migrations generated for this entity.
     /// </summary>
     /// <param name="entityTypeBuilder">The entity type builder.</param>
     /// <param name="columns">The sort-key columns to emit in the StarRocks <c>ORDER BY</c> clause.</param>
     /// <returns>The same builder so calls can be chained.</returns>
-    public static EntityTypeBuilder HasSortKey(
+    public static EntityTypeBuilder HasStarRocksSortKey(
         this EntityTypeBuilder entityTypeBuilder,
         params string[] columns
     )
@@ -129,6 +141,18 @@ public static class DotRocksEntityTypeBuilderExtensions
         );
         return entityTypeBuilder;
     }
+
+    /// <summary>
+    /// Configures the StarRocks sort key for migrations generated for this entity. This is an
+    /// alias for <see cref="HasStarRocksSortKey"/>, the canonical name.
+    /// </summary>
+    /// <param name="entityTypeBuilder">The entity type builder.</param>
+    /// <param name="columns">The sort-key columns to emit in the StarRocks <c>ORDER BY</c> clause.</param>
+    /// <returns>The same builder so calls can be chained.</returns>
+    public static EntityTypeBuilder HasSortKey(
+        this EntityTypeBuilder entityTypeBuilder,
+        params string[] columns
+    ) => HasStarRocksSortKey(entityTypeBuilder, columns);
 
     /// <summary>
     /// Adds a StarRocks table property (a <c>PROPERTIES</c> entry) for migrations generated for this

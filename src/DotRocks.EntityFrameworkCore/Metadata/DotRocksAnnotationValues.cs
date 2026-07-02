@@ -8,8 +8,9 @@ namespace DotRocks.EntityFrameworkCore.Metadata;
 internal static class DotRocksAnnotationValues
 {
     /// <summary>
-    /// Compares two annotation values, treating string collections by ordinal element equality and
-    /// falling back to <see cref="object.Equals(object?, object?)"/> for everything else.
+    /// Compares two annotation values, treating string collections by ordinal element equality,
+    /// string dictionaries by ordinal entry equality, and falling back to
+    /// <see cref="object.Equals(object?, object?)"/> for everything else.
     /// </summary>
     public static bool AreEqual(object? left, object? right)
     {
@@ -21,6 +22,18 @@ internal static class DotRocksAnnotationValues
         if (left is IReadOnlyList<string> leftList && right is IReadOnlyList<string> rightList)
         {
             return leftList.SequenceEqual(rightList, StringComparer.Ordinal);
+        }
+
+        if (
+            left is IReadOnlyDictionary<string, string> leftMap
+            && right is IReadOnlyDictionary<string, string> rightMap
+        )
+        {
+            return leftMap.Count == rightMap.Count
+                && leftMap.All(entry =>
+                    rightMap.TryGetValue(entry.Key, out string? value)
+                    && string.Equals(entry.Value, value, StringComparison.Ordinal)
+                );
         }
 
         return Equals(left, right);
