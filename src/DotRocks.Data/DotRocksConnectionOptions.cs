@@ -1,12 +1,11 @@
-using System.Collections.Immutable;
 using System.Data.Common;
 using System.Globalization;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
-using DotRocks.Data;
 using DotRocks.Data.Protocol.Handshake;
+using static DotRocks.Data.DotRocksConnectionStringKeywords;
 
-namespace DotRocks.Data.Loading;
+namespace DotRocks.Data;
 
 internal sealed record DotRocksConnectionOptions(
     string Server,
@@ -146,29 +145,7 @@ internal sealed record DotRocksConnectionOptions(
             trustServerCertificate,
             streamLoadEndpoint
         );
-        string canonical = BuildConnectionString(
-            server,
-            port,
-            userId,
-            password,
-            database,
-            timeoutSeconds,
-            pooling,
-            minimumPoolSize,
-            maximumPoolSize,
-            idleTimeoutSeconds,
-            sslMode,
-            trustServerCertificate,
-            sslRevocationMode,
-            streamLoadEndpoint,
-            allowInsecureStreamLoad,
-            maxConnectionRetries,
-            connectionRetryDelayMs,
-            serverCompatibilityLevel,
-            connectionLifetimeSeconds
-        );
-
-        return new DotRocksConnectionOptions(
+        var options = new DotRocksConnectionOptions(
             server,
             port,
             userId,
@@ -186,10 +163,17 @@ internal sealed record DotRocksConnectionOptions(
             allowInsecureStreamLoad,
             maxConnectionRetries,
             TimeSpan.FromMilliseconds(connectionRetryDelayMs),
-            canonical,
+            string.Empty,
             serverCompatibilityLevel,
             TimeSpan.FromSeconds(connectionLifetimeSeconds)
         );
+
+        // The canonical string is derived from the parsed values, so compute it from the
+        // constructed record instead of a third parallel argument list.
+        return options with
+        {
+            ConnectionString = options.BuildConnectionString(password),
+        };
     }
 
     // The compiler-generated record ToString would print Password and the full cleartext
@@ -197,54 +181,12 @@ internal sealed record DotRocksConnectionOptions(
     // debugger; the sanitized form redacts the password.
     public override string ToString() => ToSanitizedString();
 
-    public string ToSanitizedString() =>
-        BuildConnectionString(
-            Server,
-            Port,
-            UserId,
-            "***",
-            Database,
-            (int)ConnectionTimeout.TotalSeconds,
-            Pooling,
-            MinimumPoolSize,
-            MaximumPoolSize,
-            (int)ConnectionIdleTimeout.TotalSeconds,
-            SslMode,
-            TrustServerCertificate,
-            SslRevocationMode,
-            StreamLoadEndpoint,
-            AllowInsecureStreamLoad,
-            MaxConnectionRetries,
-            (int)ConnectionRetryDelay.TotalMilliseconds,
-            ServerCompatibilityLevel,
-            (int)ConnectionLifetime.TotalSeconds
-        );
+    public string ToSanitizedString() => BuildConnectionString("***");
 
     // The public ADO.NET ConnectionString getter must not return the password (the ODBC/ADO
     // PersistSecurityInfo=false convention): the password is omitted entirely so logging the getter
     // cannot leak the secret. The full credentialed string remains internal for pool keying.
-    public string ToRedactedConnectionString() =>
-        BuildConnectionString(
-            Server,
-            Port,
-            UserId,
-            string.Empty,
-            Database,
-            (int)ConnectionTimeout.TotalSeconds,
-            Pooling,
-            MinimumPoolSize,
-            MaximumPoolSize,
-            (int)ConnectionIdleTimeout.TotalSeconds,
-            SslMode,
-            TrustServerCertificate,
-            SslRevocationMode,
-            StreamLoadEndpoint,
-            AllowInsecureStreamLoad,
-            MaxConnectionRetries,
-            (int)ConnectionRetryDelay.TotalMilliseconds,
-            ServerCompatibilityLevel,
-            (int)ConnectionLifetime.TotalSeconds
-        );
+    public string ToRedactedConnectionString() => BuildConnectionString(string.Empty);
 
     internal DotRocksConnectionPoolKey CreatePoolKey() =>
         new(
@@ -346,213 +288,96 @@ internal sealed record DotRocksConnectionOptions(
         }
     }
 
-    private static string GetString(
-        DbConnectionStringBuilder builder,
-        string canonical,
-        string fallback
-    )
-    {
-        foreach (string keyword in Aliases(canonical))
-        {
-            if (builder.TryGetValue(keyword, out object? value))
-            {
-                return Convert.ToString(value, CultureInfo.InvariantCulture) ?? string.Empty;
-            }
-        }
-
-        return fallback;
-    }
-
-    private static int GetInt32(DbConnectionStringBuilder builder, string canonical, int fallback)
-    {
-        foreach (string keyword in Aliases(canonical))
-        {
-            if (builder.TryGetValue(keyword, out object? value))
-            {
-                return Convert.ToInt32(value, CultureInfo.InvariantCulture);
-            }
-        }
-
-        return fallback;
-    }
-
-    private static bool GetBoolean(
-        DbConnectionStringBuilder builder,
-        string canonical,
-        bool fallback
-    )
-    {
-        foreach (string keyword in Aliases(canonical))
-        {
-            if (builder.TryGetValue(keyword, out object? value))
-            {
-                return Convert.ToBoolean(value, CultureInfo.InvariantCulture);
-            }
-        }
-
-        return fallback;
-    }
-
-    private static TEnum GetEnum<TEnum>(
-        DbConnectionStringBuilder builder,
-        string canonical,
-        TEnum fallback
-    )
-        where TEnum : struct, Enum
-    {
-        foreach (string keyword in Aliases(canonical))
-        {
-            if (builder.TryGetValue(keyword, out object? value))
-            {
-                if (value is TEnum typed)
-                {
-                    return typed;
-                }
-
-                string text = Convert.ToString(value, CultureInfo.InvariantCulture) ?? string.Empty;
-                if (Enum.TryParse(text, ignoreCase: true, out TEnum parsed))
-                {
-                    return parsed;
-                }
-
-                throw new ArgumentException(
-                    $"{canonical} value '{text}' is not supported.",
-                    nameof(builder)
-                );
-            }
-        }
-
-        return fallback;
-    }
-
-    private static Uri GetUri(DbConnectionStringBuilder builder, string canonical, Uri fallback)
-    {
-        foreach (string keyword in Aliases(canonical))
-        {
-            if (builder.TryGetValue(keyword, out object? value))
-            {
-                string text = Convert.ToString(value, CultureInfo.InvariantCulture) ?? string.Empty;
-                return new Uri(text, UriKind.Absolute);
-            }
-        }
-
-        return fallback;
-    }
-
     private static DotRocksServerVersion? GetCompatibilityLevel(DbConnectionStringBuilder builder)
     {
-        foreach (string keyword in Aliases("Server Compatibility Level"))
+        if (!TryGetValue(builder, "Server Compatibility Level", out object? value))
         {
-            if (builder.TryGetValue(keyword, out object? value))
-            {
-                string text = Convert.ToString(value, CultureInfo.InvariantCulture) ?? string.Empty;
-                if (string.IsNullOrWhiteSpace(text))
-                {
-                    return null;
-                }
-
-                if (!DotRocksServerVersion.TryParseLevel(text, out DotRocksServerVersion version))
-                {
-                    throw new ArgumentException(
-                        $"Server Compatibility Level value '{text}' is not a valid StarRocks version.",
-                        nameof(builder)
-                    );
-                }
-
-                return version;
-            }
+            return null;
         }
 
-        return null;
+        string text = Convert.ToString(value, CultureInfo.InvariantCulture) ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
+        if (!DotRocksServerVersion.TryParseLevel(text, out DotRocksServerVersion version))
+        {
+            throw new ArgumentException(
+                $"Server Compatibility Level value '{text}' is not a valid StarRocks version.",
+                nameof(builder)
+            );
+        }
+
+        return version;
     }
 
     internal static Uri BuildDefaultStreamLoadEndpoint(string server) =>
         new($"http://{server}:{DefaultStreamLoadPort}", UriKind.Absolute);
 
-    private static ImmutableArray<string> Aliases(string canonical) =>
-        DotRocksConnectionStringKeywords.Aliases(canonical);
-
-    private static string BuildConnectionString(
-        string server,
-        int port,
-        string userId,
-        string password,
-        string database,
-        int timeoutSeconds,
-        bool pooling,
-        int minimumPoolSize,
-        int maximumPoolSize,
-        int idleTimeoutSeconds,
-        DotRocksSslMode sslMode,
-        bool trustServerCertificate,
-        X509RevocationMode sslRevocationMode,
-        Uri streamLoadEndpoint,
-        bool allowInsecureStreamLoad,
-        int maxConnectionRetries,
-        int connectionRetryDelayMilliseconds,
-        DotRocksServerVersion? serverCompatibilityLevel,
-        int connectionLifetimeSeconds
-    )
+    // Serializes this record back to its canonical connection-string form; only the password
+    // rendering varies by caller (real value, "***", or omitted), so it is the single parameter.
+    private string BuildConnectionString(string password)
     {
         var builder = new StringBuilder();
-        Append(builder, "Server", server);
-        Append(builder, "Port", port.ToString(CultureInfo.InvariantCulture));
-        Append(builder, "User ID", userId);
+        Append(builder, "Server", Server);
+        Append(builder, "Port", Port.ToString(CultureInfo.InvariantCulture));
+        Append(builder, "User ID", UserId);
         if (password.Length > 0)
         {
             Append(builder, "Password", password);
         }
 
-        if (database.Length > 0)
+        if (Database.Length > 0)
         {
-            Append(builder, "Database", database);
+            Append(builder, "Database", Database);
         }
 
         Append(
             builder,
             "Connection Timeout",
-            timeoutSeconds.ToString(CultureInfo.InvariantCulture)
+            ((int)ConnectionTimeout.TotalSeconds).ToString(CultureInfo.InvariantCulture)
         );
-        Append(builder, "Pooling", pooling.ToString(CultureInfo.InvariantCulture));
+        Append(builder, "Pooling", Pooling.ToString(CultureInfo.InvariantCulture));
         Append(
             builder,
             "Minimum Pool Size",
-            minimumPoolSize.ToString(CultureInfo.InvariantCulture)
+            MinimumPoolSize.ToString(CultureInfo.InvariantCulture)
         );
         Append(
             builder,
             "Maximum Pool Size",
-            maximumPoolSize.ToString(CultureInfo.InvariantCulture)
+            MaximumPoolSize.ToString(CultureInfo.InvariantCulture)
         );
         Append(
             builder,
             "Connection Idle Timeout",
-            idleTimeoutSeconds.ToString(CultureInfo.InvariantCulture)
+            ((int)ConnectionIdleTimeout.TotalSeconds).ToString(CultureInfo.InvariantCulture)
         );
-        Append(builder, "Ssl Mode", sslMode.ToString());
+        Append(builder, "Ssl Mode", SslMode.ToString());
         Append(
             builder,
             "Trust Server Certificate",
-            trustServerCertificate.ToString(CultureInfo.InvariantCulture)
+            TrustServerCertificate.ToString(CultureInfo.InvariantCulture)
         );
-        Append(builder, "Ssl Revocation Check", sslRevocationMode.ToString());
-        Append(builder, "Stream Load Endpoint", streamLoadEndpoint.AbsoluteUri);
+        Append(builder, "Ssl Revocation Check", SslRevocationMode.ToString());
+        Append(builder, "Stream Load Endpoint", StreamLoadEndpoint.AbsoluteUri);
         Append(
             builder,
             "Allow Insecure Stream Load",
-            allowInsecureStreamLoad.ToString(CultureInfo.InvariantCulture)
+            AllowInsecureStreamLoad.ToString(CultureInfo.InvariantCulture)
         );
         Append(
             builder,
             "Connection Retries",
-            maxConnectionRetries.ToString(CultureInfo.InvariantCulture)
+            MaxConnectionRetries.ToString(CultureInfo.InvariantCulture)
         );
         Append(
             builder,
             "Connection Retry Delay",
-            connectionRetryDelayMilliseconds.ToString(CultureInfo.InvariantCulture)
+            ((int)ConnectionRetryDelay.TotalMilliseconds).ToString(CultureInfo.InvariantCulture)
         );
-        if (serverCompatibilityLevel is { } level)
+        if (ServerCompatibilityLevel is { } level)
         {
             Append(builder, "Server Compatibility Level", level.Raw);
         }
@@ -560,7 +385,7 @@ internal sealed record DotRocksConnectionOptions(
         Append(
             builder,
             "Connection Lifetime",
-            connectionLifetimeSeconds.ToString(CultureInfo.InvariantCulture)
+            ((int)ConnectionLifetime.TotalSeconds).ToString(CultureInfo.InvariantCulture)
         );
 
         return builder.ToString();

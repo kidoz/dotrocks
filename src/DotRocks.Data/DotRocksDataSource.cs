@@ -1,6 +1,5 @@
 using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
-using DotRocks.Data.Loading;
 using DotRocks.Data.Pooling;
 
 namespace DotRocks.Data;

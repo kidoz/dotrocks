@@ -1,8 +1,8 @@
-using System.Text;
 using DotRocks.Data;
 using DotRocks.Data.Protocol.Framing;
 using DotRocks.Data.Protocol.Results;
 using DotRocks.Data.Protocol.Serialization;
+using DotRocks.Protocol.Tests.TestInfrastructure;
 using Xunit;
 
 namespace DotRocks.Protocol.Tests.Results;
@@ -13,11 +13,12 @@ public sealed class TextResultParserTests
     public async Task ReadAsync_ParsesSingleColumnTextResult()
     {
         CancellationToken ct = TestContext.Current.CancellationToken;
-        using MemoryStream stream = BuildPayloadStream(
-            BuildColumnDefinition("answer"),
-            EofPayload(),
-            BuildTextRow("42"),
-            EofPayload()
+        using MemoryStream stream = StarRocksPacketFactory.PayloadStream(
+            firstSequenceId: 1,
+            StarRocksPacketFactory.ColumnDefinition("answer"),
+            StarRocksPacketFactory.Eof(),
+            StarRocksPacketFactory.TextRow("42"),
+            StarRocksPacketFactory.Eof()
         );
         var packetReader = new PacketReader(stream);
         packetReader.ResetSequence(1);
@@ -36,11 +37,12 @@ public sealed class TextResultParserTests
     public async Task ReadAsync_ParsesNullTextValue()
     {
         CancellationToken ct = TestContext.Current.CancellationToken;
-        using MemoryStream stream = BuildPayloadStream(
-            BuildColumnDefinition("value"),
-            EofPayload(),
+        using MemoryStream stream = StarRocksPacketFactory.PayloadStream(
+            firstSequenceId: 1,
+            StarRocksPacketFactory.ColumnDefinition("value"),
+            StarRocksPacketFactory.Eof(),
             [ProtocolConstants.NullValueMarker],
-            EofPayload()
+            StarRocksPacketFactory.Eof()
         );
         var packetReader = new PacketReader(stream);
         packetReader.ResetSequence(1);
@@ -54,12 +56,13 @@ public sealed class TextResultParserTests
     public async Task ReadAsync_EmptyLeadingColumnValue_DoesNotTruncateResult()
     {
         CancellationToken ct = TestContext.Current.CancellationToken;
-        using MemoryStream stream = BuildPayloadStream(
-            BuildColumnDefinition("value"),
-            EofPayload(),
-            BuildTextRow(""),
-            BuildTextRow("second"),
-            EofPayload()
+        using MemoryStream stream = StarRocksPacketFactory.PayloadStream(
+            firstSequenceId: 1,
+            StarRocksPacketFactory.ColumnDefinition("value"),
+            StarRocksPacketFactory.Eof(),
+            StarRocksPacketFactory.TextRow(""),
+            StarRocksPacketFactory.TextRow("second"),
+            StarRocksPacketFactory.Eof()
         );
         var packetReader = new PacketReader(stream);
         packetReader.ResetSequence(1);
@@ -74,21 +77,19 @@ public sealed class TextResultParserTests
     }
 
     [Fact]
-    public async Task TextResultRowReader_EmptyLeadingColumnValue_DoesNotTerminateEarly()
+    public async Task ResultRowReader_EmptyLeadingColumnValue_DoesNotTerminateEarly()
     {
         CancellationToken ct = TestContext.Current.CancellationToken;
-        using MemoryStream stream = BuildPayloadStream(
-            BuildTextRow(""),
-            BuildTextRow("second"),
-            EofPayload()
+        using MemoryStream stream = StarRocksPacketFactory.PayloadStream(
+            firstSequenceId: 1,
+            StarRocksPacketFactory.TextRow(""),
+            StarRocksPacketFactory.TextRow("second"),
+            StarRocksPacketFactory.Eof()
         );
         var packetReader = new PacketReader(stream);
         packetReader.ResetSequence(1);
-        ColumnDefinition[] columns =
-        [
-            TextResultParser.ReadColumnDefinition(BuildColumnDefinition("value")),
-        ];
-        var rowReader = new TextResultRowReader(packetReader, columns, connectionId: null);
+        ColumnDefinition[] columns = [Column("value")];
+        var rowReader = ResultRowReader.ForText(packetReader, columns, connectionId: null);
 
         var rows = new List<object?[]>();
         object?[]? row;
@@ -106,15 +107,16 @@ public sealed class TextResultParserTests
     public async Task ReadAsync_ParsesTypedTextValues()
     {
         CancellationToken ct = TestContext.Current.CancellationToken;
-        using MemoryStream stream = BuildPayloadStream(
-            BuildColumnDefinition("i32", (byte)ColumnType.Long),
-            BuildColumnDefinition("i64", (byte)ColumnType.LongLong),
-            BuildColumnDefinition("amount", (byte)ColumnType.NewDecimal),
-            BuildColumnDefinition("ratio", (byte)ColumnType.Double),
-            BuildColumnDefinition("created_on", (byte)ColumnType.Date),
-            BuildColumnDefinition("created_at", (byte)ColumnType.DateTime),
-            EofPayload(),
-            BuildTextRow(
+        using MemoryStream stream = StarRocksPacketFactory.PayloadStream(
+            firstSequenceId: 1,
+            StarRocksPacketFactory.ColumnDefinition("i32", (byte)ColumnType.Long),
+            StarRocksPacketFactory.ColumnDefinition("i64", (byte)ColumnType.LongLong),
+            StarRocksPacketFactory.ColumnDefinition("amount", (byte)ColumnType.NewDecimal),
+            StarRocksPacketFactory.ColumnDefinition("ratio", (byte)ColumnType.Double),
+            StarRocksPacketFactory.ColumnDefinition("created_on", (byte)ColumnType.Date),
+            StarRocksPacketFactory.ColumnDefinition("created_at", (byte)ColumnType.DateTime),
+            StarRocksPacketFactory.Eof(),
+            StarRocksPacketFactory.TextRow(
                 "42",
                 "9007199254740991",
                 "12.34",
@@ -122,7 +124,7 @@ public sealed class TextResultParserTests
                 "2026-06-19",
                 "2026-06-19 13:14:15"
             ),
-            EofPayload()
+            StarRocksPacketFactory.Eof()
         );
         var packetReader = new PacketReader(stream);
         packetReader.ResetSequence(1);
@@ -142,11 +144,12 @@ public sealed class TextResultParserTests
     public async Task ReadAsync_PreservesBlobValuesAsBytes()
     {
         CancellationToken ct = TestContext.Current.CancellationToken;
-        using MemoryStream stream = BuildPayloadStream(
-            BuildColumnDefinition("bytes", (byte)ColumnType.Blob),
-            EofPayload(),
-            BuildBinaryRow([0x00, 0xFF, 0x10]),
-            EofPayload()
+        using MemoryStream stream = StarRocksPacketFactory.PayloadStream(
+            firstSequenceId: 1,
+            StarRocksPacketFactory.ColumnDefinition("bytes", (byte)ColumnType.Blob),
+            StarRocksPacketFactory.Eof(),
+            StarRocksPacketFactory.BinaryRow([0x00, 0xFF, 0x10]),
+            StarRocksPacketFactory.Eof()
         );
         var packetReader = new PacketReader(stream);
         packetReader.ResetSequence(1);
@@ -165,7 +168,7 @@ public sealed class TextResultParserTests
         var packetReader = new PacketReader(stream);
 
         QueryResult result = await TextResultParser.ReadAsync(
-            BuildOkPayload(3),
+            StarRocksPacketFactory.Ok(3),
             packetReader,
             null,
             ct
@@ -186,7 +189,7 @@ public sealed class TextResultParserTests
         DotRocksException exception = await Assert
             .ThrowsAsync<DotRocksException>(async () =>
                 await TextResultParser
-                    .ReadAsync(BuildErrorPayload(), packetReader, 42, ct)
+                    .ReadAsync(StarRocksPacketFactory.Error(), packetReader, 42, ct)
                     .ConfigureAwait(true)
             )
             .ConfigureAwait(true);
@@ -228,7 +231,7 @@ public sealed class TextResultParserTests
     public void ReadError_StripsControlCharactersFromServerMessage()
     {
         DotRocksException exception = ResultPacket.ReadError(
-            BuildErrorPayload("line1\r\nFAKE LOG ENTRY\tcol"),
+            StarRocksPacketFactory.Error("line1\r\nFAKE LOG ENTRY\tcol"),
             connectionId: null
         );
 
@@ -257,7 +260,7 @@ public sealed class TextResultParserTests
     public void ReadTextRow_WithTrailingBytes_ThrowsMalformedPacketException()
     {
         ColumnDefinition[] columns = [Column("value")];
-        byte[] payload = BuildTextRow("ok");
+        byte[] payload = StarRocksPacketFactory.TextRow("ok");
         byte[] withTrailing = [.. payload, 0xAA];
 
         MalformedPacketException exception = Assert.Throws<MalformedPacketException>(() =>
@@ -348,7 +351,10 @@ public sealed class TextResultParserTests
     public async Task ReadAsync_MalformedColumnDefinitionPacket_ThrowsMalformedPacketException()
     {
         CancellationToken ct = TestContext.Current.CancellationToken;
-        using MemoryStream stream = BuildPayloadStream([ProtocolConstants.NullValueMarker]);
+        using MemoryStream stream = StarRocksPacketFactory.PayloadStream(
+            firstSequenceId: 1,
+            [ProtocolConstants.NullValueMarker]
+        );
         var packetReader = new PacketReader(stream);
         packetReader.ResetSequence(1);
 
@@ -366,116 +372,11 @@ public sealed class TextResultParserTests
         {
             { [] },
             { [ProtocolConstants.NullValueMarker] },
-            { BuildColumnDefinitionWithFixedLength("bad_length", 0x0B) },
-            { BuildColumnDefinition("truncated")[..^1] },
-            { [.. BuildColumnDefinition("trailing"), 0xAA] },
+            { StarRocksPacketFactory.ColumnDefinition("bad_length", fixedFieldsLength: 0x0B) },
+            { StarRocksPacketFactory.ColumnDefinition("truncated")[..^1] },
+            { [.. StarRocksPacketFactory.ColumnDefinition("trailing"), 0xAA] },
         };
 
     private static ColumnDefinition Column(string name) =>
-        TextResultParser.ReadColumnDefinition(BuildColumnDefinition(name));
-
-    private static MemoryStream BuildPayloadStream(params byte[][] payloads)
-    {
-        var stream = new MemoryStream();
-        var writer = new PacketWriter(stream);
-        writer.ResetSequence(1);
-        foreach (byte[] payload in payloads)
-        {
-            writer
-                .WritePayloadAsync(payload, CancellationToken.None)
-                .AsTask()
-                .GetAwaiter()
-                .GetResult();
-        }
-
-        stream.Position = 0;
-        return stream;
-    }
-
-    private static byte[] BuildColumnDefinition(
-        string name,
-        byte columnType = (byte)ColumnType.VarString
-    )
-    {
-        using var writer = new ProtocolWriter();
-        writer.WriteLengthEncodedString("def", Encoding.UTF8);
-        writer.WriteLengthEncodedString(string.Empty, Encoding.UTF8);
-        writer.WriteLengthEncodedString(string.Empty, Encoding.UTF8);
-        writer.WriteLengthEncodedString(string.Empty, Encoding.UTF8);
-        writer.WriteLengthEncodedString(name, Encoding.UTF8);
-        writer.WriteLengthEncodedString(name, Encoding.UTF8);
-        writer.WriteLengthEncodedInteger(0x0C);
-        writer.WriteFixedInteger(0x21, 2);
-        writer.WriteFixedInteger(1024, 4);
-        writer.WriteByte(columnType);
-        writer.WriteFixedInteger(0, 2);
-        writer.WriteByte(0);
-        writer.WriteFixedInteger(0, 2);
-        return writer.ToArray();
-    }
-
-    private static byte[] BuildColumnDefinitionWithFixedLength(string name, ulong fixedLength)
-    {
-        using var writer = new ProtocolWriter();
-        writer.WriteLengthEncodedString("def", Encoding.UTF8);
-        writer.WriteLengthEncodedString(string.Empty, Encoding.UTF8);
-        writer.WriteLengthEncodedString(string.Empty, Encoding.UTF8);
-        writer.WriteLengthEncodedString(string.Empty, Encoding.UTF8);
-        writer.WriteLengthEncodedString(name, Encoding.UTF8);
-        writer.WriteLengthEncodedString(name, Encoding.UTF8);
-        writer.WriteLengthEncodedInteger(fixedLength);
-        writer.WriteFixedInteger(0x21, 2);
-        writer.WriteFixedInteger(1024, 4);
-        writer.WriteByte((byte)ColumnType.VarString);
-        writer.WriteFixedInteger(0, 2);
-        writer.WriteByte(0);
-        writer.WriteFixedInteger(0, 2);
-        return writer.ToArray();
-    }
-
-    private static byte[] BuildTextRow(params string[] values)
-    {
-        using var writer = new ProtocolWriter();
-        foreach (string value in values)
-        {
-            writer.WriteLengthEncodedString(value, Encoding.UTF8);
-        }
-
-        return writer.ToArray();
-    }
-
-    private static byte[] BuildBinaryRow(params byte[][] values)
-    {
-        using var writer = new ProtocolWriter();
-        foreach (byte[] value in values)
-        {
-            writer.WriteLengthEncodedBytes(value);
-        }
-
-        return writer.ToArray();
-    }
-
-    private static byte[] EofPayload() => [0xFE, 0x00, 0x00, 0x02, 0x00];
-
-    private static byte[] BuildOkPayload(ulong affectedRows)
-    {
-        using var writer = new ProtocolWriter();
-        writer.WriteByte(ResultPacket.OkHeader);
-        writer.WriteLengthEncodedInteger(affectedRows);
-        writer.WriteLengthEncodedInteger(0);
-        writer.WriteFixedInteger(2, 2);
-        writer.WriteFixedInteger(0, 2);
-        return writer.ToArray();
-    }
-
-    private static byte[] BuildErrorPayload(string message = "syntax error")
-    {
-        using var writer = new ProtocolWriter();
-        writer.WriteByte(ProtocolConstants.ErrorPacketHeader);
-        writer.WriteFixedInteger(1064, 2);
-        writer.WriteByte((byte)'#');
-        writer.WriteBytes(Encoding.ASCII.GetBytes("42000"));
-        writer.WriteBytes(Encoding.UTF8.GetBytes(message));
-        return writer.ToArray();
-    }
+        TextResultParser.ReadColumnDefinition(StarRocksPacketFactory.ColumnDefinition(name));
 }

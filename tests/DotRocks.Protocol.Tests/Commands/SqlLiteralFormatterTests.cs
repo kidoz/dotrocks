@@ -92,6 +92,25 @@ public sealed class SqlLiteralFormatterTests
     }
 
     [Fact]
+    public void Format_FormatsDotRocksJsonAsStringLiteralPreservingRawText()
+    {
+        // The exact server representation (spacing, key order) round-trips into the literal.
+        var value = new DotRocksJson("{\"b\": 2, \"a\":1}");
+
+        Assert.Equal("'{\"b\": 2, \"a\":1}'", SqlLiteralFormatter.Format(value));
+    }
+
+    [Fact]
+    public void Format_EscapesDotRocksJsonRawText()
+    {
+        // Raw JSON text flows through the same escaping as plain strings, so quotes and
+        // backslash escapes inside the JSON cannot break out of the SQL literal.
+        var value = new DotRocksJson("{\"name\": \"O'Reilly\\n\"}");
+
+        Assert.Equal("'{\"name\": \"O''Reilly\\\\n\"}'", SqlLiteralFormatter.Format(value));
+    }
+
+    [Fact]
     public void Format_FormatsBytesAsHexLiteral()
     {
         Assert.Equal("X'00FF10'", SqlLiteralFormatter.Format(new byte[] { 0x00, 0xFF, 0x10 }));

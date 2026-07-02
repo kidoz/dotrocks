@@ -1,4 +1,5 @@
 using System.Text;
+using DotRocks.Data;
 using DotRocks.Data.Protocol.Commands;
 using DotRocks.Data.Protocol.Results;
 using DotRocks.Data.Protocol.Serialization;
@@ -46,6 +47,22 @@ public sealed class BinaryProtocolTests
 
         // Command byte + 4-byte id + flags + 4-byte iteration count only.
         Assert.Equal(10, payload.Length);
+    }
+
+    [Fact]
+    public void BuildExecute_EncodesDotRocksJsonAsVarStringWithRawText()
+    {
+        var json = new DotRocksJson("{\"a\":1}");
+
+        byte[] payload = BinaryParameterEncoder.BuildExecute(1, [json]);
+
+        int offset = 10; // command byte + statement id + flags + iteration count
+        Assert.Equal(0x00, payload[offset++]); // NULL bitmap: no nulls
+        Assert.Equal(0x01, payload[offset++]); // new-params-bound flag
+        Assert.Equal([0xFD, 0x00], payload[offset..(offset + 2)]); // VAR_STRING, signed
+        offset += 2;
+        Assert.Equal(0x07, payload[offset++]); // length-encoded length of the raw text
+        Assert.Equal("{\"a\":1}", Encoding.UTF8.GetString(payload[offset..]));
     }
 
     [Fact]

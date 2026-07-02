@@ -1,9 +1,7 @@
 using System.Collections;
-using System.Collections.Immutable;
 using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography.X509Certificates;
-using DotRocks.Data.Loading;
 
 namespace DotRocks.Data;
 
@@ -343,66 +341,24 @@ public sealed class DotRocksConnectionStringBuilder
     IEnumerator IEnumerable.GetEnumerator() =>
         ((IEnumerable<KeyValuePair<string, object?>>)this).GetEnumerator();
 
+    // Alias lookup and value conversion live in DotRocksConnectionStringKeywords, shared with
+    // DotRocksConnectionOptions so the two parsers cannot drift apart.
     private string GetString(string keyword, string fallback) =>
-        TryGetAliasedValue(keyword, out object? value)
-            ? Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture)
-                ?? string.Empty
-            : fallback;
+        DotRocksConnectionStringKeywords.GetString(this, keyword, fallback);
 
     private int GetInt32(string keyword, int fallback) =>
-        TryGetAliasedValue(keyword, out object? value)
-            ? Convert.ToInt32(value, System.Globalization.CultureInfo.InvariantCulture)
-            : fallback;
+        DotRocksConnectionStringKeywords.GetInt32(this, keyword, fallback);
 
     private bool GetBoolean(string keyword, bool fallback) =>
-        TryGetAliasedValue(keyword, out object? value)
-            ? Convert.ToBoolean(value, System.Globalization.CultureInfo.InvariantCulture)
-            : fallback;
+        DotRocksConnectionStringKeywords.GetBoolean(this, keyword, fallback);
 
     private TEnum GetEnum<TEnum>(string keyword, TEnum fallback)
-        where TEnum : struct, Enum
-    {
-        if (!TryGetAliasedValue(keyword, out object? value))
-        {
-            return fallback;
-        }
-
-        if (value is TEnum typed)
-        {
-            return typed;
-        }
-
-        string text =
-            Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture)
-            ?? string.Empty;
-        if (Enum.TryParse(text, ignoreCase: true, out TEnum parsed))
-        {
-            return parsed;
-        }
-
-        throw new ArgumentException($"{keyword} value '{text}' is not supported.", nameof(keyword));
-    }
+        where TEnum : struct, Enum =>
+        DotRocksConnectionStringKeywords.GetEnum(this, keyword, fallback);
 
     private void SetValue(string keyword, string value)
     {
         ArgumentNullException.ThrowIfNull(value);
         this[keyword] = value;
     }
-
-    private bool TryGetAliasedValue(string keyword, out object? value)
-    {
-        foreach (string alias in Aliases(keyword))
-        {
-            if (TryGetValue(alias, out value))
-            {
-                return true;
-            }
-        }
-
-        value = null;
-        return false;
-    }
-
-    private static ImmutableArray<string> Aliases(string keyword) =>
-        DotRocksConnectionStringKeywords.Aliases(keyword);
 }

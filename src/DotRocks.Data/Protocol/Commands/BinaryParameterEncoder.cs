@@ -113,6 +113,10 @@ internal static class BinaryParameterEncoder
                 return VarString(dec.ToString(CultureInfo.InvariantCulture));
             case DotRocksDecimal dotRocksDecimal:
                 return VarString(dotRocksDecimal.ToString());
+            // JSON is sent as VAR_STRING text carrying the exact raw bytes; StarRocks casts it
+            // to the placeholder's JSON type, so the round trip through DotRocksJson is lossless.
+            case DotRocksJson dotRocksJson:
+                return VarString(dotRocksJson.RawText);
             case Int128 int128:
                 return VarString(int128.ToString(CultureInfo.InvariantCulture));
             case DateTime dateTime:

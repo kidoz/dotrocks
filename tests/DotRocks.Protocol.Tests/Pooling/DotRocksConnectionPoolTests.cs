@@ -1,4 +1,4 @@
-using DotRocks.Data.Loading;
+using DotRocks.Data;
 using DotRocks.Data.Pooling;
 using Xunit;
 

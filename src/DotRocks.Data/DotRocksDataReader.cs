@@ -20,7 +20,7 @@ public sealed class DotRocksDataReader
     private const ushort NotNullColumnFlag = 0x0001;
     private readonly IReadOnlyList<QueryResult>? _bufferedResults;
     private readonly StreamingQueryResult? _streamingResult;
-    private readonly TextResultRowReader? _rowReader;
+    private readonly ResultRowReader? _rowReader;
     private IReadOnlyList<ColumnDefinition> _columns;
     private readonly DotRocksConnection? _connection;
     private readonly CommandBehavior _behavior;
@@ -883,27 +883,10 @@ public sealed class DotRocksDataReader
         return value;
     }
 
-    private long RecordsAffectedCore
-    {
-        get
-        {
-            if (_bufferedResults is null)
-            {
-                return _streamingResult?.RecordsAffected ?? -1;
-            }
-
-            long total = -1;
-            foreach (QueryResult result in _bufferedResults)
-            {
-                if (result.RecordsAffected >= 0)
-                {
-                    total = (total < 0 ? 0 : total) + result.RecordsAffected;
-                }
-            }
-
-            return total;
-        }
-    }
+    private long RecordsAffectedCore =>
+        _bufferedResults is null
+            ? _streamingResult?.RecordsAffected ?? -1
+            : QueryResult.SumRecordsAffected(_bufferedResults);
 
     private void ReportConnectionCompletion(bool reusable)
     {
