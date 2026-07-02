@@ -3,6 +3,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using Dapper;
 using DotRocks.Data;
+using DotRocks.Data.IntegrationTests;
 using Xunit;
 
 namespace DotRocks.Data.DapperTests;
@@ -14,12 +15,7 @@ public sealed class DapperIntegrationTests
     [Fact]
     public async Task QuerySingleAsync_ReturnsScalar()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
         await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
@@ -39,12 +35,7 @@ public sealed class DapperIntegrationTests
     [Fact]
     public async Task QuerySingleAsync_BindsParameters()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
         await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
@@ -65,12 +56,7 @@ public sealed class DapperIntegrationTests
     [Fact]
     public async Task PreparedCommand_ExecutesThroughDapperConnection()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
         await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
@@ -95,12 +81,7 @@ public sealed class DapperIntegrationTests
     [Fact]
     public async Task QuerySingleAsync_MapsPoco()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
         await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
@@ -121,12 +102,7 @@ public sealed class DapperIntegrationTests
     [Fact]
     public async Task Transaction_Commit_MakesInsertedRowsVisible()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         string tableName = await CreateTransactionTableAsync().ConfigureAwait(true);
         try
@@ -161,34 +137,34 @@ public sealed class DapperIntegrationTests
     [Fact]
     public async Task PooledConnections_OpenCloseSmoke_ReusesPhysicalConnection()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         DotRocksConnection.ClearAllPools();
-        string connectionString = BuildPoolingConnectionString(maximumPoolSize: 1);
-        long firstConnectionId;
-
-        using (var first = new DotRocksConnection(connectionString))
+        try
         {
-            await first.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
-            firstConnectionId = await ReadConnectionIdAsync(first).ConfigureAwait(true);
-            await first.CloseAsync().ConfigureAwait(true);
-        }
+            string connectionString = BuildPoolingConnectionString(maximumPoolSize: 1);
+            long firstConnectionId;
 
-        using (var second = new DotRocksConnection(connectionString))
+            using (var first = new DotRocksConnection(connectionString))
+            {
+                await first.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+                firstConnectionId = await ReadConnectionIdAsync(first).ConfigureAwait(true);
+                await first.CloseAsync().ConfigureAwait(true);
+            }
+
+            using (var second = new DotRocksConnection(connectionString))
+            {
+                await second.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+                long secondConnectionId = await ReadConnectionIdAsync(second).ConfigureAwait(true);
+
+                Assert.Equal(firstConnectionId, secondConnectionId);
+                await second.CloseAsync().ConfigureAwait(true);
+            }
+        }
+        finally
         {
-            await second.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
-            long secondConnectionId = await ReadConnectionIdAsync(second).ConfigureAwait(true);
-
-            Assert.Equal(firstConnectionId, secondConnectionId);
-            await second.CloseAsync().ConfigureAwait(true);
+            DotRocksConnection.ClearAllPools();
         }
-
-        DotRocksConnection.ClearAllPools();
     }
 
     private static string BuildPoolingConnectionString(int maximumPoolSize)

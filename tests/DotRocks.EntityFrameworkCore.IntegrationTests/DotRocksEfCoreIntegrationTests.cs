@@ -3,6 +3,7 @@ using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using DotRocks.Data;
+using DotRocks.Data.IntegrationTests;
 using DotRocks.EntityFrameworkCore.Infrastructure;
 using DotRocks.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore;
@@ -49,12 +50,7 @@ public sealed class DotRocksEfCoreIntegrationTests
     [Fact]
     public async Task UseStarRocks_GetDbConnection_ExecutesSelectOne()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         var optionsBuilder = new DbContextOptionsBuilder<DotRocksTestContext>();
         optionsBuilder.UseStarRocks(IntegrationTestEnvironment.ConnectionString);
@@ -77,12 +73,7 @@ public sealed class DotRocksEfCoreIntegrationTests
     [Fact]
     public async Task DatabaseCreator_Exists_ReflectsDatabasePresence()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         using DotRocksTestContext setup = CreateContext(
             IntegrationTestEnvironment.ConnectionString
@@ -115,12 +106,7 @@ public sealed class DotRocksEfCoreIntegrationTests
     [Fact]
     public async Task ExecuteSqlRawAsync_CreatesDatabase()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         string databaseName = CreateUniqueDatabaseName();
         await using var context = CreateLiveContext();
@@ -144,12 +130,7 @@ public sealed class DotRocksEfCoreIntegrationTests
     [Fact]
     public async Task ExecuteSqlRawAsync_DropsTable()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         await using var context = CreateLiveContext();
         await EnsureLinqDatabaseAsync(context).ConfigureAwait(true);
@@ -172,12 +153,7 @@ public sealed class DotRocksEfCoreIntegrationTests
     )]
     public async Task ExecuteSqlRawAsync_ExecutesParameterizedCommand()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         await using var context = CreateLiveContext();
         await EnsureWidgetTableAsync(context).ConfigureAwait(true);
@@ -232,12 +208,7 @@ public sealed class DotRocksEfCoreIntegrationTests
     [Fact]
     public async Task DateAndMathTranslators_ExecuteAgainstStarRocks()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         await using var context = CreateLiveContext();
         await EnsureWidgetTableAsync(context).ConfigureAwait(true);
@@ -296,12 +267,7 @@ public sealed class DotRocksEfCoreIntegrationTests
     )]
     public async Task AdvancedTableShape_RandomDistributionSortKeyAndProperties_CreatesTable()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         const string tableName = "ef_advanced_shape";
         await using var context = CreateLiveContext();
@@ -392,12 +358,7 @@ public sealed class DotRocksEfCoreIntegrationTests
     [Fact]
     public async Task DbSet_MaterializesCommonStarRocksTypes()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         await using var context = CreateLiveContext();
         await EnsureWidgetTableAsync(context).ConfigureAwait(true);
@@ -429,12 +390,7 @@ public sealed class DotRocksEfCoreIntegrationTests
     [Fact]
     public async Task FromSqlRaw_MaterializesHighPrecisionDecimalAsDotRocksDecimal()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         await using var context = CreateLiveContext();
 
@@ -451,12 +407,7 @@ public sealed class DotRocksEfCoreIntegrationTests
     [Fact]
     public async Task FromSqlRaw_ProjectingHighPrecisionDecimalToDecimalThrowsPrecisionLoss()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         await using var context = CreateLiveContext();
 
@@ -472,12 +423,7 @@ public sealed class DotRocksEfCoreIntegrationTests
     [Fact]
     public async Task FromSqlRaw_MaterializesDateOnlyTimeOnlyGuidAndJson()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         await using var context = CreateLiveContext();
 
@@ -503,12 +449,7 @@ public sealed class DotRocksEfCoreIntegrationTests
     [Fact]
     public async Task FromSqlRaw_MaterializesLargeIntAsInt128()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         await using var context = CreateLiveContext();
 
@@ -536,12 +477,7 @@ public sealed class DotRocksEfCoreIntegrationTests
     [Fact]
     public async Task GroupBy_Category_AggregatesAgainstStarRocks()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         await using var context = CreateLiveContext();
         await EnsureWidgetTableAsync(context).ConfigureAwait(true);
@@ -578,12 +514,7 @@ public sealed class DotRocksEfCoreIntegrationTests
     [Fact]
     public async Task GroupBy_WithHaving_FiltersAggregatesAgainstStarRocks()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         await using var context = CreateLiveContext();
         await EnsureWidgetTableAsync(context).ConfigureAwait(true);
@@ -609,12 +540,7 @@ public sealed class DotRocksEfCoreIntegrationTests
     [Fact]
     public async Task Join_SelfJoinOnPriority_ExecutesAgainstStarRocks()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         await using var context = CreateLiveContext();
         await EnsureWidgetTableAsync(context).ConfigureAwait(true);
@@ -647,12 +573,7 @@ public sealed class DotRocksEfCoreIntegrationTests
     [Fact]
     public async Task DetectAsync_ReadsLiveServerVersion()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         StarRocksServerVersion version = await StarRocksServerVersion
             .DetectAsync(
@@ -690,12 +611,7 @@ public sealed class DotRocksEfCoreIntegrationTests
     [Fact]
     public async Task SaveChangesAsync_InsertsUpdatesAndDeletesSupportedEntity()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         var interceptor = new CapturingCommandInterceptor();
         await using var context = CreateLiveContext(interceptor);
@@ -802,12 +718,7 @@ public sealed class DotRocksEfCoreIntegrationTests
     [Fact]
     public async Task SaveChangesAsync_MultipleRowsSameTable_CharacterizesStarRocksMultiDml()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         await using var context = CreateLiveContext();
         await EnsureWriteWidgetTableAsync(context).ConfigureAwait(true);
@@ -869,12 +780,7 @@ public sealed class DotRocksEfCoreIntegrationTests
     [Fact]
     public async Task SaveChangesAsync_OneRowPerSaveChanges_WritesSequentially()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         var interceptor = new CapturingCommandInterceptor();
         await using var context = CreateLiveContext(interceptor);
@@ -932,12 +838,7 @@ public sealed class DotRocksEfCoreIntegrationTests
     [Fact]
     public async Task SaveChangesAsync_InsideEfTransactionCommitPersistsRows()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         await using var context = CreateLiveContext();
         await EnsureWriteWidgetTableAsync(context).ConfigureAwait(true);
@@ -984,12 +885,7 @@ public sealed class DotRocksEfCoreIntegrationTests
     [Fact]
     public async Task SaveChangesAsync_InsideEfTransactionRollbackHidesRowsWhenSupported()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         await using var context = CreateLiveContext();
         await EnsureWriteWidgetTableAsync(context).ConfigureAwait(true);
@@ -1047,12 +943,7 @@ public sealed class DotRocksEfCoreIntegrationTests
     )]
     public async Task MigrateAsync_CreatesValidStarRocksTable()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         await using DotRocksTestContext setupContext = CreateLiveContext();
         await EnsureLinqDatabaseAsync(setupContext).ConfigureAwait(true);
@@ -1158,12 +1049,7 @@ public sealed class DotRocksEfCoreIntegrationTests
     )]
     public async Task MigrateAsync_CreatesConfiguredTableShape()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         await using DotRocksTestContext setupContext = CreateLiveContext();
         await EnsureLinqDatabaseAsync(setupContext).ConfigureAwait(true);
@@ -1236,12 +1122,7 @@ public sealed class DotRocksEfCoreIntegrationTests
     )]
     public async Task MigrateAsync_DownMigrationDropsTableAndHistoryRow()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         await using DotRocksTestContext setupContext = CreateLiveContext();
         await EnsureLinqDatabaseAsync(setupContext).ConfigureAwait(true);
@@ -1297,12 +1178,7 @@ public sealed class DotRocksEfCoreIntegrationTests
     )]
     public async Task MigrateAsync_EnsureSchemaCreatesDatabaseTableHistoryAndQueryableRows()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         await using DotRocksTestContext setupContext = CreateLiveContext();
         await EnsureLinqDatabaseAsync(setupContext).ConfigureAwait(true);
@@ -1400,12 +1276,7 @@ public sealed class DotRocksEfCoreIntegrationTests
     )]
     public async Task MigrateAsync_UnsupportedSchemaMutationFailsBeforePartialMigrationSql()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         await using DotRocksTestContext setupContext = CreateLiveContext();
         await EnsureLinqDatabaseAsync(setupContext).ConfigureAwait(true);
@@ -1473,12 +1344,7 @@ public sealed class DotRocksEfCoreIntegrationTests
     )]
     public async Task MigrateAsync_DownMigrationSupportsDropTableOnlyAndRejectsDropDatabase()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         await using DotRocksTestContext setupContext = CreateLiveContext();
         await EnsureLinqDatabaseAsync(setupContext).ConfigureAwait(true);
@@ -1574,12 +1440,7 @@ public sealed class DotRocksEfCoreIntegrationTests
     [Fact]
     public async Task FromSqlRaw_MaterializesEntity()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         await using var context = CreateLiveContext();
 
@@ -1595,12 +1456,7 @@ public sealed class DotRocksEfCoreIntegrationTests
     [Fact]
     public async Task LinqWhereSelectFirstOrDefault_Translates()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         await using var context = CreateLiveContext();
         await EnsureWidgetTableAsync(context).ConfigureAwait(true);
@@ -1624,12 +1480,7 @@ public sealed class DotRocksEfCoreIntegrationTests
     [Fact]
     public async Task LinqWhereComparisons_Translate()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         await using var context = CreateLiveContext();
         await EnsureWidgetTableAsync(context).ConfigureAwait(true);
@@ -1665,12 +1516,7 @@ public sealed class DotRocksEfCoreIntegrationTests
     )]
     public async Task LinqContains_EscapesLikeWildcardsLiterally()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         await using var context = CreateLiveContext();
         await EnsureWidgetTableAsync(context).ConfigureAwait(true);
@@ -1716,12 +1562,7 @@ public sealed class DotRocksEfCoreIntegrationTests
     [Fact]
     public async Task LinqAndAlsoOrElseAndNullableComparisons_Translate()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         await using var context = CreateLiveContext();
         await EnsureWidgetTableAsync(context).ConfigureAwait(true);
@@ -1749,12 +1590,7 @@ public sealed class DotRocksEfCoreIntegrationTests
     [Fact]
     public async Task LinqOrderByThenByTakeSkip_Translates()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         await using var context = CreateLiveContext();
         await EnsureWidgetTableAsync(context).ConfigureAwait(true);
@@ -1781,12 +1617,7 @@ public sealed class DotRocksEfCoreIntegrationTests
     [Fact]
     public async Task LinqCountAndAny_Translate()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         await using var context = CreateLiveContext();
         await EnsureWidgetTableAsync(context).ConfigureAwait(true);
@@ -1822,12 +1653,7 @@ public sealed class DotRocksEfCoreIntegrationTests
     [Fact]
     public async Task LinqProjectionAndToList_Translate()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         await using var context = CreateLiveContext();
         await EnsureWidgetTableAsync(context).ConfigureAwait(true);
@@ -1929,12 +1755,7 @@ public sealed class DotRocksEfCoreIntegrationTests
     [Fact]
     public async Task LinqCapturedParameters_UseAtPlaceholdersAndReturnExpectedRows()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         var interceptor = new CapturingCommandInterceptor();
         await using var context = CreateLiveContext(interceptor);
@@ -1995,12 +1816,7 @@ public sealed class DotRocksEfCoreIntegrationTests
     [Fact]
     public async Task LinqEfParameter_UsesAtPlaceholdersAndReturnExpectedRows()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         var interceptor = new CapturingCommandInterceptor();
         await using var context = CreateLiveContext(interceptor);
@@ -2055,12 +1871,7 @@ public sealed class DotRocksEfCoreIntegrationTests
     )]
     public async Task LinqStringAndNullParameters_KeepSensitiveValuesOutOfSqlText()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         var interceptor = new CapturingCommandInterceptor();
         await using var context = CreateLiveContext(interceptor);
@@ -2145,12 +1956,7 @@ public sealed class DotRocksEfCoreIntegrationTests
     )]
     public async Task LinqDotRocksDecimalParameter_UsesAtPlaceholderAndReturnsExpectedRows()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         var interceptor = new CapturingCommandInterceptor();
         await using var context = CreateLiveContext(interceptor);
@@ -2199,12 +2005,7 @@ public sealed class DotRocksEfCoreIntegrationTests
     [Fact]
     public async Task LinqContainsStringPredicatesDescendingDistinctAndAggregates_Translate()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         await using var context = CreateLiveContext();
         await EnsureWidgetTableAsync(context).ConfigureAwait(true);

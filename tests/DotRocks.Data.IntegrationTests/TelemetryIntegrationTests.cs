@@ -12,12 +12,7 @@ public sealed class TelemetryIntegrationTests
     [Fact]
     public async Task ServerError_MapsToSafeStatusCodeAndErrorTypeWithoutMessage()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         using var capture = new TelemetryCapture();
         await Assert
@@ -37,12 +32,7 @@ public sealed class TelemetryIntegrationTests
     [Fact]
     public async Task Timeout_MapsToTimeoutOutcome()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         using var capture = new TelemetryCapture();
         await Assert
@@ -62,12 +52,7 @@ public sealed class TelemetryIntegrationTests
     [Fact]
     public async Task UserCancellation_MapsToCanceledOutcome()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         using var capture = new TelemetryCapture();
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(
@@ -88,12 +73,7 @@ public sealed class TelemetryIntegrationTests
     [Fact]
     public async Task Success_RecordsOperationAndSuccessOutcome()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         using var capture = new TelemetryCapture();
         _ = await ExecuteScalarAsync("SELECT 1", TestContext.Current.CancellationToken)
@@ -109,12 +89,7 @@ public sealed class TelemetryIntegrationTests
     [Fact]
     public async Task ConnectionOpenAndTransactionDurations_AreRecorded()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         var durations = new ConcurrentDictionary<string, string?>(StringComparer.Ordinal);
         using var listener = new MeterListener
