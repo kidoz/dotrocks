@@ -74,6 +74,22 @@ jobs:
             sleep 5
           done
 
+          # The FE answers SELECT 1 before any BE is alive; table operations fail until a
+          # backend registers. Probe with a real CREATE TABLE so tests never start early.
+          for attempt in {1..120}; do
+            if docker compose -f dev/docker-compose.yml exec -T starrocks \
+              mysql -h127.0.0.1 -P9030 -uroot -e \
+              'CREATE DATABASE IF NOT EXISTS dotrocks_readiness; CREATE TABLE IF NOT EXISTS dotrocks_readiness.probe (id INT) PROPERTIES ("replication_num" = "1"); DROP DATABASE dotrocks_readiness' \
+              >/dev/null 2>&1; then
+              break
+            fi
+            if [ "${attempt}" = "120" ]; then
+              docker compose -f dev/docker-compose.yml logs --tail=200 starrocks >&2 || true
+              exit 1
+            fi
+            sleep 5
+          done
+
           for attempt in {1..120}; do
             if curl -fsS -o /dev/null "http://127.0.0.1:${DOTROCKS_FE_HTTP_PORT}/api/health" 2>/dev/null \
               || curl -fsS -o /dev/null "http://127.0.0.1:${DOTROCKS_FE_HTTP_PORT}/" 2>/dev/null; then

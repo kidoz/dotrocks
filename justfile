@@ -83,6 +83,24 @@ starrocks-up:
     done
     echo "FE query endpoint is ready."
 
+    # The FE answers SELECT 1 before any BE is alive; table operations fail until a
+    # backend registers. Probe with a real CREATE TABLE so tests never start early.
+    echo "Waiting for a backend to accept table creation..."
+    attempt=0
+    until docker compose -f "${compose_file}" exec -T starrocks \
+        mysql -h127.0.0.1 -P9030 -uroot -e \
+        'CREATE DATABASE IF NOT EXISTS dotrocks_readiness; CREATE TABLE IF NOT EXISTS dotrocks_readiness.probe (id INT) PROPERTIES ("replication_num" = "1"); DROP DATABASE dotrocks_readiness' \
+        >/dev/null 2>&1; do
+        attempt=$((attempt + 1))
+        if [ "${attempt}" -ge "${max_attempts}" ]; then
+            echo "StarRocks BE did not accept table creation within $((max_attempts * poll_seconds))s." >&2
+            docker compose -f "${compose_file}" logs --tail=100 starrocks >&2 || true
+            exit 1
+        fi
+        sleep "${poll_seconds}"
+    done
+    echo "Backend accepts table creation."
+
     echo "Waiting for the FE HTTP / Stream Load endpoint on ${fe_http_port}..."
     attempt=0
     until curl -fsS -o /dev/null "http://127.0.0.1:${fe_http_port}/api/health" 2>/dev/null \
