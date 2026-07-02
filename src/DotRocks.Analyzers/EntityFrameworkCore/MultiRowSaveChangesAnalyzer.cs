@@ -265,19 +265,8 @@ public sealed class MultiRowSaveChangesAnalyzer : DiagnosticAnalyzer
         return false;
     }
 
-    private static bool IsEfDbSet(ITypeSymbol? type)
-    {
-        if (type is not INamedTypeSymbol namedType)
-        {
-            return false;
-        }
-
-        return string.Equals(
-            namedType.ConstructedFrom.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
-            "global::Microsoft.EntityFrameworkCore.DbSet<TEntity>",
-            StringComparison.Ordinal
-        );
-    }
+    private static bool IsEfDbSet(ITypeSymbol? type) =>
+        AnalyzerSyntaxHelpers.IsNamedType(type, "Microsoft.EntityFrameworkCore.DbSet", arity: 1);
 
     private static bool IsEfDbContext(ITypeSymbol? type)
     {

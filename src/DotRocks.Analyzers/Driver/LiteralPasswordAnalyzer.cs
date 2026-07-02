@@ -40,7 +40,11 @@ public sealed class LiteralPasswordAnalyzer : DiagnosticAnalyzer
     private static void AnalyzeObjectCreation(SyntaxNodeAnalysisContext context)
     {
         var objectCreation = (ObjectCreationExpressionSyntax)context.Node;
-        if (!IsConnectionStringConsumer(context.SemanticModel.GetTypeInfo(objectCreation).Type))
+        if (
+            !AnalyzerSyntaxHelpers.IsConnectionStringConsumer(
+                context.SemanticModel.GetTypeInfo(objectCreation).Type
+            )
+        )
         {
             return;
         }
@@ -90,7 +94,11 @@ public sealed class LiteralPasswordAnalyzer : DiagnosticAnalyzer
                 .OfType<ObjectCreationExpressionSyntax>()
         )
         {
-            if (!IsConnectionStringConsumer(context.SemanticModel.GetTypeInfo(objectCreation).Type))
+            if (
+                !AnalyzerSyntaxHelpers.IsConnectionStringConsumer(
+                    context.SemanticModel.GetTypeInfo(objectCreation).Type
+                )
+            )
             {
                 continue;
             }
@@ -201,15 +209,6 @@ public sealed class LiteralPasswordAnalyzer : DiagnosticAnalyzer
 
         return false;
     }
-
-    private static bool IsConnectionStringConsumer(ITypeSymbol? type) =>
-        AnalyzerSyntaxHelpers.IsNamedType(type, "DotRocks.Data.DotRocksConnection")
-        || AnalyzerSyntaxHelpers.IsNamedType(type, "DotRocks.Data.DotRocksDataSource")
-        || AnalyzerSyntaxHelpers.IsNamedType(type, "DotRocks.Data.DotRocksConnectionStringBuilder")
-        || AnalyzerSyntaxHelpers.IsNamedType(
-            type,
-            "DotRocks.Data.Loading.DotRocksStreamLoadClient"
-        );
 
     private static void Report(SyntaxNodeAnalysisContext context, SyntaxNode node) =>
         context.ReportDiagnostic(
