@@ -40,7 +40,7 @@ public sealed class InsecureStreamLoadEndpointAnalyzer : DiagnosticAnalyzer
         var objectCreation = (ObjectCreationExpressionSyntax)context.Node;
         ITypeSymbol? type = context.SemanticModel.GetTypeInfo(objectCreation).Type;
 
-        if (IsDotRocksConnectionStringConsumer(type))
+        if (AnalyzerSyntaxHelpers.IsConnectionStringConsumer(type))
         {
             foreach (ArgumentSyntax argument in objectCreation.ArgumentList?.Arguments ?? [])
             {
@@ -113,7 +113,7 @@ public sealed class InsecureStreamLoadEndpointAnalyzer : DiagnosticAnalyzer
         )
         {
             if (
-                !IsDotRocksConnectionStringConsumer(
+                !AnalyzerSyntaxHelpers.IsConnectionStringConsumer(
                     context.SemanticModel.GetTypeInfo(objectCreation).Type
                 )
             )
@@ -321,15 +321,6 @@ public sealed class InsecureStreamLoadEndpointAnalyzer : DiagnosticAnalyzer
     private static bool IsInsecureStreamLoadConnectionString(string value) =>
         value.IndexOf("stream load endpoint=http://", StringComparison.OrdinalIgnoreCase) >= 0
         && value.IndexOf("password=", StringComparison.OrdinalIgnoreCase) >= 0;
-
-    private static bool IsDotRocksConnectionStringConsumer(ITypeSymbol? type) =>
-        AnalyzerSyntaxHelpers.IsNamedType(type, "DotRocks.Data.DotRocksConnection")
-        || AnalyzerSyntaxHelpers.IsNamedType(type, "DotRocks.Data.DotRocksDataSource")
-        || AnalyzerSyntaxHelpers.IsNamedType(type, "DotRocks.Data.DotRocksConnectionStringBuilder")
-        || AnalyzerSyntaxHelpers.IsNamedType(
-            type,
-            "DotRocks.Data.Loading.DotRocksStreamLoadClient"
-        );
 
     private readonly struct BuilderState(ExpressionSyntax? endpointExpression, bool hasPassword)
     {

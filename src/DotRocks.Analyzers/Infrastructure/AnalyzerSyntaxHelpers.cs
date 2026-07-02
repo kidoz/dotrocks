@@ -67,9 +67,30 @@ internal static class AnalyzerSyntaxHelpers
         return true;
     }
 
+    /// <summary>
+    /// Returns true when the type is a generic named type with the given arity whose unbound
+    /// definition matches <paramref name="metadataName"/> (namespace-qualified, without an arity
+    /// suffix or type arguments).
+    /// </summary>
+    public static bool IsNamedType(ITypeSymbol? type, string metadataName, int arity) =>
+        type is INamedTypeSymbol namedType
+        && namedType.Arity == arity
+        && IsNamedType(namedType.ConstructedFrom, metadataName);
+
     public static bool IsDotRocksTransactionType(ITypeSymbol? type) =>
         IsNamedType(type, "DotRocks.Data.DotRocksTransaction")
         || IsNamedType(type, "DotRocks.Data.Loading.DotRocksStreamLoadTransaction");
+
+    /// <summary>
+    /// Returns true when the type is a DotRocks API that accepts a connection string (connection,
+    /// data source, connection-string builder, or Stream Load client). Shared so every analyzer
+    /// that inspects connection-string arguments gates on the same type list.
+    /// </summary>
+    public static bool IsConnectionStringConsumer(ITypeSymbol? type) =>
+        IsNamedType(type, "DotRocks.Data.DotRocksConnection")
+        || IsNamedType(type, "DotRocks.Data.DotRocksDataSource")
+        || IsNamedType(type, "DotRocks.Data.DotRocksConnectionStringBuilder")
+        || IsNamedType(type, "DotRocks.Data.Loading.DotRocksStreamLoadClient");
 
     /// <summary>
     /// Returns true when the symbol belongs to the DotRocks product namespaces. Used to gate

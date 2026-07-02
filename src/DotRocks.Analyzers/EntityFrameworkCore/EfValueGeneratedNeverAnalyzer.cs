@@ -199,24 +199,18 @@ public sealed class EfValueGeneratedNeverAnalyzer : DiagnosticAnalyzer
         }
 
         ITypeSymbol? receiverType = context.SemanticModel.GetTypeInfo(memberAccess.Expression).Type;
-        if (receiverType is INamedTypeSymbol namedReceiverType)
-        {
-            string receiverMetadataName = namedReceiverType.ConstructedFrom.ToDisplayString(
-                SymbolDisplayFormat.FullyQualifiedFormat
-            );
-            if (
-                string.Equals(
-                    receiverMetadataName,
-                    "global::Microsoft.EntityFrameworkCore.EntityTypeBuilder<TEntity>",
-                    StringComparison.Ordinal
-                )
-                && namedReceiverType.TypeArguments.Length == 1
+        if (
+            receiverType is INamedTypeSymbol namedReceiverType
+            && AnalyzerSyntaxHelpers.IsNamedType(
+                namedReceiverType,
+                "Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder",
+                arity: 1
             )
-            {
-                return namedReceiverType
-                    .TypeArguments[0]
-                    .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            }
+        )
+        {
+            return namedReceiverType
+                .TypeArguments[0]
+                .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
         }
 
         InvocationExpressionSyntax? entityInvocation = memberAccess

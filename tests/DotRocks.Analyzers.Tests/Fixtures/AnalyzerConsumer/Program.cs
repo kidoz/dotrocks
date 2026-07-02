@@ -45,9 +45,23 @@ namespace Microsoft.EntityFrameworkCore
 
     public class ModelBuilder
     {
-        public EntityTypeBuilder<TEntity> Entity<TEntity>() => new();
+        public Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<TEntity> Entity<TEntity>() =>
+            new();
     }
 
+    public class DbSet<TEntity>
+    {
+        public void AddRange(params TEntity[] entities) { }
+    }
+
+    public static class EntityFrameworkQueryableExtensions
+    {
+        public static int ExecuteDelete<TEntity>(this IQueryable<TEntity> source) => 0;
+    }
+}
+
+namespace Microsoft.EntityFrameworkCore.Metadata.Builders
+{
     public class EntityTypeBuilder<TEntity>
     {
         public EntityTypeBuilder<TEntity> HasKey<TProperty>(
@@ -64,16 +78,6 @@ namespace Microsoft.EntityFrameworkCore
         public PropertyBuilder<TProperty> ValueGeneratedNever() => this;
 
         public PropertyBuilder<TProperty> HasColumnType(string storeType) => this;
-    }
-
-    public class DbSet<TEntity>
-    {
-        public void AddRange(params TEntity[] entities) { }
-    }
-
-    public static class EntityFrameworkQueryableExtensions
-    {
-        public static int ExecuteDelete<TEntity>(this IQueryable<TEntity> source) => 0;
     }
 }
 

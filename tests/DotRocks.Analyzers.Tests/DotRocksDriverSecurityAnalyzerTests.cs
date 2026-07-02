@@ -1,9 +1,6 @@
-using System.Collections.Immutable;
 using DotRocks.Analyzers.Driver;
 using DotRocks.Analyzers.Infrastructure;
 using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp;
-using Microsoft.CodeAnalysis.Diagnostics;
 using Xunit;
 
 namespace DotRocks.Analyzers.Tests;
@@ -409,77 +406,17 @@ public sealed class DotRocksDriverSecurityAnalyzerTests
     }
 
     private static void AssertHasDiagnostic(Diagnostic[] diagnostics, string id) =>
-        Assert.Contains(diagnostics, diagnostic => diagnostic.Id == id);
+        AnalyzerTestHarness.AssertHasDiagnostic(diagnostics, id);
 
     private static void AssertNoDiagnostic(Diagnostic[] diagnostics, string id) =>
-        Assert.DoesNotContain(diagnostics, diagnostic => diagnostic.Id == id);
+        AnalyzerTestHarness.AssertNoDiagnostic(diagnostics, id);
 
-    private static async Task<Diagnostic[]> AnalyzeAsync(string source)
-    {
-        CSharpCompilation compilation = CSharpCompilation.Create(
-            "DotRocks.Analyzers.Tests.DriverSecurityTarget",
-            [
-                CSharpSyntaxTree.ParseText(
-                    DotRocksStubs + source,
-                    CSharpParseOptions.Default.WithLanguageVersion(LanguageVersion.Preview)
-                ),
-            ],
-            CreateReferences(),
-            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)
-        );
-
-        DiagnosticAnalyzer[] analyzers =
-        [
+    private static Task<Diagnostic[]> AnalyzeAsync(string source) =>
+        AnalyzerTestHarness.AnalyzeAsync(
+            AnalyzerTestHarness.DotRocksStubs + source,
             new UnsafeCommandTextAnalyzer(),
             new MissingCancellationTokenAnalyzer(),
             new SyncOverAsyncAnalyzer(),
-            new LiteralPasswordAnalyzer(),
-        ];
-        CompilationWithAnalyzers compilationWithAnalyzers = compilation.WithAnalyzers([
-            .. analyzers,
-        ]);
-        ImmutableArray<Diagnostic> diagnostics = await compilationWithAnalyzers
-            .GetAnalyzerDiagnosticsAsync()
-            .ConfigureAwait(true);
-        return diagnostics.OrderBy(diagnostic => diagnostic.Id, StringComparer.Ordinal).ToArray();
-    }
-
-    private static MetadataReference[] CreateReferences()
-    {
-        string trustedPlatformAssemblies =
-            (string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") ?? string.Empty;
-        return trustedPlatformAssemblies
-            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
-            .Select(path => MetadataReference.CreateFromFile(path))
-            .ToArray();
-    }
-
-    private const string DotRocksStubs = """
-        namespace DotRocks.Data
-        {
-            public sealed class DotRocksConnection
-            {
-                public DotRocksConnection(string connectionString) { }
-            }
-
-            public sealed class DotRocksDataSource
-            {
-                public DotRocksDataSource(string connectionString) { }
-            }
-
-            public sealed class DotRocksCommand
-            {
-                public DotRocksCommand() { }
-
-                public DotRocksCommand(string commandText) { }
-
-                public string CommandText { get; set; } = string.Empty;
-
-                public System.Threading.Tasks.Task<int> ExecuteNonQueryAsync(
-                    System.Threading.CancellationToken cancellationToken = default) =>
-                    System.Threading.Tasks.Task.FromResult(0);
-            }
-        }
-
-        """;
+            new LiteralPasswordAnalyzer()
+        );
 }
