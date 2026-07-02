@@ -11,12 +11,7 @@ public sealed class DataSourceIntegrationTests
     [Fact]
     public async Task OpenConnectionAsync_AuthenticatesAgainstStarRocks()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         using var dataSource = new DotRocksDataSource(IntegrationTestEnvironment.ConnectionString);
 
@@ -31,41 +26,41 @@ public sealed class DataSourceIntegrationTests
     [Fact]
     public async Task PooledConnections_FromDataSource_ReusePhysicalConnection()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         DotRocksConnection.ClearAllPools();
-        string connectionString = BuildPoolingConnectionString(maximumPoolSize: 1);
-        using var dataSource = new DotRocksDataSource(connectionString);
-        long firstConnectionId;
-
-        using (
-            DbConnection first = await dataSource
-                .OpenConnectionAsync(TestContext.Current.CancellationToken)
-                .ConfigureAwait(true)
-        )
+        try
         {
-            firstConnectionId = await ReadConnectionIdAsync(first).ConfigureAwait(true);
-            await first.CloseAsync().ConfigureAwait(true);
-        }
+            string connectionString = BuildPoolingConnectionString(maximumPoolSize: 1);
+            using var dataSource = new DotRocksDataSource(connectionString);
+            long firstConnectionId;
 
-        using (
-            DbConnection second = await dataSource
-                .OpenConnectionAsync(TestContext.Current.CancellationToken)
-                .ConfigureAwait(true)
-        )
+            using (
+                DbConnection first = await dataSource
+                    .OpenConnectionAsync(TestContext.Current.CancellationToken)
+                    .ConfigureAwait(true)
+            )
+            {
+                firstConnectionId = await ReadConnectionIdAsync(first).ConfigureAwait(true);
+                await first.CloseAsync().ConfigureAwait(true);
+            }
+
+            using (
+                DbConnection second = await dataSource
+                    .OpenConnectionAsync(TestContext.Current.CancellationToken)
+                    .ConfigureAwait(true)
+            )
+            {
+                long secondConnectionId = await ReadConnectionIdAsync(second).ConfigureAwait(true);
+
+                Assert.Equal(firstConnectionId, secondConnectionId);
+                await second.CloseAsync().ConfigureAwait(true);
+            }
+        }
+        finally
         {
-            long secondConnectionId = await ReadConnectionIdAsync(second).ConfigureAwait(true);
-
-            Assert.Equal(firstConnectionId, secondConnectionId);
-            await second.CloseAsync().ConfigureAwait(true);
+            DotRocksConnection.ClearAllPools();
         }
-
-        DotRocksConnection.ClearAllPools();
     }
 
     private static string BuildPoolingConnectionString(int maximumPoolSize)

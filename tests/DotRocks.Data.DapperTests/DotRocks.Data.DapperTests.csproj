@@ -17,4 +17,12 @@
   <ItemGroup>
     <ProjectReference Include="../../src/DotRocks.Data/DotRocks.Data.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <!-- Canonical copy lives in DotRocks.Data.IntegrationTests; compile it here as a link. -->
+    <Compile
+      Include="../DotRocks.Data.IntegrationTests/IntegrationTestEnvironment.cs"
+      Link="IntegrationTestEnvironment.cs"
+    />
+  </ItemGroup>
 </Project>

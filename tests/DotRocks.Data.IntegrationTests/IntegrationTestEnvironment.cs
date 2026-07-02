@@ -1,15 +1,24 @@
 using DotRocks.Data;
+using Xunit;
 
 namespace DotRocks.Data.IntegrationTests;
 
+// Canonical integration-test environment. Sibling integration test projects compile this exact
+// file via <Compile Include> links in their .csproj; edit this copy only.
 internal static class IntegrationTestEnvironment
 {
+    private const string SkipReason =
+        "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server.";
+
     public static bool IsEnabled =>
         string.Equals(
             Environment.GetEnvironmentVariable("DOTROCKS_RUN_INTEGRATION"),
             "1",
             StringComparison.Ordinal
         );
+
+    /// <summary>Skips the calling test unless the StarRocks integration environment is enabled.</summary>
+    public static void SkipUnlessEnabled() => Assert.SkipUnless(IsEnabled, SkipReason);
 
     public static string ConnectionString
     {

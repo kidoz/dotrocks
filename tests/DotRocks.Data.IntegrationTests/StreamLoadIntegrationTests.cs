@@ -15,12 +15,7 @@ public sealed class StreamLoadIntegrationTests
     [Fact]
     public async Task LoadCsvAsync_WithGzip_LoadsRowsIntoTable()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         string tableName = await CreateStreamLoadTableAsync().ConfigureAwait(true);
         try
@@ -62,12 +57,7 @@ public sealed class StreamLoadIntegrationTests
     [Fact]
     public async Task LoadCsvAsync_LoadsRowsIntoTable()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         string tableName = await CreateStreamLoadTableAsync().ConfigureAwait(true);
         try
@@ -108,12 +98,7 @@ public sealed class StreamLoadIntegrationTests
     [Fact]
     public async Task TransactionalLoadCsvAsync_Commit_MakesRowsVisible()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         string tableName = await CreateStreamLoadTableAsync().ConfigureAwait(true);
         try
@@ -169,12 +154,7 @@ public sealed class StreamLoadIntegrationTests
     [Fact]
     public async Task TransactionalLoadCsvAsync_Rollback_HidesRows()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         string tableName = await CreateStreamLoadTableAsync().ConfigureAwait(true);
         try
@@ -226,12 +206,7 @@ public sealed class StreamLoadIntegrationTests
     [Fact]
     public async Task TransactionalLoadCsvAsync_FailedLoad_RejectsFurtherOperations()
     {
-        if (!IntegrationTestEnvironment.IsEnabled)
-        {
-            Assert.Skip(
-                "StarRocks integration tests require DOTROCKS_RUN_INTEGRATION=1 and a reachable StarRocks server."
-            );
-        }
+        IntegrationTestEnvironment.SkipUnlessEnabled();
 
         string tableName = await CreateStreamLoadTableAsync().ConfigureAwait(true);
         try

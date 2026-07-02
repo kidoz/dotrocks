@@ -17,4 +17,12 @@
   <ItemGroup>
     <ProjectReference Include="../../src/DotRocks.EntityFrameworkCore/DotRocks.EntityFrameworkCore.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <!-- Canonical integration environment shared with the other integration suites. -->
+    <Compile
+      Include="../DotRocks.Data.IntegrationTests/IntegrationTestEnvironment.cs"
+      Link="IntegrationTestEnvironment.cs"
+    />
+  </ItemGroup>
 </Project>
