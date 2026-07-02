@@ -13,15 +13,6 @@ internal sealed class DotRocksRelationalAnnotationProvider(
     RelationalAnnotationProviderDependencies dependencies
 ) : RelationalAnnotationProvider(dependencies)
 {
-    private static readonly string[] TableShapeAnnotationNames =
-    [
-        DotRocksAnnotationNames.KeyModel,
-        DotRocksAnnotationNames.KeyColumns,
-        DotRocksAnnotationNames.DistributionColumns,
-        DotRocksAnnotationNames.DistributionBuckets,
-        DotRocksAnnotationNames.ReplicationNum,
-    ];
-
     public override IEnumerable<IAnnotation> For(ITable table, bool designTime)
     {
         foreach (IAnnotation annotation in base.For(table, designTime))
@@ -29,9 +20,11 @@ internal sealed class DotRocksRelationalAnnotationProvider(
             yield return annotation;
         }
 
-        foreach (string annotationName in TableShapeAnnotationNames)
+        foreach (
+            DotRocksTableShapeAnnotation tableShapeAnnotation in DotRocksTableShapeAnnotations.All
+        )
         {
-            IAnnotation? annotation = GetTableShapeAnnotation(table, annotationName);
+            IAnnotation? annotation = GetTableShapeAnnotation(table, tableShapeAnnotation.Name);
             if (annotation is not null)
             {
                 yield return annotation;

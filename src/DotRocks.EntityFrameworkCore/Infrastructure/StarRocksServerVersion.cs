@@ -4,8 +4,10 @@ using System.Globalization;
 namespace DotRocks.EntityFrameworkCore.Infrastructure;
 
 /// <summary>
-/// A StarRocks server version used to gate version-specific provider behavior. Configure it
-/// explicitly with <see cref="DotRocksDbContextOptionsBuilder.ServerVersion(StarRocksServerVersion)"/>;
+/// A StarRocks server version the provider targets. The version is currently recorded in the
+/// provider options for service-provider caching and debug info only, and is reserved for future
+/// version-specific capability gating. Configure it explicitly with
+/// <see cref="DotRocksDbContextOptionsBuilder.ServerVersion(StarRocksServerVersion)"/>;
 /// constructing <see cref="Microsoft.EntityFrameworkCore.DbContextOptions"/> never contacts the
 /// server. To discover the version
 /// once at startup, call <see cref="DetectAsync(string, System.Threading.CancellationToken)"/> and

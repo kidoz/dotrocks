@@ -16,7 +16,7 @@ public sealed class DotRocksAnnotationCodeGeneratorTests
     private static readonly string[] SortColumns = ["name", "id"];
 
     [Fact]
-    public void GenerateFluentApiCalls_RandomDistribution_EmitsDistributedRandomly()
+    public void GenerateFluentApiCalls_RandomDistribution_EmitsHasStarRocksRandomDistribution()
     {
         IEntityType entityType = BuildEntityType(entity =>
         {
@@ -28,7 +28,7 @@ public sealed class DotRocksAnnotationCodeGeneratorTests
 
         MethodCallCodeFragment fragment = Assert.Single(
             fragments,
-            f => f.Method == "DistributedRandomly"
+            f => f.Method == "HasStarRocksRandomDistribution"
         );
         Assert.Equal([7], fragment.Arguments);
         // A random-distributed table must not regenerate a (broken, zero-column) hash call.
@@ -54,7 +54,7 @@ public sealed class DotRocksAnnotationCodeGeneratorTests
     }
 
     [Fact]
-    public void GenerateFluentApiCalls_SortKey_EmitsHasSortKey()
+    public void GenerateFluentApiCalls_SortKey_EmitsHasStarRocksSortKey()
     {
         IEntityType entityType = BuildEntityType(entity =>
             entity.SetAnnotation("DotRocks:SortKeyColumns", SortColumns)
@@ -62,7 +62,10 @@ public sealed class DotRocksAnnotationCodeGeneratorTests
 
         MethodCallCodeFragment[] fragments = Generate(entityType);
 
-        MethodCallCodeFragment fragment = Assert.Single(fragments, f => f.Method == "HasSortKey");
+        MethodCallCodeFragment fragment = Assert.Single(
+            fragments,
+            f => f.Method == "HasStarRocksSortKey"
+        );
         Assert.Equal(["name", "id"], fragment.Arguments);
     }
 

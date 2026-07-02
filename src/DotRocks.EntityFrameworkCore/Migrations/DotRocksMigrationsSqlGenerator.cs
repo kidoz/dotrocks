@@ -31,52 +31,8 @@ internal sealed class DotRocksMigrationsSqlGenerator(
             );
         }
 
-        string[] keyColumns = GetColumnListAnnotation(
-            operation,
-            DotRocksAnnotationNames.KeyColumns,
-            operation.PrimaryKey.Columns,
-            "table key"
-        );
-        bool randomDistribution =
-            operation.FindAnnotation(DotRocksAnnotationNames.RandomDistribution)?.Value is true;
-        string[] distributionColumns = randomDistribution
-            ? []
-            : GetColumnListAnnotation(
-                operation,
-                DotRocksAnnotationNames.DistributionColumns,
-                keyColumns,
-                "hash distribution"
-            );
-        int distributionBuckets = GetPositiveIntAnnotation(
-            operation,
-            DotRocksAnnotationNames.DistributionBuckets,
-            1,
-            "distribution bucket count"
-        );
-        // The sort key is optional, so read it directly rather than via the required-list helper.
-        string[] sortKeyColumns = operation
-            .FindAnnotation(DotRocksAnnotationNames.SortKeyColumns)
-            ?.Value switch
-        {
-            null => [],
-            string[] array => array,
-            IReadOnlyList<string> list => [.. list],
-            _ => throw new NotSupportedException(
-                "DotRocks EF Core migrations require sort key columns to be configured as string column names."
-            ),
-        };
-        int replicationNum = GetPositiveIntAnnotation(
-            operation,
-            DotRocksAnnotationNames.ReplicationNum,
-            1,
-            "replication number"
-        );
-        string keyClause = GetKeyClause(operation);
-
-        ValidateColumnsExist(operation, keyColumns, "table key");
-        ValidateColumnsExist(operation, sortKeyColumns, "sort key");
-        ValidateColumnsExist(operation, distributionColumns, "hash distribution");
-        ValidateKeyColumnTypes(operation, keyColumns);
+        TableShape shape = TableShape.FromOperation(operation);
+        ValidateTableShape(operation, shape);
 
         builder.Append("CREATE TABLE ");
         builder.Append(
@@ -95,30 +51,32 @@ internal sealed class DotRocksMigrationsSqlGenerator(
             builder.AppendLine();
         }
 
-        builder.Append(") ").Append(keyClause).Append("(");
-        AppendDelimitedColumnList(builder, keyColumns);
+        builder.Append(") ").Append(DotRocksTableKeyModels.ToKeyClause(shape.KeyModel)).Append("(");
+        AppendDelimitedColumnList(builder, shape.KeyColumns);
         builder.AppendLine(")");
-        if (randomDistribution)
+        if (shape.RandomDistribution)
         {
             builder.Append("DISTRIBUTED BY RANDOM BUCKETS ");
         }
         else
         {
             builder.Append("DISTRIBUTED BY HASH(");
-            AppendDelimitedColumnList(builder, distributionColumns);
+            AppendDelimitedColumnList(builder, shape.DistributionColumns);
             builder.Append(") BUCKETS ");
         }
 
-        builder.Append(distributionBuckets.ToString(CultureInfo.InvariantCulture)).AppendLine();
+        builder
+            .Append(shape.DistributionBuckets.ToString(CultureInfo.InvariantCulture))
+            .AppendLine();
 
-        if (sortKeyColumns.Length > 0)
+        if (shape.SortKeyColumns.Length > 0)
         {
             builder.Append("ORDER BY (");
-            AppendDelimitedColumnList(builder, sortKeyColumns);
+            AppendDelimitedColumnList(builder, shape.SortKeyColumns);
             builder.AppendLine(")");
         }
 
-        AppendProperties(builder, operation, replicationNum);
+        AppendProperties(builder, shape.Properties);
 
         if (terminate)
         {
@@ -304,39 +262,116 @@ internal sealed class DotRocksMigrationsSqlGenerator(
         throw CreateUnsupportedMigrationOperationException("ADD FOREIGN KEY");
     }
 
-    private static void AppendProperties(
-        MigrationCommandListBuilder builder,
-        CreateTableOperation operation,
-        int replicationNum
+    /// <summary>
+    /// The parsed StarRocks table shape of one CREATE TABLE operation. Annotation reading,
+    /// coercion, and defaulting happen in <see cref="FromOperation"/>, so the emit path in
+    /// <see cref="Generate(CreateTableOperation, IModel?, MigrationCommandListBuilder, bool)"/>
+    /// reads linearly and a new table option plugs into this one seam.
+    /// </summary>
+    private sealed record TableShape(
+        DotRocksTableKeyModel KeyModel,
+        string[] KeyColumns,
+        bool RandomDistribution,
+        string[] DistributionColumns,
+        int DistributionBuckets,
+        string[] SortKeyColumns,
+        SortedDictionary<string, string> Properties
     )
     {
-        var properties = new SortedDictionary<string, string>(StringComparer.Ordinal)
+        public static TableShape FromOperation(CreateTableOperation operation)
         {
-            ["replication_num"] = replicationNum.ToString(CultureInfo.InvariantCulture),
-        };
+            DotRocksTableKeyModel keyModel =
+                DotRocksTableShapeAnnotations.CoerceKeyModel(
+                    operation.FindAnnotation(DotRocksAnnotationNames.KeyModel)?.Value
+                ) ?? DotRocksTableKeyModel.DuplicateKey;
+            string[] keyColumns =
+                DotRocksTableShapeAnnotations.CoerceColumnList(
+                    operation.FindAnnotation(DotRocksAnnotationNames.KeyColumns)?.Value,
+                    "table key"
+                ) ?? operation.PrimaryKey!.Columns;
+            bool randomDistribution = DotRocksTableShapeAnnotations.CoerceFlag(
+                operation.FindAnnotation(DotRocksAnnotationNames.RandomDistribution)?.Value,
+                "random distribution"
+            );
+            string[] distributionColumns = randomDistribution
+                ? []
+                : DotRocksTableShapeAnnotations.CoerceColumnList(
+                    operation.FindAnnotation(DotRocksAnnotationNames.DistributionColumns)?.Value,
+                    "hash distribution"
+                ) ?? keyColumns;
+            int distributionBuckets =
+                DotRocksTableShapeAnnotations.CoercePositiveInt(
+                    operation.FindAnnotation(DotRocksAnnotationNames.DistributionBuckets)?.Value,
+                    "distribution bucket count"
+                ) ?? 1;
+            string[] sortKeyColumns =
+                DotRocksTableShapeAnnotations.CoerceColumnList(
+                    operation.FindAnnotation(DotRocksAnnotationNames.SortKeyColumns)?.Value,
+                    "sort key"
+                ) ?? [];
+            int replicationNum =
+                DotRocksTableShapeAnnotations.CoercePositiveInt(
+                    operation.FindAnnotation(DotRocksAnnotationNames.ReplicationNum)?.Value,
+                    "replication number"
+                ) ?? 1;
 
-        if (
-            operation.FindAnnotation(DotRocksAnnotationNames.Properties)?.Value
-            is IReadOnlyDictionary<string, string> custom
-        )
-        {
-            foreach (KeyValuePair<string, string> entry in custom)
-            {
-                if (string.IsNullOrWhiteSpace(entry.Key))
-                {
-                    throw new NotSupportedException(
-                        "DotRocks EF Core migrations reject an empty StarRocks table property name."
-                    );
-                }
-
-                // replication_num is taken from HasStarRocksReplicationNum; a duplicate is ignored.
-                if (!string.Equals(entry.Key, "replication_num", StringComparison.Ordinal))
-                {
-                    properties[entry.Key] = entry.Value;
-                }
-            }
+            return new TableShape(
+                keyModel,
+                keyColumns,
+                randomDistribution,
+                distributionColumns,
+                distributionBuckets,
+                sortKeyColumns,
+                BuildProperties(operation, replicationNum)
+            );
         }
 
+        private static SortedDictionary<string, string> BuildProperties(
+            CreateTableOperation operation,
+            int replicationNum
+        )
+        {
+            var properties = new SortedDictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["replication_num"] = replicationNum.ToString(CultureInfo.InvariantCulture),
+            };
+
+            IReadOnlyDictionary<string, string>? custom =
+                DotRocksTableShapeAnnotations.CoercePropertyMap(
+                    operation.FindAnnotation(DotRocksAnnotationNames.Properties)?.Value
+                );
+            if (custom is not null)
+            {
+                foreach (KeyValuePair<string, string> entry in custom)
+                {
+                    // replication_num is taken from HasStarRocksReplicationNum; a duplicate is ignored.
+                    if (!string.Equals(entry.Key, "replication_num", StringComparison.Ordinal))
+                    {
+                        properties[entry.Key] = entry.Value;
+                    }
+                }
+            }
+
+            return properties;
+        }
+    }
+
+    private static void ValidateTableShape(CreateTableOperation operation, TableShape shape)
+    {
+        HashSet<string> knownColumns = operation
+            .Columns.Select(column => column.Name)
+            .ToHashSet(StringComparer.Ordinal);
+        ValidateColumnsExist(knownColumns, shape.KeyColumns, "table key");
+        ValidateColumnsExist(knownColumns, shape.SortKeyColumns, "sort key");
+        ValidateColumnsExist(knownColumns, shape.DistributionColumns, "hash distribution");
+        ValidateKeyColumnTypes(operation, shape.KeyColumns);
+    }
+
+    private static void AppendProperties(
+        MigrationCommandListBuilder builder,
+        SortedDictionary<string, string> properties
+    )
+    {
         builder.Append("PROPERTIES (");
         bool first = true;
         foreach (KeyValuePair<string, string> property in properties)
@@ -398,88 +433,12 @@ internal sealed class DotRocksMigrationsSqlGenerator(
             $"DotRocks EF Core migrations do not support {operation}; only conservative CREATE DATABASE, CREATE TABLE, and DROP TABLE operations are supported in this release."
         );
 
-    private static string GetKeyClause(CreateTableOperation operation)
-    {
-        object? value = operation.FindAnnotation(DotRocksAnnotationNames.KeyModel)?.Value;
-        if (value is null)
-        {
-            return "DUPLICATE KEY";
-        }
-
-        if (DotRocksTableKeyModels.TryParse(value, out DotRocksTableKeyModel keyModel))
-        {
-            return DotRocksTableKeyModels.ToKeyClause(keyModel);
-        }
-
-        throw new NotSupportedException(
-            $"DotRocks EF Core migrations do not support StarRocks table key model '{value}'."
-        );
-    }
-
-    private static string[] GetColumnListAnnotation(
-        CreateTableOperation operation,
-        string annotationName,
-        string[] fallback,
-        string description
-    )
-    {
-        object? value = operation.FindAnnotation(annotationName)?.Value;
-        string[] columns = value switch
-        {
-            null => fallback,
-            string[] stringArray => stringArray,
-            IReadOnlyList<string> stringList => stringList.ToArray(),
-            _ => throw new NotSupportedException(
-                $"DotRocks EF Core migrations require {description} columns to be configured as string column names."
-            ),
-        };
-
-        if (columns.Length == 0 || columns.Any(string.IsNullOrWhiteSpace))
-        {
-            throw new NotSupportedException(
-                $"DotRocks EF Core migrations require at least one non-empty {description} column."
-            );
-        }
-
-        return columns;
-    }
-
-    private static int GetPositiveIntAnnotation(
-        CreateTableOperation operation,
-        string annotationName,
-        int fallback,
-        string description
-    )
-    {
-        object? value = operation.FindAnnotation(annotationName)?.Value;
-        int number = value switch
-        {
-            null => fallback,
-            int intValue => intValue,
-            _ => throw new NotSupportedException(
-                $"DotRocks EF Core migrations require {description} to be configured as a positive integer."
-            ),
-        };
-
-        if (number <= 0)
-        {
-            throw new NotSupportedException(
-                $"DotRocks EF Core migrations require {description} to be greater than zero."
-            );
-        }
-
-        return number;
-    }
-
     private static void ValidateColumnsExist(
-        CreateTableOperation operation,
+        HashSet<string> knownColumns,
         string[] columns,
         string description
     )
     {
-        HashSet<string> knownColumns = operation
-            .Columns.Select(column => column.Name)
-            .ToHashSet(StringComparer.Ordinal);
         foreach (string column in columns)
         {
             if (!knownColumns.Contains(column))

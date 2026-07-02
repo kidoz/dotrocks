@@ -36,6 +36,86 @@ public sealed class DotRocksMigrationsTests
     }
 
     [Fact]
+    public void Generate_CreateTable_ProducesExactDuplicateKeyDdl()
+    {
+        using var context = CreateContext();
+        var generator = context.GetService<IMigrationsSqlGenerator>();
+
+        string sql = GenerateSql(generator, CreateWidgetsTable());
+
+        AssertEqualDdl(
+            """
+            CREATE TABLE `unit_db`.`widgets` (
+                `id` int NOT NULL,
+                `name` varchar(64) NOT NULL
+            ) DUPLICATE KEY(`id`)
+            DISTRIBUTED BY HASH(`id`) BUCKETS 1
+            PROPERTIES ('replication_num' = '1')
+            """,
+            sql
+        );
+    }
+
+    [Fact]
+    public void Generate_CreateTable_ProducesExactPrimaryKeyDdlWithSortKey()
+    {
+        using var context = CreateContext();
+        var generator = context.GetService<IMigrationsSqlGenerator>();
+        CreateTableOperation operation = CreateWidgetsTable();
+        operation.AddAnnotation("DotRocks:KeyModel", DotRocksTableKeyModel.PrimaryKey);
+        operation.AddAnnotation("DotRocks:KeyColumns", IdColumn);
+        operation.AddAnnotation("DotRocks:DistributionColumns", NameColumn);
+        operation.AddAnnotation("DotRocks:DistributionBuckets", 8);
+        operation.AddAnnotation("DotRocks:SortKeyColumns", NameColumn);
+        operation.AddAnnotation("DotRocks:ReplicationNum", 3);
+
+        string sql = GenerateSql(generator, operation);
+
+        AssertEqualDdl(
+            """
+            CREATE TABLE `unit_db`.`widgets` (
+                `id` int NOT NULL,
+                `name` varchar(64) NOT NULL
+            ) PRIMARY KEY(`id`)
+            DISTRIBUTED BY HASH(`name`) BUCKETS 8
+            ORDER BY (`name`)
+            PROPERTIES ('replication_num' = '3')
+            """,
+            sql
+        );
+    }
+
+    [Fact]
+    public void Generate_CreateTable_ProducesExactUniqueKeyDdlWithRandomDistribution()
+    {
+        using var context = CreateContext();
+        var generator = context.GetService<IMigrationsSqlGenerator>();
+        CreateTableOperation operation = CreateWidgetsTable();
+        operation.AddAnnotation("DotRocks:KeyModel", DotRocksTableKeyModel.UniqueKey);
+        operation.AddAnnotation("DotRocks:KeyColumns", IdColumn);
+        operation.AddAnnotation("DotRocks:RandomDistribution", true);
+        operation.AddAnnotation("DotRocks:DistributionBuckets", 3);
+        operation.AddAnnotation(
+            "DotRocks:Properties",
+            new Dictionary<string, string>(StringComparer.Ordinal) { ["compression"] = "LZ4" }
+        );
+
+        string sql = GenerateSql(generator, operation);
+
+        AssertEqualDdl(
+            """
+            CREATE TABLE `unit_db`.`widgets` (
+                `id` int NOT NULL,
+                `name` varchar(64) NOT NULL
+            ) UNIQUE KEY(`id`)
+            DISTRIBUTED BY RANDOM BUCKETS 3
+            PROPERTIES ('compression' = 'LZ4', 'replication_num' = '1')
+            """,
+            sql
+        );
+    }
+
+    [Fact]
     public void Generate_CreateTableWithRandomDistribution_ProducesRandomBucketsSql()
     {
         using var context = CreateContext();
@@ -387,6 +467,64 @@ public sealed class DotRocksMigrationsTests
     }
 
     [Fact]
+    public void HasStarRocksRandomDistribution_DefaultsToOneBucket()
+    {
+        var builder = new ModelBuilder();
+        var entity = builder.Entity<TableShapeWidget>();
+
+        entity.HasStarRocksHashDistribution(4, "id");
+        entity.HasStarRocksRandomDistribution();
+
+        Assert.True(entity.Metadata.FindAnnotation("DotRocks:RandomDistribution")?.Value as bool?);
+        Assert.Equal(1, entity.Metadata.FindAnnotation("DotRocks:DistributionBuckets")?.Value);
+        Assert.Null(entity.Metadata.FindAnnotation("DotRocks:DistributionColumns"));
+    }
+
+    [Fact]
+    public void HasStarRocksSortKey_SetsSortKeyColumns()
+    {
+        var builder = new ModelBuilder();
+        var entity = builder.Entity<TableShapeWidget>();
+
+        entity.HasStarRocksSortKey("name");
+
+        Assert.Equal(
+            NameColumn,
+            Assert.IsType<string[]>(
+                entity.Metadata.FindAnnotation("DotRocks:SortKeyColumns")?.Value
+            )
+        );
+    }
+
+    [Fact]
+    public void MigrationsModelDiffer_CarriesSortKeyRandomDistributionAndProperties()
+    {
+        var optionsBuilder = new DbContextOptionsBuilder<RandomShapeContext>();
+        optionsBuilder.UseStarRocks("Server=127.0.0.1;Port=9030;User ID=root");
+        using var context = new RandomShapeContext(optionsBuilder.Options);
+        var differ = context.GetService<IMigrationsModelDiffer>();
+        IRelationalModel model = context.GetService<IDesignTimeModel>().Model.GetRelationalModel();
+
+        CreateTableOperation operation = Assert.Single(
+            differ.GetDifferences(null, model).OfType<CreateTableOperation>()
+        );
+
+        Assert.Equal(true, operation.FindAnnotation("DotRocks:RandomDistribution")?.Value);
+        Assert.Equal(
+            IdColumn,
+            Assert.IsType<string[]>(operation.FindAnnotation("DotRocks:SortKeyColumns")?.Value)
+        );
+        Assert.IsAssignableFrom<IReadOnlyDictionary<string, string>>(
+            operation.FindAnnotation("DotRocks:Properties")?.Value
+        );
+
+        string sql = GenerateSql(context.GetService<IMigrationsSqlGenerator>(), operation);
+        Assert.Contains("DISTRIBUTED BY RANDOM BUCKETS 3", sql, StringComparison.Ordinal);
+        Assert.Contains("ORDER BY (`id`)", sql, StringComparison.Ordinal);
+        Assert.Contains("'compression' = 'LZ4'", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void EntityTypeBuilderExtensions_SetSortKeyAndMergeTableProperties()
     {
         var builder = new ModelBuilder();
@@ -533,8 +671,13 @@ public sealed class DotRocksMigrationsTests
             { "DotRocks:KeyColumns", MissingColumn, "unknown column" },
             { "DotRocks:DistributionColumns", MissingColumn, "unknown column" },
             { "DotRocks:DistributionBuckets", 0, "bucket" },
+            { "DotRocks:SortKeyColumns", MissingColumn, "unknown column" },
             { "DotRocks:ReplicationNum", 0, "replication" },
         };
+
+    // Compares full DDL with line endings normalized so the golden strings are platform-stable.
+    private static void AssertEqualDdl(string expected, string actual) =>
+        Assert.Equal(expected.ReplaceLineEndings("\n"), actual.ReplaceLineEndings("\n"));
 
     private static string GenerateSql(
         IMigrationsSqlGenerator generator,
@@ -741,6 +884,23 @@ public sealed class DotRocksMigrationsTests
                 entity.HasStarRocksPrimaryKey("id");
                 entity.HasStarRocksHashDistribution(4, "id");
                 entity.HasStarRocksReplicationNum(2);
+            });
+        }
+    }
+
+    private sealed class RandomShapeContext(DbContextOptions<RandomShapeContext> options)
+        : DbContext(options)
+    {
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<TableShapeWidget>(entity =>
+            {
+                entity.ToTable("random_shape_widgets", "unit_db");
+                entity.HasKey(widget => widget.Id);
+                entity.Property(widget => widget.Id).ValueGeneratedNever().HasColumnName("id");
+                entity.HasStarRocksRandomDistribution(3);
+                entity.HasStarRocksSortKey("id");
+                entity.HasStarRocksProperty("compression", "LZ4");
             });
         }
     }

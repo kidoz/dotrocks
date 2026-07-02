@@ -23,6 +23,11 @@
     <ProjectReference Include="../DotRocks.Data/DotRocks.Data.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="DotRocks.EntityFrameworkCore.Design" />
+    <InternalsVisibleTo Include="DotRocks.EntityFrameworkCore.Tests" />
+  </ItemGroup>
+
   <ItemGroup Label="Public API tracking">
     <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
     <AdditionalFiles Include="PublicAPI.Shipped.txt" />

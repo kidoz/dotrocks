@@ -1,8 +1,8 @@
 using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
-using System.Text;
 using DotRocks.Data;
+using DotRocks.EntityFrameworkCore.Storage;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Microsoft.EntityFrameworkCore.Migrations;
 
@@ -23,7 +23,7 @@ internal sealed class DotRocksHistoryRepository(HistoryRepositoryDependencies de
         "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = "
         + SchemaLiteral()
         + " AND table_name = "
-        + FormatSqlString(TableName);
+        + DotRocksStringLiteral.Generate(TableName);
 
     protected override string GetAppliedMigrationsSql =>
         "SELECT "
@@ -229,9 +229,9 @@ internal sealed class DotRocksHistoryRepository(HistoryRepositoryDependencies de
         + ", "
         + SqlGenerationHelper.DelimitIdentifier(ProductVersionColumnName)
         + ") VALUES ("
-        + FormatSqlString(row.MigrationId)
+        + DotRocksStringLiteral.Generate(row.MigrationId)
         + ", "
-        + FormatSqlString(row.ProductVersion)
+        + DotRocksStringLiteral.Generate(row.ProductVersion)
         + ");"
         + Environment.NewLine;
 
@@ -241,7 +241,7 @@ internal sealed class DotRocksHistoryRepository(HistoryRepositoryDependencies de
         + " WHERE "
         + SqlGenerationHelper.DelimitIdentifier(MigrationIdColumnName)
         + " = "
-        + FormatSqlString(migrationId)
+        + DotRocksStringLiteral.Generate(migrationId)
         + ";"
         + Environment.NewLine;
 
@@ -268,7 +268,9 @@ internal sealed class DotRocksHistoryRepository(HistoryRepositoryDependencies de
     }
 
     private string SchemaLiteral() =>
-        string.IsNullOrEmpty(TableSchema) ? "DATABASE()" : FormatSqlString(TableSchema);
+        string.IsNullOrEmpty(TableSchema)
+            ? "DATABASE()"
+            : DotRocksStringLiteral.Generate(TableSchema);
 
     [SuppressMessage(
         "Security",
@@ -319,25 +321,5 @@ internal sealed class DotRocksHistoryRepository(HistoryRepositoryDependencies de
                 await Dependencies.Connection.CloseAsync().ConfigureAwait(false);
             }
         }
-    }
-
-    private static string FormatSqlString(string value)
-    {
-        var builder = new StringBuilder(value.Length + 2);
-        builder.Append('\'');
-        foreach (char character in value)
-        {
-            if (character == '\'')
-            {
-                builder.Append("''");
-            }
-            else
-            {
-                builder.Append(character);
-            }
-        }
-
-        builder.Append('\'');
-        return builder.ToString();
     }
 }
