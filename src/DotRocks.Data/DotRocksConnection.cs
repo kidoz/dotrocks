@@ -3,7 +3,6 @@ using System.Data.Common;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using DotRocks.Data.Diagnostics;
-using DotRocks.Data.Loading;
 using DotRocks.Data.Pooling;
 using DotRocks.Data.Protocol.Results;
 
@@ -300,58 +299,21 @@ public sealed class DotRocksConnection : DbConnection
     /// <inheritdoc />
     protected override DbBatch CreateDbBatch() => new DotRocksBatch(this);
 
-    internal async ValueTask<QueryResult> ExecuteQueryAsync(
+    internal ValueTask<QueryResult> ExecuteQueryAsync(
         string commandText,
         CancellationToken cancellationToken
-    )
-    {
-        DotRocksConnectionPoolLease? lease = _lease;
-        if (_state != ConnectionState.Open || lease is null)
-        {
-            throw new InvalidOperationException("The connection is not open.");
-        }
+    ) =>
+        ExecuteOnPhysicalAsync(physical =>
+            physical.ExecuteQueryAsync(commandText, cancellationToken)
+        );
 
-        ValidateNoActiveReader();
-
-        try
-        {
-            return await lease
-                .PhysicalConnection.ExecuteQueryAsync(commandText, cancellationToken)
-                .ConfigureAwait(false);
-        }
-        catch
-        {
-            // Close only when the protocol state is broken (I/O failure, malformed packet,
-            // cancellation mid-command). A plain server error leaves the connection at a clean
-            // packet boundary and must not close it, even when pool policy (session dirtiness,
-            // lifetime) would decline to reuse the physical connection later.
-            if (lease.PhysicalConnection.IsBroken)
-            {
-                CloseCore(reusable: false);
-            }
-
-            throw;
-        }
-    }
-
-    internal async ValueTask<QueryResult> ExecutePreparedQueryAsync(
+    internal ValueTask<QueryResult> ExecutePreparedQueryAsync(
         string commandText,
         IReadOnlyList<object?> parameterValues,
         CancellationToken cancellationToken
-    )
-    {
-        DotRocksConnectionPoolLease? lease = _lease;
-        if (_state != ConnectionState.Open || lease is null)
+    ) =>
+        ExecuteOnPhysicalAsync(async physical =>
         {
-            throw new InvalidOperationException("The connection is not open.");
-        }
-
-        ValidateNoActiveReader();
-
-        try
-        {
-            DotRocksPhysicalConnection physical = lease.PhysicalConnection;
-
             // Reuse a cached server-prepared statement for this connection when possible; the
             // statement stays open and session-scoped, so it is not closed after each execution.
             StatementPrepareResult prepared = await physical
@@ -368,22 +330,21 @@ public sealed class DotRocksConnection : DbConnection
             return await physical
                 .ExecutePreparedAsync(prepared.StatementId, parameterValues, cancellationToken)
                 .ConfigureAwait(false);
-        }
-        catch
-        {
-            // See ExecuteQueryAsync: close only on broken protocol state, not on pool policy.
-            if (lease.PhysicalConnection.IsBroken)
-            {
-                CloseCore(reusable: false);
-            }
+        });
 
-            throw;
-        }
-    }
-
-    internal async ValueTask<StreamingQueryResult> ExecuteStreamingQueryAsync(
+    internal ValueTask<StreamingQueryResult> ExecuteStreamingQueryAsync(
         string commandText,
         CancellationToken cancellationToken
+    ) =>
+        ExecuteOnPhysicalAsync(physical =>
+            physical.ExecuteQueryStreamingAsync(commandText, cancellationToken)
+        );
+
+    // Shared guard/failure skeleton for executing one operation against the leased physical
+    // connection: the connection must be open with no active reader, and failures close the
+    // logical connection only when the protocol state is broken.
+    private async ValueTask<T> ExecuteOnPhysicalAsync<T>(
+        Func<DotRocksPhysicalConnection, ValueTask<T>> operation
     )
     {
         DotRocksConnectionPoolLease? lease = _lease;
@@ -396,13 +357,14 @@ public sealed class DotRocksConnection : DbConnection
 
         try
         {
-            return await lease
-                .PhysicalConnection.ExecuteQueryStreamingAsync(commandText, cancellationToken)
-                .ConfigureAwait(false);
+            return await operation(lease.PhysicalConnection).ConfigureAwait(false);
         }
         catch
         {
-            // See ExecuteQueryAsync: close only on broken protocol state, not on pool policy.
+            // Close only when the protocol state is broken (I/O failure, malformed packet,
+            // cancellation mid-command). A plain server error leaves the connection at a clean
+            // packet boundary and must not close it, even when pool policy (session dirtiness,
+            // lifetime) would decline to reuse the physical connection later.
             if (lease.PhysicalConnection.IsBroken)
             {
                 CloseCore(reusable: false);

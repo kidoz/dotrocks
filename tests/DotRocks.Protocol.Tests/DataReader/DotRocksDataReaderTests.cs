@@ -2,11 +2,10 @@ using System.Collections.ObjectModel;
 using System.Data;
 using System.Data.Common;
 using System.Globalization;
-using System.Text;
 using DotRocks.Data;
 using DotRocks.Data.Protocol.Framing;
 using DotRocks.Data.Protocol.Results;
-using DotRocks.Data.Protocol.Serialization;
+using DotRocks.Protocol.Tests.TestInfrastructure;
 using Xunit;
 
 namespace DotRocks.Protocol.Tests.DataReader;
@@ -321,7 +320,7 @@ public sealed class DotRocksDataReaderTests
     {
         using var connection = new DotRocksConnection();
         using var stream = new MemoryStream();
-        var rowReader = new TextResultRowReader(
+        var rowReader = ResultRowReader.ForText(
             new PacketReader(stream),
             [Column("value", (byte)ColumnType.Long)],
             connectionId: null
@@ -342,8 +341,11 @@ public sealed class DotRocksDataReaderTests
     [Fact]
     public void HasRows_StreamingEmptyResult_ReturnsFalse()
     {
-        using var stream = BuildStreamingRows(EofPayload());
-        var rowReader = new TextResultRowReader(
+        using var stream = StarRocksPacketFactory.PayloadStream(
+            firstSequenceId: 0,
+            StarRocksPacketFactory.Eof()
+        );
+        var rowReader = ResultRowReader.ForText(
             new PacketReader(stream),
             [Column("value", (byte)ColumnType.Long)],
             connectionId: null
@@ -359,8 +361,12 @@ public sealed class DotRocksDataReaderTests
     [Fact]
     public void HasRows_StreamingResultWithRow_PreservesPrefetchedRowForRead()
     {
-        using var stream = BuildStreamingRows(BuildTextRow("42"), EofPayload());
-        var rowReader = new TextResultRowReader(
+        using var stream = StarRocksPacketFactory.PayloadStream(
+            firstSequenceId: 0,
+            StarRocksPacketFactory.TextRow("42"),
+            StarRocksPacketFactory.Eof()
+        );
+        var rowReader = ResultRowReader.ForText(
             new PacketReader(stream),
             [Column("value", (byte)ColumnType.Long)],
             connectionId: null
@@ -439,13 +445,14 @@ public sealed class DotRocksDataReaderTests
     [Fact]
     public void Close_PartiallyReadStreamingResult_DrainsRemainingRows()
     {
-        using var stream = BuildStreamingRows(
-            BuildTextRow("1"),
-            BuildTextRow("2"),
-            BuildTextRow("3"),
-            EofPayload()
+        using var stream = StarRocksPacketFactory.PayloadStream(
+            firstSequenceId: 0,
+            StarRocksPacketFactory.TextRow("1"),
+            StarRocksPacketFactory.TextRow("2"),
+            StarRocksPacketFactory.TextRow("3"),
+            StarRocksPacketFactory.Eof()
         );
-        var rowReader = new TextResultRowReader(
+        var rowReader = ResultRowReader.ForText(
             new PacketReader(stream),
             [Column("value", (byte)ColumnType.Long)],
             connectionId: null
@@ -467,8 +474,13 @@ public sealed class DotRocksDataReaderTests
     [Fact]
     public void Read_StreamingSingleRowBehavior_LeavesRemainingRowsForCloseToDrain()
     {
-        using var stream = BuildStreamingRows(BuildTextRow("1"), BuildTextRow("2"), EofPayload());
-        var rowReader = new TextResultRowReader(
+        using var stream = StarRocksPacketFactory.PayloadStream(
+            firstSequenceId: 0,
+            StarRocksPacketFactory.TextRow("1"),
+            StarRocksPacketFactory.TextRow("2"),
+            StarRocksPacketFactory.Eof()
+        );
+        var rowReader = ResultRowReader.ForText(
             new PacketReader(stream),
             [Column("value", (byte)ColumnType.Long)],
             connectionId: null
@@ -628,30 +640,4 @@ public sealed class DotRocksDataReaderTests
             flags,
             0
         );
-
-    private static MemoryStream BuildStreamingRows(params byte[][] payloads)
-    {
-        var stream = new MemoryStream();
-        var writer = new PacketWriter(stream);
-        foreach (byte[] payload in payloads)
-        {
-            writer
-                .WritePayloadAsync(payload, CancellationToken.None)
-                .AsTask()
-                .GetAwaiter()
-                .GetResult();
-        }
-
-        stream.Position = 0;
-        return stream;
-    }
-
-    private static byte[] BuildTextRow(string value)
-    {
-        using var writer = new ProtocolWriter();
-        writer.WriteLengthEncodedBytes(Encoding.UTF8.GetBytes(value));
-        return writer.ToArray();
-    }
-
-    private static byte[] EofPayload() => [0xFE, 0x00, 0x00, 0x02, 0x00];
 }

@@ -1,7 +1,6 @@
 using System.Text;
 using DotRocks.Data;
 using DotRocks.Data.Authentication;
-using DotRocks.Data.Loading;
 using DotRocks.Data.Protocol.Serialization;
 
 namespace DotRocks.Data.Protocol.Handshake;

@@ -13,9 +13,8 @@ namespace DotRocks.Data;
 /// </summary>
 public sealed class DotRocksCommand : DbCommand
 {
-    private readonly Lock _activeCommandGate = new();
+    private readonly ActiveOperationGate _activeOperationGate = new();
     private readonly DotRocksParameterCollection _parameters = new();
-    private CancellationTokenSource? _activeCommandCancellation;
     private DotRocksConnection? _connection;
     private DbTransaction? _transaction;
     private string _commandText = string.Empty;
@@ -150,15 +149,8 @@ public sealed class DotRocksCommand : DbCommand
     /// <inheritdoc />
     public override void Cancel()
     {
-        CancellationTokenSource? activeCommandCancellation;
-        lock (_activeCommandGate)
+        if (_activeOperationGate.TryCancelActiveOperation())
         {
-            activeCommandCancellation = _activeCommandCancellation;
-        }
-
-        if (activeCommandCancellation is not null)
-        {
-            activeCommandCancellation.Cancel();
             _connection?.Abort();
         }
     }
@@ -265,15 +257,13 @@ public sealed class DotRocksCommand : DbCommand
         // sent to COM_STMT_PREPARE and values are bound positionally. The text path tokenizes
         // named `@` parameters and inlines safely-formatted literals.
         string commandText = serverPrepared ? CommandText : BindCommandText();
-        using var commandCancellation = new CancellationTokenSource();
-        using CancellationTokenSource? timeoutCancellation = CreateTimeoutCancellation();
-        using CancellationTokenSource linkedCancellation = CreateLinkedCancellation(
-            commandCancellation,
-            timeoutCancellation,
+        using var scope = new ActiveOperationScope(
+            _activeOperationGate,
+            CommandTimeout,
+            "Concurrent execution of the same DotRocksCommand is not supported.",
             cancellationToken
         );
 
-        SetActiveCommandCancellation(commandCancellation);
         using Activity? activity = DotRocksTelemetry.ActivitySource.StartActivity(
             "dotrocks.command.execute",
             ActivityKind.Client
@@ -293,7 +283,7 @@ public sealed class DotRocksCommand : DbCommand
                     .ExecutePreparedQueryAsync(
                         commandText,
                         ExtractServerPreparedValues(),
-                        linkedCancellation.Token
+                        scope.Token
                     )
                     .ConfigureAwait(false);
                 reader = new DotRocksDataReader(preparedResult, _connection, behavior);
@@ -302,7 +292,7 @@ public sealed class DotRocksCommand : DbCommand
             else
             {
                 StreamingQueryResult result = await _connection
-                    .ExecuteStreamingQueryAsync(commandText, linkedCancellation.Token)
+                    .ExecuteStreamingQueryAsync(commandText, scope.Token)
                     .ConfigureAwait(false);
                 reader = new DotRocksDataReader(result, _connection, behavior);
                 hasResultSet = result.HasResultSet;
@@ -316,44 +306,36 @@ public sealed class DotRocksCommand : DbCommand
             succeeded = true;
             return reader;
         }
-        catch (OperationCanceledException ex)
-            when (IsCommandTimeout(timeoutCancellation, commandCancellation, cancellationToken))
+        catch (OperationCanceledException ex) when (scope.IsTimeout)
         {
             errorType = DotRocksTelemetryTags.ErrorTimeout;
             await _connection.CloseAsync().ConfigureAwait(false);
             throw CreateCommandTimeoutException(ex);
         }
-        catch (DotRocksException ex)
-            when (IsCommandTimeout(timeoutCancellation, commandCancellation, cancellationToken))
+        catch (DotRocksException ex) when (scope.IsTimeout)
         {
             errorType = DotRocksTelemetryTags.ErrorTimeout;
             await _connection.CloseAsync().ConfigureAwait(false);
             throw CreateCommandTimeoutException(ex);
         }
-        catch (OperationCanceledException ex)
-            when (commandCancellation.IsCancellationRequested
-                && !cancellationToken.IsCancellationRequested
-            )
+        catch (OperationCanceledException ex) when (scope.IsCanceledByCancelMethod)
         {
             errorType = DotRocksTelemetryTags.ErrorCanceled;
             await _connection.CloseAsync().ConfigureAwait(false);
             throw new OperationCanceledException(
                 "The DotRocks command was canceled.",
                 ex,
-                commandCancellation.Token
+                scope.OperationToken
             );
         }
-        catch (DotRocksException ex)
-            when (commandCancellation.IsCancellationRequested
-                && !cancellationToken.IsCancellationRequested
-            )
+        catch (DotRocksException ex) when (scope.IsCanceledByCancelMethod)
         {
             errorType = DotRocksTelemetryTags.ErrorCanceled;
             await _connection.CloseAsync().ConfigureAwait(false);
             throw new OperationCanceledException(
                 "The DotRocks command was canceled.",
                 ex,
-                commandCancellation.Token
+                scope.OperationToken
             );
         }
         catch (OperationCanceledException)
@@ -395,75 +377,8 @@ public sealed class DotRocksCommand : DbCommand
                 tags
             );
             DotRocksTelemetry.CommandsExecuted.Add(1, tags);
-            ClearActiveCommandCancellation(commandCancellation);
         }
     }
-
-    private CancellationTokenSource? CreateTimeoutCancellation()
-    {
-        if (CommandTimeout == 0)
-        {
-            return null;
-        }
-
-        return new CancellationTokenSource(TimeSpan.FromSeconds(CommandTimeout));
-    }
-
-    private static CancellationTokenSource CreateLinkedCancellation(
-        CancellationTokenSource commandCancellation,
-        CancellationTokenSource? timeoutCancellation,
-        CancellationToken cancellationToken
-    )
-    {
-        if (timeoutCancellation is null)
-        {
-            return CancellationTokenSource.CreateLinkedTokenSource(
-                cancellationToken,
-                commandCancellation.Token
-            );
-        }
-
-        return CancellationTokenSource.CreateLinkedTokenSource(
-            cancellationToken,
-            commandCancellation.Token,
-            timeoutCancellation.Token
-        );
-    }
-
-    private void SetActiveCommandCancellation(CancellationTokenSource commandCancellation)
-    {
-        lock (_activeCommandGate)
-        {
-            if (_activeCommandCancellation is not null)
-            {
-                throw new InvalidOperationException(
-                    "Concurrent execution of the same DotRocksCommand is not supported."
-                );
-            }
-
-            _activeCommandCancellation = commandCancellation;
-        }
-    }
-
-    private void ClearActiveCommandCancellation(CancellationTokenSource commandCancellation)
-    {
-        lock (_activeCommandGate)
-        {
-            if (ReferenceEquals(_activeCommandCancellation, commandCancellation))
-            {
-                _activeCommandCancellation = null;
-            }
-        }
-    }
-
-    private static bool IsCommandTimeout(
-        CancellationTokenSource? timeoutCancellation,
-        CancellationTokenSource commandCancellation,
-        CancellationToken userCancellationToken
-    ) =>
-        timeoutCancellation?.IsCancellationRequested == true
-        && !userCancellationToken.IsCancellationRequested
-        && !commandCancellation.IsCancellationRequested;
 
     private static DotRocksException CreateCommandTimeoutException(Exception innerException) =>
         new(

@@ -4,7 +4,7 @@ internal sealed class StreamingQueryResult
 {
     private StreamingQueryResult(
         IReadOnlyList<ColumnDefinition> columns,
-        TextResultRowReader? rowReader,
+        ResultRowReader? rowReader,
         long recordsAffected
     )
     {
@@ -15,7 +15,7 @@ internal sealed class StreamingQueryResult
 
     public IReadOnlyList<ColumnDefinition> Columns { get; }
 
-    public TextResultRowReader? RowReader { get; }
+    public ResultRowReader? RowReader { get; }
 
     public long RecordsAffected { get; }
 
@@ -23,7 +23,7 @@ internal sealed class StreamingQueryResult
 
     public static StreamingQueryResult FromRows(
         IReadOnlyList<ColumnDefinition> columns,
-        TextResultRowReader rowReader
+        ResultRowReader rowReader
     ) => new(columns, rowReader, recordsAffected: -1);
 
     public static StreamingQueryResult FromOk(OkResult ok) => new([], null, ok.AffectedRows);

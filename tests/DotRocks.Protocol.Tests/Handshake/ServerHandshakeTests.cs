@@ -1,13 +1,14 @@
 using System.Text;
 using DotRocks.Data.Protocol.Handshake;
 using DotRocks.Data.Protocol.Serialization;
+using DotRocks.Protocol.Tests.TestInfrastructure;
 using Xunit;
 
 namespace DotRocks.Protocol.Tests.Handshake;
 
 public sealed class ServerHandshakeTests
 {
-    private static readonly byte[] AuthPart1 = [1, 2, 3, 4, 5, 6, 7, 8];
+    private static readonly byte[] AuthPart1 = StarRocksPacketFactory.AuthPart1;
 
     [Fact]
     public void Parses_FullProtocol41Handshake()
@@ -22,7 +23,7 @@ public sealed class ServerHandshakeTests
         // 13-byte part 2 = 12 scramble bytes + trailing NUL.
         byte[] authPart2 = [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 0];
 
-        byte[] payload = BuildHandshake(
+        byte[] payload = StarRocksPacketFactory.Handshake(
             protocolVersion: 10,
             serverVersion: "8.0.33-StarRocks-3.3",
             connectionId: 42,
@@ -83,35 +84,5 @@ public sealed class ServerHandshakeTests
     {
         byte[] payload = [ProtocolConstants.ErrorPacketHeader, 0x15, 0x04];
         Assert.Throws<MalformedPacketException>(() => ServerHandshake.Parse(payload));
-    }
-
-    private static byte[] BuildHandshake(
-        byte protocolVersion,
-        string serverVersion,
-        uint connectionId,
-        CapabilityFlags capabilities,
-        byte characterSet,
-        ushort statusFlags,
-        byte authPluginDataLength,
-        byte[] authPart2,
-        string authPluginName
-    )
-    {
-        uint caps = (uint)capabilities;
-        using var writer = new ProtocolWriter();
-        writer.WriteByte(protocolVersion);
-        writer.WriteNullTerminatedString(serverVersion, Encoding.ASCII);
-        writer.WriteFixedInteger(connectionId, 4);
-        writer.WriteBytes(AuthPart1);
-        writer.WriteByte(0); // filler
-        writer.WriteFixedInteger(caps & 0xFFFF, 2);
-        writer.WriteByte(characterSet);
-        writer.WriteFixedInteger(statusFlags, 2);
-        writer.WriteFixedInteger((caps >> 16) & 0xFFFF, 2);
-        writer.WriteByte(authPluginDataLength);
-        writer.WriteBytes(new byte[10]); // reserved
-        writer.WriteBytes(authPart2);
-        writer.WriteNullTerminatedString(authPluginName, Encoding.ASCII);
-        return writer.ToArray();
     }
 }

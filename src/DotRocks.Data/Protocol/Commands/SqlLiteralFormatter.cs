@@ -33,6 +33,10 @@ internal static class SqlLiteralFormatter
             decimal decimalValue => decimalValue.ToString(CultureInfo.InvariantCulture),
             DotRocksDecimal dotRocksDecimalValue => dotRocksDecimalValue.ToString(),
             string stringValue => FormatString(stringValue),
+            // JSON binds as an escaped string literal carrying the exact raw text; StarRocks
+            // casts it to the JSON column type, so the round trip through DotRocksJson is
+            // lossless.
+            DotRocksJson dotRocksJsonValue => FormatString(dotRocksJsonValue.RawText),
             DateTime dateTimeValue => FormatString(
                 dateTimeValue.ToString("yyyy-MM-dd HH:mm:ss.FFFFFF", CultureInfo.InvariantCulture)
             ),

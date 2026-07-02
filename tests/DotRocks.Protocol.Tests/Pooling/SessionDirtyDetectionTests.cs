@@ -1,4 +1,4 @@
-using DotRocks.Data.Pooling;
+using DotRocks.Data.Protocol.Commands;
 using Xunit;
 
 namespace DotRocks.Protocol.Tests.Pooling;
@@ -18,7 +18,7 @@ public sealed class SessionDirtyDetectionTests
     [InlineData("/* block */ USE analytics")]
     [InlineData("/* multi\nline */SET names utf8")]
     public void IsSessionMutatingStatement_FlagsUseAndSet(string commandText) =>
-        Assert.True(DotRocksPhysicalConnection.IsSessionMutatingStatement(commandText));
+        Assert.True(SqlStatementClassifier.IsSessionMutating(commandText));
 
     [Theory]
     [InlineData("SELECT 1")]
@@ -31,5 +31,5 @@ public sealed class SessionDirtyDetectionTests
     [InlineData("   ")]
     [InlineData("-- USE analytics")]
     public void IsSessionMutatingStatement_AllowsNonSessionStatements(string commandText) =>
-        Assert.False(DotRocksPhysicalConnection.IsSessionMutatingStatement(commandText));
+        Assert.False(SqlStatementClassifier.IsSessionMutating(commandText));
 }

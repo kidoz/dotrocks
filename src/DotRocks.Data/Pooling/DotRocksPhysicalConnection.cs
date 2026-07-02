@@ -5,7 +5,6 @@ using System.Net.Sockets;
 using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
 using DotRocks.Data;
-using DotRocks.Data.Loading;
 using DotRocks.Data.Protocol.Commands;
 using DotRocks.Data.Protocol.Framing;
 using DotRocks.Data.Protocol.Handshake;
@@ -301,8 +300,31 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
         SslPolicyErrors sslPolicyErrors
     ) => true;
 
-    public async ValueTask<QueryResult> ExecuteQueryAsync(
+    public ValueTask<QueryResult> ExecuteQueryAsync(
         string commandText,
+        CancellationToken cancellationToken
+    )
+    {
+        MarkSessionDirtyIfMutating(commandText);
+        return ExecuteExchangeAsync(
+            QueryCommandBuilder.Build(commandText),
+            "I/O failed while executing the StarRocks command.",
+            static (firstPayload, reader, ct) =>
+                TextResultParser.ReadAsync(firstPayload, reader, connectionId: null, ct),
+            cancellationToken
+        );
+    }
+
+    /// <summary>
+    /// Sends one command payload and parses its response with <paramref name="parseResponse"/>.
+    /// Owns the shared exchange preamble (write the request, continue the packet sequence into the
+    /// response) and the single exception-translation ladder; any failure that can leave the wire
+    /// off a clean packet boundary marks the connection broken.
+    /// </summary>
+    private async ValueTask<T> ExecuteExchangeAsync<T>(
+        byte[] payload,
+        string ioFailureMessage,
+        Func<byte[], PacketReader, CancellationToken, ValueTask<T>> parseResponse,
         CancellationToken cancellationToken
     )
     {
@@ -311,11 +333,8 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
             throw new InvalidOperationException("The physical StarRocks connection is closed.");
         }
 
-        MarkSessionDirtyIfMutating(commandText);
-
         try
         {
-            byte[] payload = QueryCommandBuilder.Build(commandText);
             var writer = new PacketWriter(_stream);
             writer.ResetSequence();
             await writer.WritePayloadAsync(payload, cancellationToken).ConfigureAwait(false);
@@ -327,8 +346,7 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
             byte[] firstPayload = await reader
                 .ReadPayloadAsync(cancellationToken)
                 .ConfigureAwait(false);
-            return await TextResultParser
-                .ReadAsync(firstPayload, reader, connectionId: null, cancellationToken)
+            return await parseResponse(firstPayload, reader, cancellationToken)
                 .ConfigureAwait(false);
         }
         catch (OperationCanceledException)
@@ -345,7 +363,7 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
         {
             MarkBroken();
             throw new DotRocksException(
-                "I/O failed while executing the StarRocks command.",
+                ioFailureMessage,
                 serverErrorCode: null,
                 sqlState: null,
                 isTransient: true,
@@ -372,83 +390,54 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
     /// parameter and column definition packets (and their trailing EOF packets, since DotRocks does
     /// not negotiate <c>CLIENT_DEPRECATE_EOF</c>). Returns the server statement id and counts.
     /// </summary>
-    public async ValueTask<StatementPrepareResult> PrepareAsync(
+    public ValueTask<StatementPrepareResult> PrepareAsync(
         string commandText,
+        CancellationToken cancellationToken
+    ) =>
+        ExecuteExchangeAsync(
+            StatementCommandBuilder.BuildPrepare(commandText),
+            "I/O failed while preparing the StarRocks statement.",
+            static (firstPayload, reader, ct) =>
+                ParsePrepareResponseAsync(firstPayload, reader, ct),
+            cancellationToken
+        );
+
+    private static async ValueTask<StatementPrepareResult> ParsePrepareResponseAsync(
+        byte[] firstPayload,
+        PacketReader reader,
         CancellationToken cancellationToken
     )
     {
-        if (_isDisposed)
+        if (ResultPacket.IsError(firstPayload))
         {
-            throw new InvalidOperationException("The physical StarRocks connection is closed.");
+            throw ResultPacket.ReadError(firstPayload, connectionId: null);
         }
 
-        try
+        var protocolReader = new ProtocolReader(firstPayload);
+        byte status = protocolReader.ReadByte();
+        if (status != 0x00)
         {
-            byte[] payload = StatementCommandBuilder.BuildPrepare(commandText);
-            var writer = new PacketWriter(_stream);
-            writer.ResetSequence();
-            await writer.WritePayloadAsync(payload, cancellationToken).ConfigureAwait(false);
-
-            var reader = new PacketReader(_stream);
-            // The response sequence continues from the request's last packet (see ExecuteQueryAsync).
-            reader.ResetSequence(writer.SequenceId);
-            byte[] firstPayload = await reader
-                .ReadPayloadAsync(cancellationToken)
-                .ConfigureAwait(false);
-
-            if (ResultPacket.IsError(firstPayload))
-            {
-                throw ResultPacket.ReadError(firstPayload, connectionId: null);
-            }
-
-            var protocolReader = new ProtocolReader(firstPayload);
-            byte status = protocolReader.ReadByte();
-            if (status != 0x00)
-            {
-                throw new MalformedPacketException(
-                    $"Unexpected COM_STMT_PREPARE response status 0x{status:X2}."
-                );
-            }
-
-            uint statementId = (uint)protocolReader.ReadFixedInteger(4);
-
-            // The counts are 2-byte wire fields, so each is inherently bounded to 65535; the
-            // definition-consume loops below also honor the cancellation token (command timeout) on
-            // every packet read, so a hostile count cannot cause an unbounded stall.
-            int columnCount = (int)protocolReader.ReadFixedInteger(2);
-            int parameterCount = (int)protocolReader.ReadFixedInteger(2);
-
-            // Consume the parameter-definition packets (+EOF) and column-definition packets (+EOF)
-            // so the connection is left at a clean packet boundary for the next command.
-            await ConsumeDefinitionBlockAsync(reader, parameterCount, cancellationToken)
-                .ConfigureAwait(false);
-            await ConsumeDefinitionBlockAsync(reader, columnCount, cancellationToken)
-                .ConfigureAwait(false);
-
-            return new StatementPrepareResult(statementId, parameterCount, columnCount);
-        }
-        catch (OperationCanceledException)
-        {
-            MarkBroken();
-            throw;
-        }
-        catch (MalformedPacketException ex)
-        {
-            MarkBroken();
-            throw new DotRocksException("StarRocks returned malformed protocol bytes.", ex);
-        }
-        catch (IOException ex)
-        {
-            MarkBroken();
-            throw new DotRocksException(
-                "I/O failed while preparing the StarRocks statement.",
-                serverErrorCode: null,
-                sqlState: null,
-                isTransient: true,
-                connectionId: null,
-                innerException: ex
+            throw new MalformedPacketException(
+                $"Unexpected COM_STMT_PREPARE response status 0x{status:X2}."
             );
         }
+
+        uint statementId = (uint)protocolReader.ReadFixedInteger(4);
+
+        // The counts are 2-byte wire fields, so each is inherently bounded to 65535; the
+        // definition-consume loops below also honor the cancellation token (command timeout) on
+        // every packet read, so a hostile count cannot cause an unbounded stall.
+        int columnCount = (int)protocolReader.ReadFixedInteger(2);
+        int parameterCount = (int)protocolReader.ReadFixedInteger(2);
+
+        // Consume the parameter-definition packets (+EOF) and column-definition packets (+EOF)
+        // so the connection is left at a clean packet boundary for the next command.
+        await ConsumeDefinitionBlockAsync(reader, parameterCount, cancellationToken)
+            .ConfigureAwait(false);
+        await ConsumeDefinitionBlockAsync(reader, columnCount, cancellationToken)
+            .ConfigureAwait(false);
+
+        return new StatementPrepareResult(statementId, parameterCount, columnCount);
     }
 
     /// <summary>
@@ -489,113 +478,18 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
     /// values and reads the binary result set into a buffered <see cref="QueryResult"/>. The whole
     /// result is buffered so the statement can be closed immediately after.
     /// </summary>
-    public async ValueTask<QueryResult> ExecutePreparedAsync(
+    public ValueTask<QueryResult> ExecutePreparedAsync(
         uint statementId,
         IReadOnlyList<object?> parameterValues,
         CancellationToken cancellationToken
-    )
-    {
-        if (_isDisposed)
-        {
-            throw new InvalidOperationException("The physical StarRocks connection is closed.");
-        }
-
-        try
-        {
-            byte[] payload = BinaryParameterEncoder.BuildExecute(statementId, parameterValues);
-            var writer = new PacketWriter(_stream);
-            writer.ResetSequence();
-            await writer.WritePayloadAsync(payload, cancellationToken).ConfigureAwait(false);
-
-            var reader = new PacketReader(_stream);
-            // The response sequence continues from the request's last packet (see ExecuteQueryAsync).
-            reader.ResetSequence(writer.SequenceId);
-            byte[] firstPayload = await reader
-                .ReadPayloadAsync(cancellationToken)
-                .ConfigureAwait(false);
-
-            if (ResultPacket.IsError(firstPayload))
-            {
-                throw ResultPacket.ReadError(firstPayload, connectionId: null);
-            }
-
-            if (ResultPacket.IsOk(firstPayload))
-            {
-                return QueryResult.FromOk(ResultPacket.ReadOk(firstPayload));
-            }
-
-            int columnCount = TextResultParser.ReadColumnCount(firstPayload);
-            var columns = new List<ColumnDefinition>(columnCount);
-            for (int i = 0; i < columnCount; i++)
-            {
-                byte[] columnPayload = await reader
-                    .ReadPayloadAsync(cancellationToken)
-                    .ConfigureAwait(false);
-                if (ResultPacket.IsError(columnPayload))
-                {
-                    throw ResultPacket.ReadError(columnPayload, connectionId: null);
-                }
-
-                columns.Add(TextResultParser.ReadColumnDefinition(columnPayload));
-            }
-
-            byte[] columnTerminator = await reader
-                .ReadPayloadAsync(cancellationToken)
-                .ConfigureAwait(false);
-            if (!ResultPacket.IsEndOfResultSet(columnTerminator))
-            {
-                throw new MalformedPacketException(
-                    "Expected an EOF packet after the prepared-statement column definitions."
-                );
-            }
-
-            var rows = new List<object?[]>();
-            while (true)
-            {
-                byte[] rowPayload = await reader
-                    .ReadPayloadAsync(cancellationToken)
-                    .ConfigureAwait(false);
-
-                // A server that aborts the query mid-stream (timeout, kill) sends an ERR packet in
-                // place of a row; surface the real server error rather than a malformed-row failure.
-                if (ResultPacket.IsError(rowPayload))
-                {
-                    throw ResultPacket.ReadError(rowPayload, connectionId: null);
-                }
-
-                if (ResultPacket.IsEndOfResultSet(rowPayload))
-                {
-                    break;
-                }
-
-                rows.Add(BinaryResultRowDecoder.Decode(rowPayload, columns));
-            }
-
-            return QueryResult.FromRows(columns, rows);
-        }
-        catch (OperationCanceledException)
-        {
-            MarkBroken();
-            throw;
-        }
-        catch (MalformedPacketException ex)
-        {
-            MarkBroken();
-            throw new DotRocksException("StarRocks returned malformed protocol bytes.", ex);
-        }
-        catch (IOException ex)
-        {
-            MarkBroken();
-            throw new DotRocksException(
-                "I/O failed while executing the prepared StarRocks statement.",
-                serverErrorCode: null,
-                sqlState: null,
-                isTransient: true,
-                connectionId: null,
-                innerException: ex
-            );
-        }
-    }
+    ) =>
+        ExecuteExchangeAsync(
+            BinaryParameterEncoder.BuildExecute(statementId, parameterValues),
+            "I/O failed while executing the prepared StarRocks statement.",
+            static (firstPayload, reader, ct) =>
+                TextResultParser.ReadBinaryAsync(firstPayload, reader, connectionId: null, ct),
+            cancellationToken
+        );
 
     /// <summary>Sends <c>COM_STMT_CLOSE</c> for the given statement id. The server sends no reply.</summary>
     public async ValueTask ClosePreparedStatementAsync(
@@ -686,69 +580,19 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
         return DotRocksServerVersion.Unknown;
     }
 
-    public async ValueTask<StreamingQueryResult> ExecuteQueryStreamingAsync(
+    public ValueTask<StreamingQueryResult> ExecuteQueryStreamingAsync(
         string commandText,
         CancellationToken cancellationToken
     )
     {
-        if (_isDisposed)
-        {
-            throw new InvalidOperationException("The physical StarRocks connection is closed.");
-        }
-
         MarkSessionDirtyIfMutating(commandText);
-
-        try
-        {
-            byte[] payload = QueryCommandBuilder.Build(commandText);
-            var writer = new PacketWriter(_stream);
-            writer.ResetSequence();
-            await writer.WritePayloadAsync(payload, cancellationToken).ConfigureAwait(false);
-
-            var reader = new PacketReader(_stream);
-            // The response sequence continues from the request's last packet (see ExecuteQueryAsync).
-            reader.ResetSequence(writer.SequenceId);
-            byte[] firstPayload = await reader
-                .ReadPayloadAsync(cancellationToken)
-                .ConfigureAwait(false);
-            return await TextResultParser
-                .ReadStreamingAsync(firstPayload, reader, connectionId: null, cancellationToken)
-                .ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-            MarkBroken();
-            throw;
-        }
-        catch (MalformedPacketException ex)
-        {
-            MarkBroken();
-            throw new DotRocksException("StarRocks returned malformed protocol bytes.", ex);
-        }
-        catch (IOException ex)
-        {
-            MarkBroken();
-            throw new DotRocksException(
-                "I/O failed while executing the StarRocks command.",
-                serverErrorCode: null,
-                sqlState: null,
-                isTransient: true,
-                connectionId: null,
-                innerException: ex
-            );
-        }
-        catch (ObjectDisposedException ex)
-        {
-            MarkBroken();
-            throw new DotRocksException(
-                "The StarRocks connection was closed while executing a command.",
-                serverErrorCode: null,
-                sqlState: null,
-                isTransient: true,
-                connectionId: null,
-                innerException: ex
-            );
-        }
+        return ExecuteExchangeAsync(
+            QueryCommandBuilder.Build(commandText),
+            "I/O failed while executing the StarRocks command.",
+            static (firstPayload, reader, ct) =>
+                TextResultParser.ReadStreamingAsync(firstPayload, reader, connectionId: null, ct),
+            cancellationToken
+        );
     }
 
     public void MarkBroken() => _isBroken = true;
@@ -756,90 +600,11 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
     // Discard connections after USE / SET because per-lease session reset is not verified.
     private void MarkSessionDirtyIfMutating(string commandText)
     {
-        if (IsSessionMutatingStatement(commandText))
+        if (SqlStatementClassifier.IsSessionMutating(commandText))
         {
             _sessionMayBeDirty = true;
         }
     }
-
-    // Detection is intentionally conservative (it errs toward discarding): it skips leading
-    // whitespace and SQL comments, then flags a statement whose leading keyword is USE or SET.
-    internal static bool IsSessionMutatingStatement(string commandText)
-    {
-        if (string.IsNullOrEmpty(commandText))
-        {
-            return false;
-        }
-
-        ReadOnlySpan<char> sql = commandText.AsSpan();
-        int index = SkipLeadingTrivia(sql);
-        return MatchesKeyword(sql, index, "USE") || MatchesKeyword(sql, index, "SET");
-    }
-
-    private static int SkipLeadingTrivia(ReadOnlySpan<char> sql)
-    {
-        int index = 0;
-        while (index < sql.Length)
-        {
-            char current = sql[index];
-            if (char.IsWhiteSpace(current))
-            {
-                index++;
-                continue;
-            }
-
-            // Line comments: "-- ..." and "# ..." run to the end of the line.
-            if (
-                current == '#'
-                || (current == '-' && index + 1 < sql.Length && sql[index + 1] == '-')
-            )
-            {
-                while (index < sql.Length && sql[index] != '\n')
-                {
-                    index++;
-                }
-
-                continue;
-            }
-
-            // Block comment: "/* ... */".
-            if (current == '/' && index + 1 < sql.Length && sql[index + 1] == '*')
-            {
-                index += 2;
-                while (index + 1 < sql.Length && !(sql[index] == '*' && sql[index + 1] == '/'))
-                {
-                    index++;
-                }
-
-                index = Math.Min(index + 2, sql.Length);
-                continue;
-            }
-
-            break;
-        }
-
-        return index;
-    }
-
-    private static bool MatchesKeyword(ReadOnlySpan<char> sql, int index, string keyword)
-    {
-        if (index + keyword.Length > sql.Length)
-        {
-            return false;
-        }
-
-        if (!sql.Slice(index, keyword.Length).Equals(keyword, StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        // Require a word boundary so identifiers like USER or SETTINGS do not match.
-        int next = index + keyword.Length;
-        return next >= sql.Length || !IsIdentifierPart(sql[next]);
-    }
-
-    private static bool IsIdentifierPart(char value) =>
-        char.IsLetterOrDigit(value) || value is '_' or '$';
 
     // Spread connection retirement so connections opened together do not all expire at the same
     // instant (a reconnect storm). Each connection lives 90-100% of the configured lifetime; zero

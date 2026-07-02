@@ -15,11 +15,10 @@ namespace DotRocks.Data;
 /// </remarks>
 public sealed class DotRocksBatch : DbBatch
 {
-    private readonly Lock _activeBatchGate = new();
+    private readonly ActiveOperationGate _activeOperationGate = new();
     private readonly DotRocksBatchCommandCollection _batchCommands = new();
     private DotRocksConnection? _connection;
     private DbTransaction? _transaction;
-    private CancellationTokenSource? _activeBatchCancellation;
     private int _timeout = 30;
 
     /// <summary>
@@ -76,15 +75,8 @@ public sealed class DotRocksBatch : DbBatch
     /// <inheritdoc />
     public override void Cancel()
     {
-        CancellationTokenSource? active;
-        lock (_activeBatchGate)
+        if (_activeOperationGate.TryCancelActiveOperation())
         {
-            active = _activeBatchCancellation;
-        }
-
-        if (active is not null)
-        {
-            active.Cancel();
             _connection?.Abort();
         }
     }
@@ -114,15 +106,7 @@ public sealed class DotRocksBatch : DbBatch
     {
         IReadOnlyList<QueryResult> results = await ExecuteAllAsync(cancellationToken)
             .ConfigureAwait(false);
-        long total = -1;
-        foreach (QueryResult result in results)
-        {
-            if (result.RecordsAffected >= 0)
-            {
-                total = (total < 0 ? 0 : total) + result.RecordsAffected;
-            }
-        }
-
+        long total = QueryResult.SumRecordsAffected(results);
         return total > int.MaxValue ? int.MaxValue : (int)total;
     }
 
@@ -181,16 +165,12 @@ public sealed class DotRocksBatch : DbBatch
 
         _connection.ValidateCommandTransaction((DotRocksTransaction?)_transaction);
 
-        using var batchCancellation = new CancellationTokenSource();
-        using CancellationTokenSource? timeoutCancellation =
-            _timeout == 0 ? null : new CancellationTokenSource(TimeSpan.FromSeconds(_timeout));
-        using CancellationTokenSource linkedCancellation = CreateLinkedCancellation(
-            batchCancellation,
-            timeoutCancellation,
+        using var scope = new ActiveOperationScope(
+            _activeOperationGate,
+            _timeout,
+            "Concurrent execution of the same DotRocksBatch is not supported.",
             cancellationToken
         );
-
-        SetActiveBatchCancellation(batchCancellation);
         try
         {
             var results = new List<QueryResult>(_batchCommands.Count);
@@ -207,7 +187,7 @@ public sealed class DotRocksBatch : DbBatch
                     batchCommand.DotRocksParameters
                 );
                 QueryResult result = await _connection
-                    .ExecuteQueryAsync(commandText, linkedCancellation.Token)
+                    .ExecuteQueryAsync(commandText, scope.Token)
                     .ConfigureAwait(false);
                 batchCommand.SetRecordsAffected(result.RecordsAffected);
                 results.Add(result);
@@ -215,63 +195,14 @@ public sealed class DotRocksBatch : DbBatch
 
             return results;
         }
-        catch (OperationCanceledException ex)
-            when (batchCancellation.IsCancellationRequested
-                && !cancellationToken.IsCancellationRequested
-            )
+        catch (OperationCanceledException ex) when (scope.IsCanceledByCancelMethod)
         {
             await _connection.CloseAsync().ConfigureAwait(false);
             throw new OperationCanceledException(
                 "The DotRocks batch was canceled.",
                 ex,
-                batchCancellation.Token
+                scope.OperationToken
             );
-        }
-        finally
-        {
-            ClearActiveBatchCancellation(batchCancellation);
-        }
-    }
-
-    private static CancellationTokenSource CreateLinkedCancellation(
-        CancellationTokenSource batchCancellation,
-        CancellationTokenSource? timeoutCancellation,
-        CancellationToken cancellationToken
-    ) =>
-        timeoutCancellation is null
-            ? CancellationTokenSource.CreateLinkedTokenSource(
-                cancellationToken,
-                batchCancellation.Token
-            )
-            : CancellationTokenSource.CreateLinkedTokenSource(
-                cancellationToken,
-                batchCancellation.Token,
-                timeoutCancellation.Token
-            );
-
-    private void SetActiveBatchCancellation(CancellationTokenSource batchCancellation)
-    {
-        lock (_activeBatchGate)
-        {
-            if (_activeBatchCancellation is not null)
-            {
-                throw new InvalidOperationException(
-                    "Concurrent execution of the same DotRocksBatch is not supported."
-                );
-            }
-
-            _activeBatchCancellation = batchCancellation;
-        }
-    }
-
-    private void ClearActiveBatchCancellation(CancellationTokenSource batchCancellation)
-    {
-        lock (_activeBatchGate)
-        {
-            if (ReferenceEquals(_activeBatchCancellation, batchCancellation))
-            {
-                _activeBatchCancellation = null;
-            }
         }
     }
 }

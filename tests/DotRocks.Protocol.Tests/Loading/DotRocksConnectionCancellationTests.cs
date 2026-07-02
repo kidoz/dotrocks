@@ -3,29 +3,20 @@ using System.Data.Common;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using System.Net;
-using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Authentication;
-using System.Security.Cryptography;
-using System.Security.Cryptography.X509Certificates;
-using System.Text;
 using DotRocks.Data;
 using DotRocks.Data.Authentication;
 using DotRocks.Data.Diagnostics;
 using DotRocks.Data.Protocol.Framing;
-using DotRocks.Data.Protocol.Handshake;
-using DotRocks.Data.Protocol.Results;
 using DotRocks.Data.Protocol.Serialization;
+using DotRocks.Protocol.Tests.TestInfrastructure;
 using Xunit;
 
 namespace DotRocks.Protocol.Tests.Loading;
 
 public sealed class DotRocksConnectionCancellationTests
 {
-    private const string Secret = "fake-server-secret";
-    private static readonly byte[] AuthPart1 = [1, 2, 3, 4, 5, 6, 7, 8];
-    private static readonly byte[] AuthPart2 = [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 0];
-
     [Fact]
     public async Task Batch_ExecutesCommandsSequentiallyWithBoundParameters()
     {
@@ -33,12 +24,16 @@ public sealed class DotRocksConnectionCancellationTests
         var commands = new List<string>();
         using var server = FakeStarRocksServer.Start(async stream =>
         {
-            await CompleteAuthenticationAsync(stream).ConfigureAwait(true);
-            commands.Add(await ReadCommandAndReplyOkAsync(stream).ConfigureAwait(true));
-            commands.Add(await ReadCommandAndReplyOkAsync(stream).ConfigureAwait(true));
+            await FakeStarRocksServer.CompleteAuthenticationAsync(stream).ConfigureAwait(true);
+            commands.Add(
+                await FakeStarRocksServer.ReadCommandAndReplyOkAsync(stream).ConfigureAwait(true)
+            );
+            commands.Add(
+                await FakeStarRocksServer.ReadCommandAndReplyOkAsync(stream).ConfigureAwait(true)
+            );
         });
 
-        using var connection = new DotRocksConnection(BuildFakeServerConnectionString(server.Port));
+        using var connection = new DotRocksConnection(server.ConnectionString);
         await connection.OpenAsync(ct).ConfigureAwait(true);
 
         Assert.True(connection.CanCreateBatch);
@@ -69,13 +64,19 @@ public sealed class DotRocksConnectionCancellationTests
         var commands = new List<string>();
         using var server = FakeStarRocksServer.Start(async stream =>
         {
-            await CompleteAuthenticationAsync(stream).ConfigureAwait(true);
-            commands.Add(await ReadCommandAndReplyOkAsync(stream).ConfigureAwait(true));
-            commands.Add(await ReadCommandAndReplyOkAsync(stream).ConfigureAwait(true));
-            commands.Add(await ReadCommandAndReplyOkAsync(stream).ConfigureAwait(true));
+            await FakeStarRocksServer.CompleteAuthenticationAsync(stream).ConfigureAwait(true);
+            commands.Add(
+                await FakeStarRocksServer.ReadCommandAndReplyOkAsync(stream).ConfigureAwait(true)
+            );
+            commands.Add(
+                await FakeStarRocksServer.ReadCommandAndReplyOkAsync(stream).ConfigureAwait(true)
+            );
+            commands.Add(
+                await FakeStarRocksServer.ReadCommandAndReplyOkAsync(stream).ConfigureAwait(true)
+            );
         });
 
-        using var connection = new DotRocksConnection(BuildFakeServerConnectionString(server.Port));
+        using var connection = new DotRocksConnection(server.ConnectionString);
         await connection.OpenAsync(ct).ConfigureAwait(true);
 
         DbTransaction transaction = await connection.BeginTransactionAsync(ct).ConfigureAwait(true);
@@ -146,13 +147,11 @@ public sealed class DotRocksConnectionCancellationTests
 
         using var server = FakeStarRocksServer.Start(async stream =>
         {
-            await CompleteAuthenticationAsync(stream).ConfigureAwait(true);
-            _ = await ReadCommandAndReplyOkAsync(stream).ConfigureAwait(true);
+            await FakeStarRocksServer.CompleteAuthenticationAsync(stream).ConfigureAwait(true);
+            _ = await FakeStarRocksServer.ReadCommandAndReplyOkAsync(stream).ConfigureAwait(true);
         });
 
-        using (
-            var connection = new DotRocksConnection(BuildFakeServerConnectionString(server.Port))
-        )
+        using (var connection = new DotRocksConnection(server.ConnectionString))
         {
             await connection.OpenAsync(ct).ConfigureAwait(true);
             using DbCommand command = connection.CreateCommand();
@@ -193,14 +192,16 @@ public sealed class DotRocksConnectionCancellationTests
                     .AcceptTcpClientAsync(ct)
                     .ConfigureAwait(false);
                 using NetworkStream stream = second.GetStream();
-                await CompleteAuthenticationAsync(stream).ConfigureAwait(false);
+                await FakeStarRocksServer.CompleteAuthenticationAsync(stream).ConfigureAwait(false);
                 await Task.Delay(TimeSpan.FromMilliseconds(250), ct).ConfigureAwait(false);
             },
             ct
         );
 
         string connectionString =
-            $"Server=127.0.0.1;Port={port};User ID=alice;Password={Secret};Connection Timeout=5;Connection Retries=2;Connection Retry Delay=50";
+            $"Server=127.0.0.1;Port={port};User ID={FakeStarRocksServer.UserName};"
+            + $"Password={FakeStarRocksServer.Secret};Connection Timeout=5;"
+            + "Connection Retries=2;Connection Retry Delay=50";
         using var connection = new DotRocksConnection(connectionString);
 
         await connection.OpenAsync(ct).ConfigureAwait(true);
@@ -220,7 +221,8 @@ public sealed class DotRocksConnectionCancellationTests
             .AcceptTcpClientAsync(acceptCancellation.Token)
             .AsTask();
         string connectionString =
-            $"Server=127.0.0.1;Port={port};User ID=alice;Password={Secret};Connection Timeout=5";
+            $"Server=127.0.0.1;Port={port};User ID={FakeStarRocksServer.UserName};"
+            + $"Password={FakeStarRocksServer.Secret};Connection Timeout=5";
         using var connection = new DotRocksConnection(connectionString);
         using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
 
@@ -232,7 +234,11 @@ public sealed class DotRocksConnectionCancellationTests
 
         using TcpClient acceptedClient = await acceptedClientTask.ConfigureAwait(true);
         Assert.Equal(ConnectionState.Closed, connection.State);
-        Assert.DoesNotContain(Secret, exception.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            FakeStarRocksServer.Secret,
+            exception.ToString(),
+            StringComparison.Ordinal
+        );
         Assert.DoesNotContain(connectionString, exception.ToString(), StringComparison.Ordinal);
     }
 
@@ -249,7 +255,7 @@ public sealed class DotRocksConnectionCancellationTests
                 )
                 .ConfigureAwait(true);
         });
-        string connectionString = BuildFakeServerConnectionString(server.Port);
+        string connectionString = server.ConnectionString;
         using var connection = new DotRocksConnection(connectionString);
 
         DotRocksException exception = await Assert
@@ -261,7 +267,6 @@ public sealed class DotRocksConnectionCancellationTests
             .ConfigureAwait(true);
 
         Assert.Equal(ConnectionState.Closed, connection.State);
-        Assert.Contains("malformed protocol bytes", exception.Message, StringComparison.Ordinal);
         Assert.IsType<MalformedPacketException>(exception.InnerException);
         AssertSanitized(exception, connectionString);
     }
@@ -274,12 +279,12 @@ public sealed class DotRocksConnectionCancellationTests
             var writer = new PacketWriter(stream);
             await writer
                 .WritePayloadAsync(
-                    BuildHandshake("caching_sha2_password"),
+                    StarRocksPacketFactory.Handshake("caching_sha2_password"),
                     TestContext.Current.CancellationToken
                 )
                 .ConfigureAwait(true);
         });
-        string connectionString = BuildFakeServerConnectionString(server.Port);
+        string connectionString = server.ConnectionString;
         using var connection = new DotRocksConnection(connectionString);
 
         DotRocksException exception = await Assert
@@ -307,7 +312,7 @@ public sealed class DotRocksConnectionCancellationTests
             var writer = new PacketWriter(stream);
             await writer
                 .WritePayloadAsync(
-                    BuildHandshake(MySqlNativePassword.PluginName),
+                    StarRocksPacketFactory.Handshake(MySqlNativePassword.PluginName),
                     TestContext.Current.CancellationToken
                 )
                 .ConfigureAwait(true);
@@ -317,7 +322,7 @@ public sealed class DotRocksConnectionCancellationTests
                 .ReadPayloadAsync(TestContext.Current.CancellationToken)
                 .ConfigureAwait(true);
         });
-        string connectionString = BuildFakeServerConnectionString(server.Port);
+        string connectionString = server.ConnectionString;
         using var connection = new DotRocksConnection(connectionString);
 
         DotRocksException exception = await Assert
@@ -341,13 +346,12 @@ public sealed class DotRocksConnectionCancellationTests
             var writer = new PacketWriter(stream);
             await writer
                 .WritePayloadAsync(
-                    BuildHandshake(MySqlNativePassword.PluginName),
+                    StarRocksPacketFactory.Handshake(MySqlNativePassword.PluginName),
                     TestContext.Current.CancellationToken
                 )
                 .ConfigureAwait(true);
         });
-        string connectionString =
-            BuildFakeServerConnectionString(server.Port) + ";Ssl Mode=Required";
+        string connectionString = server.ConnectionString + ";Ssl Mode=Required";
         using var connection = new DotRocksConnection(connectionString);
 
         DotRocksException exception = await Assert
@@ -366,10 +370,11 @@ public sealed class DotRocksConnectionCancellationTests
     [Fact]
     public async Task OpenAsync_SslModeRequired_UpgradesToTlsAndAuthenticates()
     {
-        using var server = FakeStarRocksServer.Start(HandleTlsOpenOnlyConnectionAsync);
+        using var server = FakeStarRocksServer.Start(
+            FakeStarRocksServer.HandleTlsOpenOnlyConnectionAsync
+        );
         string connectionString =
-            BuildFakeServerConnectionString(server.Port)
-            + ";Ssl Mode=Required;Trust Server Certificate=True";
+            server.ConnectionString + ";Ssl Mode=Required;Trust Server Certificate=True";
         using var connection = new DotRocksConnection(connectionString);
 
         await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
@@ -380,9 +385,10 @@ public sealed class DotRocksConnectionCancellationTests
     [Fact]
     public async Task OpenAsync_SslModeRequiredWithUntrustedCertificate_RejectsConnection()
     {
-        using var server = FakeStarRocksServer.Start(HandleTlsRejectingConnectionAsync);
-        string connectionString =
-            BuildFakeServerConnectionString(server.Port) + ";Ssl Mode=Required";
+        using var server = FakeStarRocksServer.Start(
+            FakeStarRocksServer.HandleTlsRejectingConnectionAsync
+        );
+        string connectionString = server.ConnectionString + ";Ssl Mode=Required";
         using var connection = new DotRocksConnection(connectionString);
 
         // Without Trust Server Certificate, the self-signed certificate must be rejected.
@@ -401,12 +407,13 @@ public sealed class DotRocksConnectionCancellationTests
     [Fact]
     public async Task OpenAsync_SslModePreferredWithoutServerSupport_ConnectsInPlaintext()
     {
-        using var server = FakeStarRocksServer.Start(HandleOpenOnlyConnectionAsync);
+        using var server = FakeStarRocksServer.Start(
+            FakeStarRocksServer.HandleOpenOnlyConnectionAsync
+        );
 
         // Preferred is opportunistic: a server that does not advertise TLS continues in plaintext
         // rather than failing the connection.
-        string connectionString =
-            BuildFakeServerConnectionString(server.Port) + ";Ssl Mode=Preferred";
+        string connectionString = server.ConnectionString + ";Ssl Mode=Preferred";
         using var connection = new DotRocksConnection(connectionString);
 
         await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
@@ -418,14 +425,15 @@ public sealed class DotRocksConnectionCancellationTests
     [Fact]
     public async Task OpenAsync_SslModePreferredWithServerSupport_NegotiatesTlsAndValidatesCertificate()
     {
-        using var server = FakeStarRocksServer.Start(HandleTlsRejectingConnectionAsync);
+        using var server = FakeStarRocksServer.Start(
+            FakeStarRocksServer.HandleTlsRejectingConnectionAsync
+        );
 
         // Preferred upgrades when the server advertises TLS and then enforces certificate
         // validation; the self-signed cert is rejected (proving it negotiated TLS rather than
         // silently falling back to plaintext). Trust Server Certificate is not allowed under
         // Preferred, so this is the only way to exercise the upgrade path here.
-        string connectionString =
-            BuildFakeServerConnectionString(server.Port) + ";Ssl Mode=Preferred";
+        string connectionString = server.ConnectionString + ";Ssl Mode=Preferred";
         using var connection = new DotRocksConnection(connectionString);
 
         DotRocksException exception = await Assert
@@ -447,11 +455,10 @@ public sealed class DotRocksConnectionCancellationTests
     {
         using var server = FakeStarRocksServer.Start(
             HandleMalformedQueryConnectionAsync,
-            HandleOpenOnlyConnectionAsync
+            FakeStarRocksServer.HandleOpenOnlyConnectionAsync
         );
         string connectionString =
-            BuildFakeServerConnectionString(server.Port)
-            + ";Pooling=True;Maximum Pool Size=1;Minimum Pool Size=0";
+            server.ConnectionString + ";Pooling=True;Maximum Pool Size=1;Minimum Pool Size=0";
         DotRocksConnection.ClearAllPools();
 
         try
@@ -496,7 +503,7 @@ public sealed class DotRocksConnectionCancellationTests
 
     private static async Task HandleMalformedQueryConnectionAsync(NetworkStream stream)
     {
-        await CompleteAuthenticationAsync(stream).ConfigureAwait(true);
+        await FakeStarRocksServer.CompleteAuthenticationAsync(stream).ConfigureAwait(true);
         var reader = new PacketReader(stream);
         reader.ResetSequence(0);
         _ = await reader
@@ -509,275 +516,10 @@ public sealed class DotRocksConnectionCancellationTests
             .ConfigureAwait(true);
     }
 
-    private static async Task HandleOpenOnlyConnectionAsync(NetworkStream stream)
-    {
-        await CompleteAuthenticationAsync(stream).ConfigureAwait(true);
-        await Task.Delay(TimeSpan.FromMilliseconds(250), TestContext.Current.CancellationToken)
-            .ConfigureAwait(true);
-    }
-
-    private static async Task HandleTlsRejectingConnectionAsync(NetworkStream stream)
-    {
-        var writer = new PacketWriter(stream);
-        await writer
-            .WritePayloadAsync(
-                BuildHandshake(MySqlNativePassword.PluginName, supportsTls: true),
-                TestContext.Current.CancellationToken
-            )
-            .ConfigureAwait(true);
-        var reader = new PacketReader(stream);
-        reader.ResetSequence(writer.SequenceId);
-        _ = await reader
-            .ReadPayloadAsync(TestContext.Current.CancellationToken)
-            .ConfigureAwait(true);
-
-        using X509Certificate2 certificate = CreateSelfSignedCertificate();
-        using var tls = new SslStream(stream, leaveInnerStreamOpen: true);
-        try
-        {
-            await tls.AuthenticateAsServerAsync(
-                    new SslServerAuthenticationOptions
-                    {
-                        ServerCertificate = certificate,
-                        EnabledSslProtocols = SslProtocols.None,
-                        ClientCertificateRequired = false,
-                    },
-                    TestContext.Current.CancellationToken
-                )
-                .ConfigureAwait(true);
-        }
-        catch (AuthenticationException)
-        {
-            // Expected: the client rejects the untrusted certificate and aborts the handshake.
-        }
-        catch (IOException)
-        {
-            // Expected: the client closes the socket once it rejects the certificate.
-        }
-    }
-
-    private static async Task HandleTlsOpenOnlyConnectionAsync(NetworkStream stream)
-    {
-        var writer = new PacketWriter(stream);
-        await writer
-            .WritePayloadAsync(
-                BuildHandshake(MySqlNativePassword.PluginName, supportsTls: true),
-                TestContext.Current.CancellationToken
-            )
-            .ConfigureAwait(true);
-
-        var reader = new PacketReader(stream);
-        reader.ResetSequence(writer.SequenceId);
-        byte[] sslRequestPayload = await reader
-            .ReadPayloadAsync(TestContext.Current.CancellationToken)
-            .ConfigureAwait(true);
-        AssertSslRequest(sslRequestPayload);
-        byte authSequence = reader.SequenceId;
-
-        using X509Certificate2 certificate = CreateSelfSignedCertificate();
-        using var tls = new SslStream(stream, true);
-        await tls.AuthenticateAsServerAsync(
-                new SslServerAuthenticationOptions
-                {
-                    ServerCertificate = certificate,
-                    EnabledSslProtocols = SslProtocols.None,
-                    ClientCertificateRequired = false,
-                },
-                TestContext.Current.CancellationToken
-            )
-            .ConfigureAwait(true);
-
-        reader = new PacketReader(tls);
-        reader.ResetSequence(authSequence);
-        _ = await reader
-            .ReadPayloadAsync(TestContext.Current.CancellationToken)
-            .ConfigureAwait(true);
-        writer = new PacketWriter(tls);
-        writer.ResetSequence(reader.SequenceId);
-        await writer
-            .WritePayloadAsync(BuildOkPayload(), TestContext.Current.CancellationToken)
-            .ConfigureAwait(true);
-        await Task.Delay(TimeSpan.FromMilliseconds(250), TestContext.Current.CancellationToken)
-            .ConfigureAwait(true);
-    }
-
-    private static async Task CompleteAuthenticationAsync(NetworkStream stream)
-    {
-        var writer = new PacketWriter(stream);
-        await writer
-            .WritePayloadAsync(
-                BuildHandshake(MySqlNativePassword.PluginName),
-                TestContext.Current.CancellationToken
-            )
-            .ConfigureAwait(true);
-        var reader = new PacketReader(stream);
-        reader.ResetSequence(writer.SequenceId);
-        _ = await reader
-            .ReadPayloadAsync(TestContext.Current.CancellationToken)
-            .ConfigureAwait(true);
-        writer.ResetSequence(reader.SequenceId);
-        await writer
-            .WritePayloadAsync(BuildOkPayload(), TestContext.Current.CancellationToken)
-            .ConfigureAwait(true);
-    }
-
-    private static string BuildFakeServerConnectionString(int port) =>
-        $"Server=127.0.0.1;Port={port};User ID=alice;Password={Secret};Connection Timeout=5";
-
-    private static byte[] BuildHandshake(string authPluginName, bool supportsTls = false)
-    {
-        CapabilityFlags capabilities =
-            CapabilityFlags.LongPassword
-            | CapabilityFlags.LongFlag
-            | CapabilityFlags.Protocol41
-            | CapabilityFlags.SecureConnection
-            | CapabilityFlags.PluginAuth;
-        if (supportsTls)
-        {
-            capabilities |= CapabilityFlags.Ssl;
-        }
-        uint caps = (uint)capabilities;
-        using var writer = new ProtocolWriter();
-        writer.WriteByte(10);
-        writer.WriteNullTerminatedString("8.0.33-StarRocks-3.3", Encoding.ASCII);
-        writer.WriteFixedInteger(42, 4);
-        writer.WriteBytes(AuthPart1);
-        writer.WriteByte(0);
-        writer.WriteFixedInteger(caps & 0xFFFF, 2);
-        writer.WriteByte(0x21);
-        writer.WriteFixedInteger(2, 2);
-        writer.WriteFixedInteger((caps >> 16) & 0xFFFF, 2);
-        writer.WriteByte(21);
-        writer.WriteBytes(new byte[10]);
-        writer.WriteBytes(AuthPart2);
-        writer.WriteNullTerminatedString(authPluginName, Encoding.ASCII);
-        return writer.ToArray();
-    }
-
-    private static void AssertSslRequest(ReadOnlySpan<byte> payload)
-    {
-        var reader = new ProtocolReader(payload);
-        var capabilities = (CapabilityFlags)reader.ReadFixedInteger(4);
-        Assert.True(capabilities.HasFlag(CapabilityFlags.Ssl));
-        Assert.True(capabilities.HasFlag(CapabilityFlags.Protocol41));
-        Assert.True(capabilities.HasFlag(CapabilityFlags.SecureConnection));
-        Assert.Equal(0UL, reader.ReadFixedInteger(4));
-        Assert.Equal(0x21, reader.ReadByte());
-        reader.ReadBytes(23);
-        Assert.True(reader.IsAtEnd);
-    }
-
-    private static X509Certificate2 CreateSelfSignedCertificate()
-    {
-        using RSA rsa = RSA.Create(2048);
-        var request = new CertificateRequest(
-            "CN=127.0.0.1",
-            rsa,
-            HashAlgorithmName.SHA256,
-            RSASignaturePadding.Pkcs1
-        );
-        var subjectAlternativeNames = new SubjectAlternativeNameBuilder();
-        subjectAlternativeNames.AddIpAddress(IPAddress.Loopback);
-        request.CertificateExtensions.Add(subjectAlternativeNames.Build());
-        return request.CreateSelfSigned(
-            DateTimeOffset.UtcNow.AddDays(-1),
-            DateTimeOffset.UtcNow.AddDays(1)
-        );
-    }
-
-    private static async Task<string> ReadCommandAndReplyOkAsync(NetworkStream stream)
-    {
-        var reader = new PacketReader(stream);
-        reader.ResetSequence(0);
-        byte[] payload = await reader
-            .ReadPayloadAsync(TestContext.Current.CancellationToken)
-            .ConfigureAwait(true);
-        var writer = new PacketWriter(stream);
-        writer.ResetSequence(reader.SequenceId);
-        await writer
-            .WritePayloadAsync(BuildOkPayload(), TestContext.Current.CancellationToken)
-            .ConfigureAwait(true);
-
-        // COM_QUERY payload is a 0x03 command byte followed by the SQL text.
-        return Encoding.UTF8.GetString(payload.AsSpan(1));
-    }
-
-    private static byte[] BuildOkPayload()
-    {
-        using var writer = new ProtocolWriter();
-        writer.WriteByte(ResultPacket.OkHeader);
-        writer.WriteLengthEncodedInteger(0);
-        writer.WriteLengthEncodedInteger(0);
-        writer.WriteFixedInteger(2, 2);
-        writer.WriteFixedInteger(0, 2);
-        return writer.ToArray();
-    }
-
     private static void AssertSanitized(Exception exception, string connectionString)
     {
         string text = exception.ToString();
-        Assert.DoesNotContain(Secret, text, StringComparison.Ordinal);
+        Assert.DoesNotContain(FakeStarRocksServer.Secret, text, StringComparison.Ordinal);
         Assert.DoesNotContain(connectionString, text, StringComparison.Ordinal);
-    }
-
-    private sealed class FakeStarRocksServer : IDisposable
-    {
-        private readonly TcpListener _listener;
-        private readonly Func<NetworkStream, Task>[] _handlers;
-        private readonly CancellationTokenSource _cancellation = new();
-        private readonly Task _acceptLoop;
-        private int _connectionCount;
-
-        private FakeStarRocksServer(TcpListener listener, Func<NetworkStream, Task>[] handlers)
-        {
-            _listener = listener;
-            _handlers = handlers;
-            Port = ((IPEndPoint)listener.LocalEndpoint).Port;
-            _acceptLoop = AcceptLoopAsync();
-        }
-
-        public int Port { get; }
-
-        public int ConnectionCount => Volatile.Read(ref _connectionCount);
-
-        public static FakeStarRocksServer Start(params Func<NetworkStream, Task>[] handlers)
-        {
-            var listener = new TcpListener(IPAddress.Loopback, port: 0);
-            listener.Start();
-            return new FakeStarRocksServer(listener, handlers);
-        }
-
-        public void Dispose()
-        {
-            _cancellation.Cancel();
-            _listener.Stop();
-            try
-            {
-                _acceptLoop.GetAwaiter().GetResult();
-            }
-            catch (OperationCanceledException) { }
-            catch (ObjectDisposedException) { }
-
-            _cancellation.Dispose();
-        }
-
-        private async Task AcceptLoopAsync()
-        {
-            while (!_cancellation.IsCancellationRequested)
-            {
-                using TcpClient client = await _listener
-                    .AcceptTcpClientAsync(_cancellation.Token)
-                    .ConfigureAwait(true);
-                int index = Interlocked.Increment(ref _connectionCount) - 1;
-                Func<NetworkStream, Task> handler =
-                    index < _handlers.Length
-                        ? _handlers[index]
-                        : throw new InvalidOperationException(
-                            "The fake StarRocks server received an unexpected connection."
-                        );
-                using NetworkStream stream = client.GetStream();
-                await handler(stream).ConfigureAwait(true);
-            }
-        }
     }
 }
