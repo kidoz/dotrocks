@@ -160,8 +160,12 @@ internal static class BinaryResultRowDecoder
                 + TimeSpan.FromTicks(microseconds * (TimeSpan.TicksPerMillisecond / 1000));
             return negative ? -value : value;
         }
-        catch (ArgumentOutOfRangeException ex)
+        catch (Exception ex) when (ex is ArgumentOutOfRangeException or OverflowException)
         {
+            // TimeSpan's constructor throws ArgumentOutOfRangeException, but the microsecond
+            // addition (TimeSpan.operator+) throws OverflowException when the total exceeds
+            // TimeSpan.MaxValue. Both are malformed-input failures and must surface as a
+            // controlled MalformedPacketException, not escape as a raw arithmetic exception.
             throw new MalformedPacketException("Binary TIME value is out of range.", ex);
         }
     }
