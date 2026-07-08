@@ -28,6 +28,7 @@
 
   <ItemGroup Label="Internal test access">
     <InternalsVisibleTo Include="DotRocks.Protocol.Tests" />
+    <InternalsVisibleTo Include="DotRocks.Data.IntegrationTests" />
     <InternalsVisibleTo Include="DotRocks.CompatibilityHarness" />
     <InternalsVisibleTo Include="DotRocks.Benchmarks" />
   </ItemGroup>
