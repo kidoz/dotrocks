@@ -8,10 +8,14 @@
   </Folder>
   <Folder Name="/samples/">
     <Project Path="samples/DotRocks.Samples.AdoNet/DotRocks.Samples.AdoNet.csproj" />
+    <Project Path="samples/DotRocks.Samples.ConnectionPooling/DotRocks.Samples.ConnectionPooling.csproj" />
     <Project Path="samples/DotRocks.Samples.Dapper/DotRocks.Samples.Dapper.csproj" />
     <Project Path="samples/DotRocks.Samples.DependencyInjection/DotRocks.Samples.DependencyInjection.csproj" />
     <Project Path="samples/DotRocks.Samples.EntityFrameworkCore/DotRocks.Samples.EntityFrameworkCore.csproj" />
+    <Project Path="samples/DotRocks.Samples.SecureConnection/DotRocks.Samples.SecureConnection.csproj" />
     <Project Path="samples/DotRocks.Samples.StreamLoad/DotRocks.Samples.StreamLoad.csproj" />
+    <Project Path="samples/DotRocks.Samples.StreamLoadTransaction/DotRocks.Samples.StreamLoadTransaction.csproj" />
+    <Project Path="samples/DotRocks.Samples.Transactions/DotRocks.Samples.Transactions.csproj" />
   </Folder>
   <Folder Name="/benchmarks/">
     <Project Path="benchmarks/DotRocks.Benchmarks/DotRocks.Benchmarks.csproj" />

@@ -225,8 +225,16 @@ Other compilable samples cover the rest of the surface:
   registering the dependency-free `DotRocksDataSource` with `Microsoft.Extensions.DependencyInjection`.
 - [`DotRocks.Samples.Dapper`](https://github.com/kidoz/dotrocks/tree/main/samples/DotRocks.Samples.Dapper) —
   Dapper over a `DotRocksConnection`.
+- [`DotRocks.Samples.SecureConnection`](https://github.com/kidoz/dotrocks/tree/main/samples/DotRocks.Samples.SecureConnection) —
+  requiring TLS with `Ssl Mode=Required` and full certificate/host-name validation.
+- [`DotRocks.Samples.ConnectionPooling`](https://github.com/kidoz/dotrocks/tree/main/samples/DotRocks.Samples.ConnectionPooling) —
+  pool sizing and lifetime, connection reuse, and transient-open retries.
+- [`DotRocks.Samples.Transactions`](https://github.com/kidoz/dotrocks/tree/main/samples/DotRocks.Samples.Transactions) —
+  `DotRocksTransaction` begin/commit/rollback over a `DotRocksConnection`.
 - [`DotRocks.Samples.StreamLoad`](https://github.com/kidoz/dotrocks/tree/main/samples/DotRocks.Samples.StreamLoad) —
   streaming CSV Stream Load without buffering the payload in memory.
+- [`DotRocks.Samples.StreamLoadTransaction`](https://github.com/kidoz/dotrocks/tree/main/samples/DotRocks.Samples.StreamLoadTransaction) —
+  a two-phase Stream Load transaction (begin → load → prepare → commit) for all-or-nothing ingestion.
 
 StarRocks transaction behavior is characterized by live tests. `COMMIT WORK` makes EF
 `SaveChangesAsync` rows visible. Some StarRocks builds accept `ROLLBACK WORK` for DML
