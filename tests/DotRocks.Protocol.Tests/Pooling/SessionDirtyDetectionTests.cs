@@ -17,6 +17,12 @@ public sealed class SessionDirtyDetectionTests
     [InlineData("# comment\nSET names utf8")]
     [InlineData("/* block */ USE analytics")]
     [InlineData("/* multi\nline */SET names utf8")]
+    // User-variable assignment via ":=" mutates session state without a leading SET/USE keyword;
+    // it must be flagged so the connection is retired instead of leaking the variable to the next
+    // lease of a pooled connection.
+    [InlineData("SELECT @tenant := 7")]
+    [InlineData("SELECT @tenant := ?")]
+    [InlineData("select @x:=@x+1 from t")]
     public void IsSessionMutatingStatement_FlagsUseAndSet(string commandText) =>
         Assert.True(SqlStatementClassifier.IsSessionMutating(commandText));
 

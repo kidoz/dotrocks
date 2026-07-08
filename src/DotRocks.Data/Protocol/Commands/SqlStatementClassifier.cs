@@ -9,6 +9,11 @@ internal static class SqlStatementClassifier
 {
     // Detection is intentionally conservative (it errs toward discarding): it skips leading
     // whitespace and SQL comments, then flags a statement whose leading keyword is USE or SET.
+    // It also flags any statement that assigns a user variable with ":=" (for example
+    // "SELECT @tenant := ?"), since that mutates session state without a leading SET keyword and
+    // would otherwise leak the variable into the next lease of a pooled connection. Matching ":="
+    // anywhere (including inside a string literal) can only over-retire a connection, which is the
+    // safe direction.
     public static bool IsSessionMutating(string commandText)
     {
         if (string.IsNullOrEmpty(commandText))
@@ -18,7 +23,9 @@ internal static class SqlStatementClassifier
 
         ReadOnlySpan<char> sql = commandText.AsSpan();
         int index = SkipLeadingTrivia(sql);
-        return MatchesKeyword(sql, index, "USE") || MatchesKeyword(sql, index, "SET");
+        return MatchesKeyword(sql, index, "USE")
+            || MatchesKeyword(sql, index, "SET")
+            || commandText.Contains(":=", StringComparison.Ordinal);
     }
 
     private static int SkipLeadingTrivia(ReadOnlySpan<char> sql)

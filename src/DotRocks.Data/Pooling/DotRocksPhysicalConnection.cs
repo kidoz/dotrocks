@@ -393,14 +393,20 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
     public ValueTask<StatementPrepareResult> PrepareAsync(
         string commandText,
         CancellationToken cancellationToken
-    ) =>
-        ExecuteExchangeAsync(
+    )
+    {
+        // A prepared statement can mutate session state just like a text command (for example
+        // "SET @tenant := ?"), so classify it here too; otherwise the mutation leaks into the next
+        // lease of the pooled connection.
+        MarkSessionDirtyIfMutating(commandText);
+        return ExecuteExchangeAsync(
             StatementCommandBuilder.BuildPrepare(commandText),
             "I/O failed while preparing the StarRocks statement.",
             static (firstPayload, reader, ct) =>
                 ParsePrepareResponseAsync(firstPayload, reader, ct),
             cancellationToken
         );
+    }
 
     private static async ValueTask<StatementPrepareResult> ParsePrepareResponseAsync(
         byte[] firstPayload,
