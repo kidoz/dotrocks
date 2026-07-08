@@ -493,6 +493,218 @@ public sealed class DotRocksStreamLoadClientTests
         Assert.Single(handler.Requests);
     }
 
+    [Theory]
+    [InlineData("http://169.254.169.254/api/warehouse/events/_stream_load")]
+    [InlineData("http://127.0.0.1:8040/api/warehouse/events/_stream_load")]
+    [InlineData("http://localhost:8040/api/warehouse/events/_stream_load")]
+    [InlineData("http://[::1]:8040/api/warehouse/events/_stream_load")]
+    public async Task LoadCsvAsync_RedirectToInternalAddress_ThrowsBeforeForwardingAuth(
+        string redirectTarget
+    )
+    {
+        // SSRF guard: a public FE endpoint must not be able to redirect the credential-bearing load
+        // to a loopback / link-local (cloud-metadata) / unspecified target. The second request must
+        // never be made, so the Authorization header is never forwarded there.
+        using var handler = new SingleRedirectHandler(new Uri(redirectTarget));
+        using var httpClient = new HttpClient(handler);
+        DotRocksConnectionOptions options = DotRocksConnectionOptions.Parse(
+            "Server=starrocks.local;User ID=alice;Password=secret;"
+                + "Stream Load Endpoint=http://starrocks.local:8030;Allow Insecure Stream Load=true"
+        );
+        using var client = new DotRocksStreamLoadClient(
+            options,
+            httpClient,
+            disposeHttpClient: false
+        );
+        using var payload = new MemoryStream(Encoding.UTF8.GetBytes("1,one\\n"));
+
+        DotRocksStreamLoadException exception = await Assert
+            .ThrowsAsync<DotRocksStreamLoadException>(async () =>
+                await client
+                    .LoadCsvAsync(
+                        "warehouse",
+                        "events",
+                        payload,
+                        cancellationToken: TestContext.Current.CancellationToken
+                    )
+                    .ConfigureAwait(true)
+            )
+            .ConfigureAwait(true);
+
+        Assert.Contains(
+            "refuses to forward credentials",
+            exception.Message,
+            StringComparison.OrdinalIgnoreCase
+        );
+        Assert.Single(handler.Requests);
+    }
+
+    [Theory]
+    // IPv4-mapped IPv6 literals must be normalized before the range checks, or a mapped loopback /
+    // link-local address would slip past the IPv4-only octet check.
+    [InlineData("http://[::ffff:127.0.0.1]:8040/api/warehouse/events/_stream_load")]
+    [InlineData("http://[::ffff:169.254.169.254]/api/warehouse/events/_stream_load")]
+    public async Task LoadCsvAsync_RedirectToIpv4MappedIpv6Internal_Throws(string redirectTarget)
+    {
+        using var handler = new SingleRedirectHandler(new Uri(redirectTarget));
+        using var httpClient = new HttpClient(handler);
+        using var client = CreateClient(httpClient);
+        using var payload = new MemoryStream(Encoding.UTF8.GetBytes("1,one\\n"));
+
+        DotRocksStreamLoadException exception = await Assert
+            .ThrowsAsync<DotRocksStreamLoadException>(async () =>
+                await client
+                    .LoadCsvAsync(
+                        "warehouse",
+                        "events",
+                        payload,
+                        cancellationToken: TestContext.Current.CancellationToken
+                    )
+                    .ConfigureAwait(true)
+            )
+            .ConfigureAwait(true);
+
+        Assert.Contains(
+            "refuses to forward credentials",
+            exception.Message,
+            StringComparison.OrdinalIgnoreCase
+        );
+        Assert.Single(handler.Requests);
+    }
+
+    [Theory]
+    // The authoritative connect-time gate resolves once and vets the actual address the socket will
+    // connect to (closing the validation/connect DNS-rebinding gap). A host name that resolves to an
+    // internal address is refused here — this is the case a redirect-time hostname check would miss.
+    [InlineData("169.254.169.254")] // IPv4 link-local / cloud metadata
+    [InlineData("224.0.0.1")] // IPv4 multicast
+    [InlineData("0.0.0.0")] // unspecified
+    [InlineData("::ffff:169.254.169.254")] // IPv4-mapped IPv6 link-local
+    public void ConnectVetting_BlockedAddress_ThrowsRegardlessOfEndpoint(string address)
+    {
+        using DotRocksStreamLoadClient client = CreateVettingClient("http://starrocks.local:8030");
+
+        DotRocksStreamLoadException exception = Assert.Throws<DotRocksStreamLoadException>(() =>
+            client.EnsureConnectAddressAllowed(IPAddress.Parse(address))
+        );
+
+        Assert.Contains(
+            "internal or link-local",
+            exception.Message,
+            StringComparison.OrdinalIgnoreCase
+        );
+    }
+
+    [Fact]
+    public void ConnectVetting_LoopbackFromPublicEndpoint_Throws()
+    {
+        using DotRocksStreamLoadClient client = CreateVettingClient("http://starrocks.local:8030");
+
+        Assert.Throws<DotRocksStreamLoadException>(() =>
+            client.EnsureConnectAddressAllowed(IPAddress.Loopback)
+        );
+    }
+
+    [Fact]
+    public void ConnectVetting_LoopbackFromLocalEndpoint_Allowed()
+    {
+        using DotRocksStreamLoadClient client = CreateVettingClient("http://localhost:8030");
+
+        // A single-node / local-development endpoint may legitimately reach the loopback BE.
+        client.EnsureConnectAddressAllowed(IPAddress.Loopback);
+        client.EnsureConnectAddressAllowed(IPAddress.IPv6Loopback);
+    }
+
+    [Fact]
+    public void ConnectVetting_RoutableAddress_Allowed()
+    {
+        using DotRocksStreamLoadClient client = CreateVettingClient("http://starrocks.local:8030");
+
+        // Public and RFC 1918 private addresses (real BE nodes) are allowed.
+        client.EnsureConnectAddressAllowed(IPAddress.Parse("203.0.113.10"));
+        client.EnsureConnectAddressAllowed(IPAddress.Parse("10.0.0.5"));
+    }
+
+    [Fact]
+    public async Task LoadCsvAsync_LocalEndpointRedirectToLinkLocal_Throws()
+    {
+        // The local-development exception only covers loopback; a link-local (metadata) target is
+        // refused even when the endpoint is loopback, so localhost cannot redirect to 169.254.x.
+        using var handler = new SingleRedirectHandler(
+            new Uri("http://169.254.169.254/api/warehouse/events/_stream_load")
+        );
+        using var httpClient = new HttpClient(handler);
+        DotRocksConnectionOptions options = DotRocksConnectionOptions.Parse(
+            "Server=localhost;User ID=alice;Password=secret;"
+                + "Stream Load Endpoint=http://localhost:8030;Allow Insecure Stream Load=true"
+        );
+        using var client = new DotRocksStreamLoadClient(
+            options,
+            httpClient,
+            disposeHttpClient: false
+        );
+        using var payload = new MemoryStream(Encoding.UTF8.GetBytes("1,one\\n"));
+
+        DotRocksStreamLoadException exception = await Assert
+            .ThrowsAsync<DotRocksStreamLoadException>(async () =>
+                await client
+                    .LoadCsvAsync(
+                        "warehouse",
+                        "events",
+                        payload,
+                        cancellationToken: TestContext.Current.CancellationToken
+                    )
+                    .ConfigureAwait(true)
+            )
+            .ConfigureAwait(true);
+
+        Assert.Contains(
+            "internal or link-local",
+            exception.Message,
+            StringComparison.OrdinalIgnoreCase
+        );
+        Assert.Single(handler.Requests);
+    }
+
+    [Fact]
+    public async Task LoadCsvAsync_LocalEndpointRedirectToLoopback_IsAllowed()
+    {
+        // A single-node / local-development endpoint (localhost) legitimately redirects to the
+        // loopback BE, so the guard must not block it: the FE and BE share the loopback host.
+        using var handler = new SequencedRedirectHandler(
+            new Uri("http://127.0.0.1:8040/api/warehouse/events/_stream_load")
+        );
+        using var httpClient = new HttpClient(handler);
+        DotRocksConnectionOptions options = DotRocksConnectionOptions.Parse(
+            "Server=localhost;User ID=alice;Password=secret;"
+                + "Stream Load Endpoint=http://localhost:8030;Allow Insecure Stream Load=true"
+        );
+        using var client = new DotRocksStreamLoadClient(
+            options,
+            httpClient,
+            disposeHttpClient: false
+        );
+        using var payload = new MemoryStream(Encoding.UTF8.GetBytes("1,one\\n"));
+
+        DotRocksStreamLoadResult result = await client
+            .LoadCsvAsync(
+                "warehouse",
+                "events",
+                payload,
+                cancellationToken: TestContext.Current.CancellationToken
+            )
+            .ConfigureAwait(true);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.Equal(
+            "http://127.0.0.1:8040/api/warehouse/events/_stream_load",
+            handler.Requests[1].RequestUri!.AbsoluteUri
+        );
+        // The credential is forwarded to the loopback BE (the intended local flow).
+        Assert.Equal("Basic", handler.Requests[1].Headers.Authorization!.Scheme);
+    }
+
     [Fact]
     public async Task LoadCsvAsync_RedirectWithUserInfo_ThrowsBeforeForwardingAuth()
     {
@@ -1265,6 +1477,8 @@ public sealed class DotRocksStreamLoadClientTests
                 )
             );
 
+    // Resolves any redirect host name to a routable public address so cross-host FE→BE redirects to
+    // host names (the normal case) are allowed in tests without a real DNS lookup.
     private static DotRocksStreamLoadClient CreateClient(HttpClient httpClient)
     {
         DotRocksConnectionOptions options = DotRocksConnectionOptions.Parse(
@@ -1292,6 +1506,19 @@ public sealed class DotRocksStreamLoadClientTests
             capabilityProbe
         );
     }
+
+    // Builds a client purely to exercise the connect-time SSRF vetting with synthetic addresses; the
+    // HTTP layer is never used (the default client's ConnectCallback path needs real sockets).
+    private static DotRocksStreamLoadClient CreateVettingClient(string endpoint) =>
+        new(
+            DotRocksConnectionOptions.Parse(
+                "Server=starrocks.local;User ID=alice;Password=secret;Allow Insecure Stream Load=true;"
+                    + "Stream Load Endpoint="
+                    + endpoint
+            ),
+            httpClient: null,
+            disposeHttpClient: true
+        );
 
     private static HttpResponseMessage JsonResponse(
         string json =
@@ -1399,6 +1626,32 @@ public sealed class DotRocksStreamLoadClientTests
                     Headers = { Location = location },
                 }
             );
+        }
+    }
+
+    // Redirects the first request to the supplied target, then returns a success payload — used to
+    // verify a redirect the guard is expected to allow (and that credentials reach the target).
+    private sealed class SequencedRedirectHandler(Uri location) : HttpMessageHandler
+    {
+        public List<HttpRequestMessage> Requests { get; } = [];
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken
+        )
+        {
+            Requests.Add(request);
+            if (Requests.Count == 1)
+            {
+                return Task.FromResult(
+                    new HttpResponseMessage(HttpStatusCode.TemporaryRedirect)
+                    {
+                        Headers = { Location = location },
+                    }
+                );
+            }
+
+            return Task.FromResult(JsonResponse());
         }
     }
 
