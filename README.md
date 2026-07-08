@@ -22,7 +22,7 @@ Roslyn analyzer suite built specifically for [StarRocks](https://www.starrocks.i
 
 ## Status
 
-The latest tagged release is DotRocks 1.3.1. The `main` branch is post-1.3.1; this
+The latest tagged release is DotRocks 1.3.2. The `main` branch is post-1.3.2; this
 README tracks `main`, and unreleased changes are listed in
 [CHANGELOG.md](https://github.com/kidoz/dotrocks/blob/main/CHANGELOG.md).
 The ADO.NET driver (`DotRocks.Data`), EF Core provider (`DotRocks.EntityFrameworkCore`),
