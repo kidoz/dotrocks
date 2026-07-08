@@ -580,6 +580,9 @@ public sealed class DotRocksStreamLoadClientTests
     [InlineData("224.0.0.1")] // IPv4 multicast
     [InlineData("0.0.0.0")] // unspecified
     [InlineData("::ffff:169.254.169.254")] // IPv4-mapped IPv6 link-local
+    [InlineData("fd00:ec2::254")] // IPv6 unique-local: AWS IMDS metadata endpoint
+    [InlineData("fc00::1")] // IPv6 unique-local
+    [InlineData("fe80::1")] // IPv6 link-local
     public void ConnectVetting_BlockedAddress_ThrowsRegardlessOfEndpoint(string address)
     {
         using DotRocksStreamLoadClient client = CreateVettingClient("http://starrocks.local:8030");
@@ -623,6 +626,52 @@ public sealed class DotRocksStreamLoadClientTests
         // Public and RFC 1918 private addresses (real BE nodes) are allowed.
         client.EnsureConnectAddressAllowed(IPAddress.Parse("203.0.113.10"));
         client.EnsureConnectAddressAllowed(IPAddress.Parse("10.0.0.5"));
+    }
+
+    [Fact]
+    public void ConnectVetting_ConfiguredEndpointHost_IsExempt()
+    {
+        // The configured endpoint host is trusted and not SSRF-vetted, so a hostname endpoint that
+        // resolves to loopback (e.g. an /etc/hosts alias) still connects; only server-chosen
+        // redirect hosts (a different host) are vetted.
+        using DotRocksStreamLoadClient client = CreateVettingClient("http://starrocks.local:8030");
+
+        Assert.True(client.IsConfiguredEndpointHost("starrocks.local"));
+        Assert.True(client.IsConfiguredEndpointHost("STARROCKS.LOCAL"));
+        Assert.False(client.IsConfiguredEndpointHost("be.starrocks.local"));
+    }
+
+    [Fact]
+    public async Task LoadCsvAsync_ConnectGateException_IsUnwrapped()
+    {
+        // The connect-time gate throws DotRocksStreamLoadException; SocketsHttpHandler wraps a
+        // ConnectCallback exception in HttpRequestException. The client must surface the original so
+        // a connect-time rejection is the same observable type as a redirect-time one.
+        using var handler = new RecordingHandler(
+            static (_, _) =>
+                throw new HttpRequestException(
+                    "connect failed",
+                    new DotRocksStreamLoadException("blocked by SSRF gate")
+                )
+        );
+        using var httpClient = new HttpClient(handler);
+        using var client = CreateClient(httpClient);
+        using var payload = new MemoryStream(Encoding.UTF8.GetBytes("1,one"));
+
+        DotRocksStreamLoadException exception = await Assert
+            .ThrowsAsync<DotRocksStreamLoadException>(async () =>
+                await client
+                    .LoadCsvAsync(
+                        "warehouse",
+                        "events",
+                        payload,
+                        cancellationToken: TestContext.Current.CancellationToken
+                    )
+                    .ConfigureAwait(true)
+            )
+            .ConfigureAwait(true);
+
+        Assert.Contains("blocked by SSRF gate", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1477,8 +1526,6 @@ public sealed class DotRocksStreamLoadClientTests
                 )
             );
 
-    // Resolves any redirect host name to a routable public address so cross-host FE→BE redirects to
-    // host names (the normal case) are allowed in tests without a real DNS lookup.
     private static DotRocksStreamLoadClient CreateClient(HttpClient httpClient)
     {
         DotRocksConnectionOptions options = DotRocksConnectionOptions.Parse(

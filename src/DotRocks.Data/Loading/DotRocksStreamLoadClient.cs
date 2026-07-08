@@ -28,9 +28,9 @@ public sealed class DotRocksStreamLoadClient : IDisposable
     private DotRocksServerCapabilities? _capabilities;
     private bool _isDisposed;
 
-    // Ordered from least to most restrictive so the most restrictive classification of any
-    // resolved address wins. Blocked targets (link-local/metadata, multicast, unspecified) are
-    // never a legitimate BE and are refused unconditionally; Loopback is refused unless the
+    // Classification of a connect target. A connection is refused if ANY resolved address is
+    // disallowed: Blocked targets (link-local/metadata, multicast, unspecified, IPv6 unique-local)
+    // are never a legitimate BE and are refused unconditionally; Loopback is refused unless the
     // configured endpoint is itself loopback (single-node / local development).
     private enum HostClass
     {
@@ -368,9 +368,20 @@ public sealed class DotRocksStreamLoadClient : IDisposable
             using var request = CreateRequest(method, requestUri, payload, headers, mediaType);
             HttpResponseMessage response;
             onRequestDispatch?.Invoke();
-            response = await _httpClient
-                .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
-                .ConfigureAwait(false);
+            try
+            {
+                response = await _httpClient
+                    .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (HttpRequestException ex)
+                when (ex.InnerException is DotRocksStreamLoadException streamLoadException)
+            {
+                // The connect-time SSRF gate (ConnectCallback) throws DotRocksStreamLoadException,
+                // which SocketsHttpHandler wraps in HttpRequestException. Surface the original so a
+                // connect-time rejection is the same observable type as the redirect-time one.
+                throw streamLoadException;
+            }
 
             using (response)
             {
@@ -625,9 +636,16 @@ public sealed class DotRocksStreamLoadClient : IDisposable
             );
         }
 
-        foreach (IPAddress address in addresses)
+        // The configured endpoint host is operator-supplied and trusted, so it is not SSRF-vetted:
+        // vetting targets server-chosen redirect hosts, not the endpoint the caller pointed at. This
+        // also lets a local endpoint whose host name resolves to loopback (e.g. an /etc/hosts alias)
+        // connect, which a literal "localhost"-only check would wrongly reject.
+        if (!IsConfiguredEndpointHost(dnsEndPoint.Host))
         {
-            EnsureConnectAddressAllowed(address);
+            foreach (IPAddress address in addresses)
+            {
+                EnsureConnectAddressAllowed(address);
+            }
         }
 
         var socket = new Socket(SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
@@ -644,6 +662,15 @@ public sealed class DotRocksStreamLoadClient : IDisposable
             throw;
         }
     }
+
+    // True when the connect target is the operator-configured endpoint host (which is trusted and
+    // exempt from SSRF vetting). Internal so the exemption is unit-testable without a real socket.
+    internal bool IsConfiguredEndpointHost(string host) =>
+        string.Equals(
+            host,
+            _options.StreamLoadEndpoint.DnsSafeHost,
+            StringComparison.OrdinalIgnoreCase
+        );
 
     // Vets a concrete address that a socket is about to connect to. Internal so the connect-time
     // policy can be unit-tested directly with synthetic addresses (the ConnectCallback path itself
@@ -710,6 +737,12 @@ public sealed class DotRocksStreamLoadClient : IDisposable
             || address.Equals(IPAddress.IPv6Any)
             || address.IsIPv6LinkLocal
             || address.IsIPv6Multicast
+            // IPv6 unique-local (fc00::/7). Unlike IPv4 RFC 1918 (allowed below), ULA is blocked
+            // because the IPv6 cloud-metadata endpoint (AWS's fd00:ec2::254) is a ULA address; an
+            // FE redirect to it would otherwise forward credentials to the metadata service. IPv6
+            // ULA-addressed BE nodes reachable via redirect are not a supported deployment — use a
+            // direct endpoint for those.
+            || address.IsIPv6UniqueLocal
         )
         {
             return HostClass.Blocked;
