@@ -64,4 +64,29 @@ public sealed class DotRocksConnectionPoolTests
             DotRocksConnectionPool.Clear(options);
         }
     }
+
+    [Fact]
+    public void EvictionCycle_DormantPool_IsReapedFromRegistry()
+    {
+        // A pool with no idle connections and no outstanding leases must be removed from the
+        // process-wide registry (and its eviction timer disposed) so per-key connection-string
+        // churn cannot accumulate pool objects and timers without bound. A subsequent GetPool must
+        // return a fresh instance, proving the dormant one was reaped rather than reused.
+        DotRocksConnectionOptions options = DotRocksConnectionOptions.Parse(
+            "Server=pool-reap.local;User ID=alice;Pooling=true"
+        );
+        try
+        {
+            DotRocksConnectionPool first = DotRocksConnectionPool.GetPool(options);
+
+            first.RunEvictionCycleForTests();
+
+            DotRocksConnectionPool second = DotRocksConnectionPool.GetPool(options);
+            Assert.NotSame(first, second);
+        }
+        finally
+        {
+            DotRocksConnectionPool.Clear(options);
+        }
+    }
 }

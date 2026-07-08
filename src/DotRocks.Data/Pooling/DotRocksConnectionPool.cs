@@ -139,7 +139,16 @@ internal sealed class DotRocksConnectionPool : IDisposable
         );
         try
         {
-            ObjectDisposedException.ThrowIf(_isDisposed, this);
+            // Re-check disposal under the gate, after the permit is already held. The eviction path
+            // only reaps when it observes ActiveLeaseCount == 0 under the same gate, so once this
+            // check passes the permit keeps ActiveLeaseCount >= 1 and the pool cannot be reaped from
+            // under this lease; conversely, if a reap already flipped _isDisposed, this observes it
+            // and LeaseFromPoolAsync retries on a fresh pool. This makes reaping atomic with leasing.
+            lock (_gate)
+            {
+                ObjectDisposedException.ThrowIf(_isDisposed, this);
+            }
+
             DotRocksPhysicalConnection? physicalConnection = TryTakeIdleConnection();
             physicalConnection ??= await DotRocksPhysicalConnection
                 .OpenAsync(_options, cancellationToken)
@@ -266,8 +275,13 @@ internal sealed class DotRocksConnectionPool : IDisposable
         return total;
     }
 
+    // Test seam: runs one eviction/reap cycle synchronously. In production the eviction timer is
+    // the only trigger, so tests cannot otherwise exercise dormant-pool reaping deterministically.
+    internal void RunEvictionCycleForTests() => EvictExpiredIdleConnections();
+
     private void EvictExpiredIdleConnections()
     {
+        bool reap;
         lock (_gate)
         {
             if (_isDisposed)
@@ -276,6 +290,38 @@ internal sealed class DotRocksConnectionPool : IDisposable
             }
 
             PruneExpiredIdleConnections();
+
+            // A pool with no idle connections and no outstanding leases is dormant. Without
+            // reaping, an application whose connection strings vary per request (per-tenant or
+            // per-credential keys) accumulates a pool object and its recurring eviction timer for
+            // every distinct key seen over the process lifetime — an unbounded resource leak.
+            //
+            // Flip _isDisposed inside the same locked region that observed zero active leases so the
+            // reap is atomic with lease admission: a lease that acquired its permit before this is
+            // reflected in ActiveLeaseCount (so we would not be here), and a lease that acquires one
+            // afterward observes _isDisposed under the gate and retries on a fresh pool. The idle
+            // queue is already empty, so there is nothing to drain.
+            reap = _idleConnections.Count == 0 && ActiveLeaseCount == 0;
+            if (reap)
+            {
+                _isDisposed = true;
+            }
+        }
+
+        if (reap)
+        {
+            // Remove only this exact instance, so a pool a concurrent GetPool() already replaced is
+            // left alone, and release the eviction timer. GetPool()/LeaseFromPoolAsync transparently
+            // recreate a fresh pool for the key on the next use.
+            (
+                (ICollection<KeyValuePair<DotRocksConnectionPoolKey, DotRocksConnectionPool>>)Pools
+            ).Remove(
+                new KeyValuePair<DotRocksConnectionPoolKey, DotRocksConnectionPool>(
+                    _options.CreatePoolKey(),
+                    this
+                )
+            );
+            _evictionTimer?.Dispose();
         }
     }
 
