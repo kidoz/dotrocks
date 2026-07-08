@@ -8,6 +8,15 @@ version is derived from the release tag at publish time.
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-07-08
+
+### Fixed
+- A binary `TIME` value whose components overflow `TimeSpan` now surfaces as a controlled
+  malformed-packet error instead of an uncaught `OverflowException`.
+- Dormant connection pools (no idle connections and no outstanding leases) are reaped from the
+  process-wide registry so connection strings that vary per request no longer accumulate pool
+  objects and their eviction timers; reaping is coordinated with lease admission.
+
 ### Security
 - Stream Load redirects are now vetted at connect time: the request host is resolved once and the
   socket connects to exactly that vetted address, refusing loopback, link-local (including the
@@ -23,13 +32,6 @@ version is derived from the release tag at publish time.
   connection.
 - `Maximum Pool Size` is bounded (rejected at both the connection-string builder setter and parse)
   to resist resource exhaustion from an oversized pool.
-
-### Fixed
-- A binary `TIME` value whose components overflow `TimeSpan` now surfaces as a controlled
-  malformed-packet error instead of an uncaught `OverflowException`.
-- Dormant connection pools (no idle connections and no outstanding leases) are reaped from the
-  process-wide registry so connection strings that vary per request no longer accumulate pool
-  objects and their eviction timers; reaping is coordinated with lease admission.
 
 ## [1.3.1] - 2026-07-06
 
