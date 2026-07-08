@@ -29,6 +29,9 @@ steps. We aim to acknowledge reports within a few business days.
   validating a host name and letting the HTTP client re-resolve) closes the DNS-rebinding gap and
   fails closed on resolution failure, so a malicious redirect cannot forward credentials to
   internal-only services.
+- Connection-string values are validated: unrecognized `Ssl Mode` (and other enum) values fail
+  closed rather than silently falling back to plaintext, and `Maximum Pool Size` is bounded to
+  resist resource-exhaustion via an oversized pool.
 - CI runs CodeQL and NuGet vulnerability auditing; dependencies are pinned with lock files.
 - Assemblies are unsigned (no strong-name/Authenticode); packages are published with build
   provenance attestation.

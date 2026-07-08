@@ -37,6 +37,11 @@ internal sealed record DotRocksConnectionOptions(
     public const bool DefaultPooling = false;
     public const int DefaultMinimumPoolSize = 0;
     public const int DefaultMaximumPoolSize = 100;
+
+    // An upper bound on Maximum Pool Size so a misconfigured or hostile connection string cannot
+    // request an effectively unbounded number of concurrent sockets/file descriptors against the
+    // server (resource-exhaustion DoS). Chosen well above any realistic application need.
+    public const int MaximumAllowedPoolSize = 65535;
     public const int DefaultConnectionIdleTimeoutSeconds = 300;
     public const int DefaultStreamLoadPort = 8030;
     public const X509RevocationMode DefaultSslRevocationMode = X509RevocationMode.Offline;
@@ -242,6 +247,7 @@ internal sealed record DotRocksConnectionOptions(
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(timeoutSeconds);
         ArgumentOutOfRangeException.ThrowIfNegative(minimumPoolSize);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumPoolSize);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(maximumPoolSize, MaximumAllowedPoolSize);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(idleTimeoutSeconds);
         if (minimumPoolSize > maximumPoolSize)
         {
@@ -250,6 +256,13 @@ internal sealed record DotRocksConnectionOptions(
                 minimumPoolSize,
                 "Minimum Pool Size must be less than or equal to Maximum Pool Size."
             );
+        }
+
+        if (!Enum.IsDefined(sslMode))
+        {
+            // Backstop: no parse path should produce an undefined mode, but a security setting must
+            // never reach connection negotiation as an unknown value that falls back to plaintext.
+            throw new ArgumentOutOfRangeException(nameof(sslMode), sslMode, "Unknown Ssl Mode.");
         }
 
         if (trustServerCertificate && sslMode != DotRocksSslMode.Required)
