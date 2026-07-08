@@ -44,6 +44,11 @@ internal sealed class DotRocksConnectionPool : IDisposable
     private readonly SemaphoreSlim _leaseGate;
     private readonly Queue<PooledPhysicalConnection> _idleConnections = new();
     private readonly Timer? _evictionTimer;
+
+    // Number of outstanding leases (permits held). Mutated only under _gate so the reap dormancy
+    // check (_idleConnections.Count == 0 && _activeLeases == 0) is a true single-lock invariant
+    // rather than deriving from the semaphore's count, which is mutated outside _gate.
+    private int _activeLeases;
     private volatile bool _isDisposed;
 
     private DotRocksConnectionPool(DotRocksConnectionOptions options)
@@ -139,13 +144,15 @@ internal sealed class DotRocksConnectionPool : IDisposable
         );
         try
         {
-            // Re-check disposal under the gate, after the permit is already held. The eviction path
-            // only reaps when it observes ActiveLeaseCount == 0 under the same gate, so once this
-            // check passes the permit keeps ActiveLeaseCount >= 1 and the pool cannot be reaped from
-            // under this lease; conversely, if a reap already flipped _isDisposed, this observes it
-            // and LeaseFromPoolAsync retries on a fresh pool. This makes reaping atomic with leasing.
+            // Count this lease and re-check disposal under the gate, after the permit is held. Both
+            // happen in the same locked region the reap uses to read _activeLeases, so reaping is
+            // atomic with leasing: if this runs first, _activeLeases >= 1 blocks the reap; if a reap
+            // ran first, _isDisposed is set and this throws so LeaseFromPoolAsync retries on a fresh
+            // pool. The increment is paired with the decrement in ReleaseLease (always called via
+            // this method's catch or via Return).
             lock (_gate)
             {
+                _activeLeases++;
                 ObjectDisposedException.ThrowIf(_isDisposed, this);
             }
 
@@ -203,6 +210,11 @@ internal sealed class DotRocksConnectionPool : IDisposable
 
     private void ReleaseLease()
     {
+        lock (_gate)
+        {
+            _activeLeases--;
+        }
+
         try
         {
             _leaseGate.Release();
@@ -250,8 +262,9 @@ internal sealed class DotRocksConnectionPool : IDisposable
         }
     }
 
-    // Permits taken from the lease gate equal the number of leased (in-use) connections.
-    internal int ActiveLeaseCount => _options.MaximumPoolSize - _leaseGate.CurrentCount;
+    // Outstanding leases (in-use connections). Read under _gate by the reap decision; the metric
+    // gauge reads it without the gate, which is an acceptable point-in-time value.
+    internal int ActiveLeaseCount => _activeLeases;
 
     private static int ObserveIdleConnections()
     {
