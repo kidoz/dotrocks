@@ -3,6 +3,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.IO.Compression;
 using System.Net;
 using System.Net.Http.Headers;
+using System.Net.Sockets;
 using System.Text;
 using DotRocks.Data.Diagnostics;
 using DotRocks.Data.Pooling;
@@ -27,17 +28,31 @@ public sealed class DotRocksStreamLoadClient : IDisposable
     private DotRocksServerCapabilities? _capabilities;
     private bool _isDisposed;
 
+    // Ordered from least to most restrictive so the most restrictive classification of any
+    // resolved address wins. Blocked targets (link-local/metadata, multicast, unspecified) are
+    // never a legitimate BE and are refused unconditionally; Loopback is refused unless the
+    // configured endpoint is itself loopback (single-node / local development).
+    private enum HostClass
+    {
+        Public = 0,
+        Loopback = 1,
+        Blocked = 2,
+    }
+
     /// <summary>
     /// Initializes a new instance of the <see cref="DotRocksStreamLoadClient"/> class.
     /// </summary>
     /// <param name="connectionString">The DotRocks connection string.</param>
     public DotRocksStreamLoadClient(string connectionString)
-        : this(DotRocksConnectionOptions.Parse(connectionString), CreateDefaultHttpClient(), true)
-    { }
+        : this(
+            DotRocksConnectionOptions.Parse(connectionString),
+            httpClient: null,
+            disposeHttpClient: true
+        ) { }
 
     internal DotRocksStreamLoadClient(
         DotRocksConnectionOptions options,
-        HttpClient httpClient,
+        HttpClient? httpClient,
         bool disposeHttpClient,
         Func<
             DotRocksConnectionOptions,
@@ -47,8 +62,11 @@ public sealed class DotRocksStreamLoadClient : IDisposable
     )
     {
         _options = options;
-        _httpClient = httpClient;
         _disposeHttpClient = disposeHttpClient;
+        // A caller-supplied client keeps the caller's transport; the default client installs the
+        // connect-time SSRF gate (ConnectCallback), which needs instance state and so cannot be
+        // built statically before the instance exists.
+        _httpClient = httpClient ?? CreateDefaultHttpClient();
         _capabilityProbe = capabilityProbe ?? ProbeServerCapabilitiesAsync;
         ValidateTransportSecurity(options);
     }
@@ -490,9 +508,15 @@ public sealed class DotRocksStreamLoadClient : IDisposable
         "CA2000:Dispose objects before losing scope",
         Justification = "HttpClient owns and disposes the SocketsHttpHandler through disposeHandler: true."
     )]
-    private static HttpClient CreateDefaultHttpClient()
+    private HttpClient CreateDefaultHttpClient()
     {
-        var handler = new SocketsHttpHandler { AllowAutoRedirect = false };
+        var handler = new SocketsHttpHandler
+        {
+            AllowAutoRedirect = false,
+            // Route every connection (initial and redirect hops) through the connect-time SSRF gate
+            // so the address the socket actually connects to is the vetted one.
+            ConnectCallback = VettedConnectAsync,
+        };
         return new HttpClient(handler, disposeHandler: true);
     }
 
@@ -518,6 +542,11 @@ public sealed class DotRocksStreamLoadClient : IDisposable
         return location.IsAbsoluteUri ? location : new Uri(requestUri, location);
     }
 
+    // Synchronous, no-DNS pre-check on a redirect target: it rejects unsupported schemes, embedded
+    // credentials, TLS downgrades, and IP-literal / "localhost" internal targets early — before any
+    // connection is attempted. Host names are NOT resolved here; the authoritative SSRF decision for
+    // a host name is made at connect time in VettedConnectAsync, which resolves once and connects to
+    // exactly the vetted address (so a rebinding host cannot resolve public here and internal later).
     private void ValidateRedirectUri(Uri redirectUri)
     {
         if (redirectUri.Scheme is not ("http" or "https"))
@@ -560,6 +589,146 @@ public sealed class DotRocksStreamLoadClient : IDisposable
                 "StarRocks Stream Load redirected to an HTTP endpoint. Use HTTPS or set 'Allow Insecure Stream Load=true' for trusted local test environments."
             );
         }
+
+        // Reject an IP-literal / "localhost" internal target up front (host names are handled at
+        // connect time). ClassifyLiteralHost returns Public for a host name, so this is a no-op for
+        // names and only fast-fails obvious internal literals.
+        EnsureTargetAllowed(ClassifyLiteralHost(redirectUri), "redirected");
+    }
+
+    // The authoritative SSRF gate for the default client. HttpClient hands each outbound connection
+    // (initial and every redirect hop) to this callback; DotRocks resolves the host exactly once,
+    // vets every resolved address, and connects the socket to those vetted addresses — so there is
+    // no second, unvetted resolution and a rebinding host cannot present a benign address to a
+    // validation step and an internal one to the actual connect. Resolution failure propagates (fail
+    // closed): the load fails rather than connecting to an unvetted target.
+    [SuppressMessage(
+        "Reliability",
+        "CA2000:Dispose objects before losing scope",
+        Justification = "On success the socket is owned by the returned NetworkStream (ownsSocket: true) and disposed with it; the catch disposes it on failure."
+    )]
+    private async ValueTask<Stream> VettedConnectAsync(
+        SocketsHttpConnectionContext context,
+        CancellationToken cancellationToken
+    )
+    {
+        DnsEndPoint dnsEndPoint = context.DnsEndPoint;
+        IPAddress[] addresses = IPAddress.TryParse(dnsEndPoint.Host, out IPAddress? literal)
+            ? [literal]
+            : await Dns.GetHostAddressesAsync(dnsEndPoint.Host, cancellationToken)
+                .ConfigureAwait(false);
+
+        if (addresses.Length == 0)
+        {
+            throw new DotRocksStreamLoadException(
+                "StarRocks Stream Load could not resolve the request host."
+            );
+        }
+
+        foreach (IPAddress address in addresses)
+        {
+            EnsureConnectAddressAllowed(address);
+        }
+
+        var socket = new Socket(SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
+        try
+        {
+            await socket
+                .ConnectAsync(addresses, dnsEndPoint.Port, cancellationToken)
+                .ConfigureAwait(false);
+            return new NetworkStream(socket, ownsSocket: true);
+        }
+        catch
+        {
+            socket.Dispose();
+            throw;
+        }
+    }
+
+    // Vets a concrete address that a socket is about to connect to. Internal so the connect-time
+    // policy can be unit-tested directly with synthetic addresses (the ConnectCallback path itself
+    // requires real sockets).
+    internal void EnsureConnectAddressAllowed(IPAddress address) =>
+        EnsureTargetAllowed(ClassifyAddress(address), "resolved to");
+
+    private void EnsureTargetAllowed(HostClass targetClass, string verb)
+    {
+        // Link-local (including the 169.254.169.254 cloud-metadata address), multicast, and
+        // unspecified targets are never a legitimate BE, so refuse them regardless of the endpoint.
+        if (targetClass == HostClass.Blocked)
+        {
+            throw new DotRocksStreamLoadException(
+                $"StarRocks Stream Load {verb} an internal or link-local address; DotRocks refuses to forward credentials to it."
+            );
+        }
+
+        // A loopback target is only legitimate for a single-node / local-development endpoint that
+        // is itself loopback; a routable endpoint must not reach loopback (the exception is
+        // deliberately narrow — it does not cover link-local or multicast).
+        if (
+            targetClass == HostClass.Loopback
+            && ClassifyLiteralHost(_options.StreamLoadEndpoint) != HostClass.Loopback
+        )
+        {
+            throw new DotRocksStreamLoadException(
+                $"StarRocks Stream Load {verb} a loopback address from a non-local endpoint; DotRocks refuses to forward credentials to it."
+            );
+        }
+    }
+
+    // Classifies the configured endpoint host without DNS resolution: it is operator-supplied and
+    // trusted, and only its loopback-ness matters for the narrow local-development exception.
+    private static HostClass ClassifyLiteralHost(Uri uri)
+    {
+        string host = uri.DnsSafeHost;
+        if (string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase))
+        {
+            return HostClass.Loopback;
+        }
+
+        return IPAddress.TryParse(host, out IPAddress? address)
+            ? ClassifyAddress(address)
+            : HostClass.Public;
+    }
+
+    private static HostClass ClassifyAddress(IPAddress address)
+    {
+        // Normalize an IPv4-mapped IPv6 literal (e.g. ::ffff:127.0.0.1 or ::ffff:169.254.169.254)
+        // to its IPv4 form so the IPv4 range checks below apply instead of being skipped.
+        if (address.IsIPv4MappedToIPv6)
+        {
+            address = address.MapToIPv4();
+        }
+
+        if (IPAddress.IsLoopback(address))
+        {
+            return HostClass.Loopback;
+        }
+
+        if (
+            address.Equals(IPAddress.Any)
+            || address.Equals(IPAddress.IPv6Any)
+            || address.IsIPv6LinkLocal
+            || address.IsIPv6Multicast
+        )
+        {
+            return HostClass.Blocked;
+        }
+
+        if (address.AddressFamily == AddressFamily.InterNetwork)
+        {
+            byte[] octets = address.GetAddressBytes();
+
+            // IPv4 link-local 169.254.0.0/16 (includes the 169.254.169.254 cloud-metadata address)
+            // and multicast 224.0.0.0/4. RFC 1918 private ranges are deliberately NOT blocked,
+            // since real StarRocks BE nodes commonly live on private addresses.
+            if ((octets[0] == 169 && octets[1] == 254) || octets[0] is >= 224 and <= 239)
+            {
+                return HostClass.Blocked;
+            }
+        }
+
+        return HostClass.Public;
     }
 
     private static void ValidateTransportSecurity(DotRocksConnectionOptions options)

@@ -21,7 +21,14 @@ steps. We aim to acknowledge reports within a few business days.
   `Preferred` (opportunistic: TLS when the server advertises it, plaintext otherwise). Use
   `Required` for non-local servers to reject a connection that cannot negotiate TLS and resist
   active downgrade.
-- HTTP Stream Load rejects plaintext credentials and refuses HTTPS→HTTP redirect downgrades.
+- HTTP Stream Load rejects plaintext credentials and refuses HTTPS→HTTP redirect downgrades. Every
+  outbound connection (initial and each redirect hop) is vetted at connect time: the host is
+  resolved once and the socket connects to exactly that vetted address, refusing loopback/link-local
+  (including the `169.254.169.254` cloud-metadata address)/multicast/unspecified targets unless the
+  configured endpoint is itself loopback. Resolving and connecting in one step (rather than
+  validating a host name and letting the HTTP client re-resolve) closes the DNS-rebinding gap and
+  fails closed on resolution failure, so a malicious redirect cannot forward credentials to
+  internal-only services.
 - CI runs CodeQL and NuGet vulnerability auditing; dependencies are pinned with lock files.
 - Assemblies are unsigned (no strong-name/Authenticode); packages are published with build
   provenance attestation.
