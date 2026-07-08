@@ -12,6 +12,8 @@ dependencies.
 | `Microsoft.CodeAnalysis.CSharp` | Analyzer implementation and analyzer unit tests. |
 | `Microsoft.CodeAnalysis.CSharp.Workspaces` | Code-fix implementation and tests. |
 | `Microsoft.CodeAnalysis.PublicApiAnalyzers` | Build-time public API surface tracking for shipping packages. |
+| `Microsoft.CodeAnalysis.Workspaces.Common` | Transitive Roslyn workspace pin for EF Core design-time tooling. |
+| `Microsoft.CodeAnalysis.Workspaces.MSBuild` | Transitive Roslyn workspace pin for EF Core design-time tooling. |
 | `Microsoft.Extensions.DependencyInjection` | Dependency-injection sample wiring. |
 | `Microsoft.EntityFrameworkCore` | EF Core provider implementation and tests. |
 | `Microsoft.EntityFrameworkCore.Design` | EF Core design-time migrations services. |
