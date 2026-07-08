@@ -194,7 +194,17 @@ public sealed class DotRocksConnectionStringBuilder
     public DotRocksSslMode SslMode
     {
         get => GetEnum(SslModeKeyword, DotRocksSslMode.Preferred);
-        set => this[SslModeKeyword] = value;
+        set
+        {
+            // Reject an undefined value (e.g. (DotRocksSslMode)99) at the setter so a security
+            // setting cannot carry an unknown mode that later resolves to plaintext.
+            if (!Enum.IsDefined(value))
+            {
+                throw new ArgumentOutOfRangeException(nameof(value), value, "Unknown Ssl Mode.");
+            }
+
+            this[SslModeKeyword] = value;
+        }
     }
 
     /// <summary>
@@ -216,7 +226,19 @@ public sealed class DotRocksConnectionStringBuilder
     {
         get =>
             GetEnum(SslRevocationCheckKeyword, DotRocksConnectionOptions.DefaultSslRevocationMode);
-        set => this[SslRevocationCheckKeyword] = value;
+        set
+        {
+            if (!Enum.IsDefined(value))
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(value),
+                    value,
+                    "Unknown Ssl Revocation Check mode."
+                );
+            }
+
+            this[SslRevocationCheckKeyword] = value;
+        }
     }
 
     /// <summary>

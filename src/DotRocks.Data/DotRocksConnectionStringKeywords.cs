@@ -135,11 +135,27 @@ internal static class DotRocksConnectionStringKeywords
 
         if (value is TEnum typed)
         {
+            // A boxed enum can already be undefined — e.g. builder.SslMode = (DotRocksSslMode)99
+            // through the typed setter stores a boxed value that never went through the string
+            // parse below. Validate it here too so the typed path cannot bypass the defined-member
+            // check and silently fall back to the least-secure switch arm (plaintext).
+            if (!Enum.IsDefined(typed))
+            {
+                throw new ArgumentException(
+                    $"{canonical} value '{typed}' is not supported.",
+                    nameof(builder)
+                );
+            }
+
             return typed;
         }
 
         string text = Convert.ToString(value, CultureInfo.InvariantCulture) ?? string.Empty;
-        if (Enum.TryParse(text, ignoreCase: true, out TEnum parsed))
+        // Enum.TryParse accepts any numeric string (e.g. "Ssl Mode=3") and returns an undefined
+        // enum value, which for a security-relevant setting like Ssl Mode would silently fall
+        // through to the least-secure switch arm (plaintext). Require the parsed value to name a
+        // defined member so unrecognized configuration fails closed instead of failing open.
+        if (Enum.TryParse(text, ignoreCase: true, out TEnum parsed) && Enum.IsDefined(parsed))
         {
             return parsed;
         }

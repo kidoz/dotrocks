@@ -160,6 +160,58 @@ public sealed class ConnectionStringBuilderTests
         Assert.Throws<ArgumentOutOfRangeException>(() => builder.ConnectionIdleTimeout = 0);
     }
 
+    [Theory]
+    [InlineData("Ssl Mode=3")]
+    [InlineData("Ssl Mode=99")]
+    [InlineData("Ssl Mode=-1")]
+    public void UndefinedNumericSslMode_FailsClosed(string sslModeSetting)
+    {
+        // An undefined numeric enum value (e.g. copied from another driver's numbering) parses via
+        // Enum.TryParse but names no defined member. It must throw rather than silently resolving to
+        // an undefined mode that falls back to plaintext — security config fails closed.
+        Assert.Throws<ArgumentException>(() =>
+            _ = DotRocksConnectionOptions.Parse("Server=h;User ID=alice;" + sslModeSetting)
+        );
+    }
+
+    [Fact]
+    public void UndefinedTypedSslMode_FailsClosed()
+    {
+        // The typed setter rejects an undefined value (cast from an arbitrary int) up front.
+        var builder = new DotRocksConnectionStringBuilder();
+        Assert.Throws<ArgumentOutOfRangeException>(() => builder.SslMode = (DotRocksSslMode)99);
+
+        // And if an undefined boxed enum is injected past the typed setter (raw indexer), building
+        // the options must still fail closed rather than resolving to an undefined mode that the
+        // TLS switch treats as plaintext.
+        builder["Ssl Mode"] = (DotRocksSslMode)99;
+        Assert.Throws<ArgumentException>(() => _ = builder.BuildOptions());
+    }
+
+    [Fact]
+    public void MaximumPoolSize_AboveCap_Throws()
+    {
+        // An oversized Maximum Pool Size would let a single pool open an effectively unbounded
+        // number of sockets/file descriptors; it is bounded to resist resource-exhaustion.
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            _ = DotRocksConnectionOptions.Parse(
+                "Server=h;User ID=alice;Maximum Pool Size="
+                    + (DotRocksConnectionOptions.MaximumAllowedPoolSize + 1).ToString(
+                        System.Globalization.CultureInfo.InvariantCulture
+                    )
+            )
+        );
+
+        // The cap itself remains accepted.
+        DotRocksConnectionOptions atCap = DotRocksConnectionOptions.Parse(
+            "Server=h;User ID=alice;Maximum Pool Size="
+                + DotRocksConnectionOptions.MaximumAllowedPoolSize.ToString(
+                    System.Globalization.CultureInfo.InvariantCulture
+                )
+        );
+        Assert.Equal(DotRocksConnectionOptions.MaximumAllowedPoolSize, atCap.MaximumPoolSize);
+    }
+
     [Fact]
     public void TlsOptions_ParseAliases()
     {
