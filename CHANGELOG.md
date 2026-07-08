@@ -8,6 +8,29 @@ version is derived from the release tag at publish time.
 
 ## [Unreleased]
 
+### Security
+- Stream Load redirects are now vetted at connect time: the request host is resolved once and the
+  socket connects to exactly that vetted address, refusing loopback, link-local (including the
+  `169.254.169.254` and IPv6 `fd00:ec2::254` cloud-metadata endpoints), multicast, unspecified,
+  and IPv6 unique-local targets unless the configured endpoint is itself loopback. This closes an
+  SSRF / credential-forwarding and DNS-rebinding gap and fails closed on resolution failure. The
+  configured endpoint host is trusted and exempt; only server-chosen redirect hosts are vetted.
+- Unrecognized `Ssl Mode` values — including out-of-range numeric strings and undefined typed-enum
+  values set through the connection-string builder — now fail closed instead of silently
+  negotiating a plaintext connection.
+- Session state mutated by a prepared statement (for example `SET @tenant := ?` or a
+  `SELECT ... := ...` user-variable assignment) is no longer reused across leases of a pooled
+  connection.
+- `Maximum Pool Size` is bounded (rejected at both the connection-string builder setter and parse)
+  to resist resource exhaustion from an oversized pool.
+
+### Fixed
+- A binary `TIME` value whose components overflow `TimeSpan` now surfaces as a controlled
+  malformed-packet error instead of an uncaught `OverflowException`.
+- Dormant connection pools (no idle connections and no outstanding leases) are reaped from the
+  process-wide registry so connection strings that vary per request no longer accumulate pool
+  objects and their eviction timers; reaping is coordinated with lease admission.
+
 ## [1.3.1] - 2026-07-06
 
 ### Added
