@@ -167,6 +167,12 @@ public sealed class DotRocksConnectionStringBuilder
         set
         {
             ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value);
+            // Mirror the Validate() bound so an oversized value fails at the setter (like Port),
+            // not later during parse.
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(
+                value,
+                DotRocksConnectionOptions.MaximumAllowedPoolSize
+            );
             this[MaximumPoolSizeKeyword] = value;
         }
     }
