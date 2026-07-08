@@ -138,6 +138,29 @@ public sealed class BinaryProtocolTests
         );
     }
 
+    [Fact]
+    public void Decode_TimeMicrosecondsOverflow_ThrowsMalformedPacket()
+    {
+        // Regression: days just under TimeSpan.MaxValue.Days pass the day guard and the TimeSpan
+        // constructor, but adding a huge microseconds field overflows via TimeSpan.operator+, which
+        // throws OverflowException (not ArgumentOutOfRangeException). A malicious server row must
+        // still surface as a controlled MalformedPacketException, never a raw OverflowException.
+        ColumnDefinition timeColumn = Column(0x0B); // TIME
+
+        var row = new List<byte> { 0x00, 0x00 }; // header + 1-column NULL bitmap
+        row.Add(0x0C); // value length: sign + days + hms + microseconds
+        row.Add(0x00); // not negative
+        row.AddRange([0xFF, 0xE3, 0xA2, 0x00]); // days = 10675199 (== TimeSpan.MaxValue.Days)
+        row.Add(0x02); // hours
+        row.Add(0x30); // minutes = 48
+        row.Add(0x05); // seconds
+        row.AddRange([0xFF, 0xFF, 0xFF, 0xFF]); // microseconds: overflows the addition
+
+        Assert.Throws<MalformedPacketException>(() =>
+            BinaryResultRowDecoder.Decode(row.ToArray(), [timeColumn])
+        );
+    }
+
     private static ColumnDefinition Column(byte type) =>
         new(
             "def",
