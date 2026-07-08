@@ -158,6 +158,13 @@ public sealed class ConnectionStringBuilderTests
         Assert.Throws<ArgumentOutOfRangeException>(() => builder.MinimumPoolSize = -1);
         Assert.Throws<ArgumentOutOfRangeException>(() => builder.MaximumPoolSize = 0);
         Assert.Throws<ArgumentOutOfRangeException>(() => builder.ConnectionIdleTimeout = 0);
+        // The setter mirrors the parse-time cap so an oversized value fails immediately (like Port),
+        // not later during Open/parse.
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            builder.MaximumPoolSize = DotRocksConnectionOptions.MaximumAllowedPoolSize + 1
+        );
+        builder.MaximumPoolSize = DotRocksConnectionOptions.MaximumAllowedPoolSize;
+        Assert.Equal(DotRocksConnectionOptions.MaximumAllowedPoolSize, builder.MaximumPoolSize);
     }
 
     [Theory]
