@@ -1,2 +1,14 @@
 - name: Getting started
   href: getting-started.md
+- name: Connection strings
+  href: connection-strings.md
+- name: Security
+  href: security.md
+- name: Stream Load
+  href: stream-load.md
+- name: Observability
+  href: observability.md
+- name: EF Core entity mapping
+  href: ef-core-entity-mapping.md
+- name: Analyzers
+  href: analyzers.md

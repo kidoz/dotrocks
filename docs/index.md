@@ -20,7 +20,12 @@ README and changelog for unreleased behavior.
 ## Documentation
 
 - [Getting started](articles/getting-started.md)
+- [Connection strings](articles/connection-strings.md)
+- [Security](articles/security.md)
+- [Stream Load](articles/stream-load.md)
+- [Observability](articles/observability.md)
 - [EF Core entity mapping](articles/ef-core-entity-mapping.md)
+- [Analyzers](articles/analyzers.md)
 - [StarRocks 3.x driver developer notes](starrocks-3x-driver-developer-notes.md)
 - [StarRocks 4.x driver developer notes](starrocks-4x-driver-developer-notes.md)
 - [API reference](xref:DotRocks.Data.DotRocksConnection)

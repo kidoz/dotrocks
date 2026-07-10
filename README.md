@@ -44,7 +44,12 @@ driver, and it is not a general-purpose MySQL driver.
 ## Documentation
 
 - [Getting started](https://github.com/kidoz/dotrocks/blob/main/docs/articles/getting-started.md)
+- [Connection strings](https://github.com/kidoz/dotrocks/blob/main/docs/articles/connection-strings.md)
+- [Security](https://github.com/kidoz/dotrocks/blob/main/docs/articles/security.md)
+- [Stream Load](https://github.com/kidoz/dotrocks/blob/main/docs/articles/stream-load.md)
+- [Observability](https://github.com/kidoz/dotrocks/blob/main/docs/articles/observability.md)
 - [EF Core entity mapping](https://github.com/kidoz/dotrocks/blob/main/docs/articles/ef-core-entity-mapping.md)
+- [Analyzers](https://github.com/kidoz/dotrocks/blob/main/docs/articles/analyzers.md)
 - [StarRocks 3.x driver developer notes](https://github.com/kidoz/dotrocks/blob/main/docs/starrocks-3x-driver-developer-notes.md)
 - [StarRocks 4.x driver developer notes](https://github.com/kidoz/dotrocks/blob/main/docs/starrocks-4x-driver-developer-notes.md)
 
