@@ -23,7 +23,8 @@ consumers of your project:
 ```
 
 For IDE squiggle-to-fix ergonomics, optionally add `DotRocks.Analyzers.CodeFixes` the same
-way — it carries the code-fix providers that pair with the diagnostics.
+way — it carries code-fix providers for the diagnostics where the correction is mechanical
+(currently DTR0001 and DTR0002).
 
 ## Diagnostic catalog
 
