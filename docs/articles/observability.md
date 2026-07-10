@@ -44,8 +44,15 @@ All metrics are on meter `DotRocks.Data` (version `1.0.0`).
 | `dotrocks.stream_load.rows_filtered` | Counter | `{row}` | Rows filtered/rejected. |
 | `dotrocks.stream_load.bytes` | Counter | `By` | Payload bytes accepted. |
 
-The Stream Load duration/row/byte metrics carry a bounded `outcome` tag from the set
-`{success, error}`. No other high-cardinality labels are used.
+Every metric tag is drawn from a bounded set — no high-cardinality labels are used:
+
+| Metric | Tags |
+|---|---|
+| `dotrocks.connection.open.duration` | `outcome` ∈ `{success, timeout, error}` |
+| `dotrocks.transaction.duration` | `outcome` ∈ `{committed, rolledback}` |
+| `dotrocks.commands.executed`, `dotrocks.command.duration` | `outcome` ∈ `{success, error, canceled, timeout}`; `operation` = bounded SQL keyword or `OTHER` |
+| `dotrocks.stream_load.*` | `outcome` ∈ `{success, error}` |
+| `dotrocks.connections.opened`, `dotrocks.pool.*` | none |
 
 ## Tracing spans
 
