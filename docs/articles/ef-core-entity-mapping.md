@@ -177,11 +177,12 @@ columns, **one** bucket, `replication_num = 1`.
 | `HasStarRocksPrimaryKey(params cols)` | `PRIMARY KEY (...)` | Required for writable entities |
 | `HasStarRocksUniqueKey(params cols)` | `UNIQUE KEY (...)` | |
 | `HasStarRocksHashDistribution(int buckets, params cols)` | `DISTRIBUTED BY HASH (...) BUCKETS n` | `buckets` must be `> 0` |
-| `DistributedRandomly(int buckets)` | `DISTRIBUTED BY RANDOM BUCKETS n` | Clears hash-distribution columns; `buckets` must be `> 0` |
-| `HasSortKey(params cols)` | `ORDER BY (...)` | Uses store column names |
+| `HasStarRocksRandomDistribution(int buckets = 1)` | `DISTRIBUTED BY RANDOM BUCKETS n` | Clears hash-distribution columns; `buckets` must be `> 0`; `DistributedRandomly(int buckets)` is a shorthand alias |
+| `HasStarRocksSortKey(params cols)` | `ORDER BY (...)` | Uses store column names; `HasSortKey(params cols)` is a shorthand alias |
 | `HasStarRocksProperty(string name, string value)` | Adds a `PROPERTIES` entry | Property names and values are validated against quote injection |
 | `HasStarRocksReplicationNum(int n)` | `PROPERTIES("replication_num" = "n")` | `n` must be `> 0`; overrides a custom `replication_num` property |
 
+Migration scaffolding emits the canonical `HasStarRocks*` names, not the short aliases.
 The column names passed here are **store column names** (the actual table columns), and they
 must exist on the entity's table — the validator rejects unknown columns. When several
 entities map to the same table, their table-shape annotations must not conflict.
