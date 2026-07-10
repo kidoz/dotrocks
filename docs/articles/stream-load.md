@@ -41,12 +41,10 @@ DotRocksStreamLoadResult result = await client.LoadCsvAsync(
         RowDelimiter = "\\n",
     }
 );
-
-if (!result.IsSuccess)
-{
-    throw new InvalidOperationException($"Load failed: {result.Status}");
-}
 ```
+
+A non-success status throws `DotRocksStreamLoadException`, so a returned `result` always
+has `IsSuccess == true` — see [Interpreting the result](#interpreting-the-result).
 
 The payload stream is uploaded with **no in-memory buffering** — it is streamed directly
 to the server. If the server redirects, DotRocks replays the stream, so a **non-seekable**
@@ -119,10 +117,11 @@ partition names must not be empty or contain `,`.
 | `IsSuccess` | `bool` | `Success`, `OK`, or publish-timeout. |
 | `IsPublishTimeout` | `bool` | Data was written but visibility publish timed out (rows become queryable slightly later). |
 
-When `IsSuccess` is `false`, `LoadCsvAsync`/`LoadJsonAsync` already throws a
-`DotRocksStreamLoadException` carrying the status, HTTP status code, and the result — so
-explicit `IsSuccess` checks are for the publish-timeout case if you want to treat it
-differently.
+A non-success server status never reaches the caller as a result: `LoadCsvAsync` and
+`LoadJsonAsync` throw a `DotRocksStreamLoadException` carrying the status, the HTTP
+status code, the parsed result, and the raw response body (`ResponseBody`). A returned
+result always has `IsSuccess == true`; the one outcome worth checking explicitly is
+`IsPublishTimeout` — the data was written, visibility just lags.
 
 ## Transactional Stream Load (two-phase)
 
@@ -132,24 +131,34 @@ For exactly-once ingestion across multiple loads, use a Stream Load transaction:
 terminals); operations on the wrong state throw `InvalidOperationException`.
 
 ```csharp
-await using var client = new DotRocksStreamLoadClient(connectionString);
-await using DotRocksStreamLoadTransaction txn = await client.BeginTransactionAsync(
+using var client = new DotRocksStreamLoadClient(connectionString);
+DotRocksStreamLoadTransaction txn = await client.BeginTransactionAsync(
     "warehouse",
     "events",
     new DotRocksStreamLoadTransactionOptions { Label = "events_txn_001" }
 );
 
-await using Stream batch1 = File.OpenRead("events-1.csv");
-await txn.LoadCsvAsync(batch1);
+try
+{
+    await using Stream batch1 = File.OpenRead("events-1.csv");
+    await txn.LoadCsvAsync(batch1);
 
-await using Stream batch2 = File.OpenRead("events-2.csv");
-await txn.LoadCsvAsync(batch2);
+    await using Stream batch2 = File.OpenRead("events-2.csv");
+    await txn.LoadCsvAsync(batch2);
 
-await txn.PrepareAsync();
-await txn.CommitAsync();
+    await txn.PrepareAsync();
+    await txn.CommitAsync();
+}
+catch
+{
+    await txn.RollbackAsync();
+    throw;
+}
 ```
 
-`await using` on the transaction rolls it back on disposal if it was not committed.
+The transaction is not disposable, and nothing rolls it back implicitly. Call
+`RollbackAsync()` on failure (as above) so the label's loads are discarded immediately
+instead of lingering until the server's idle timeout expires.
 
 ### Transaction options
 
