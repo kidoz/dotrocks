@@ -8,6 +8,31 @@ version is derived from the release tag at publish time.
 
 ## [Unreleased]
 
+## [1.3.3] - 2026-07-13
+
+### Added
+- The ADO.NET synchronous command path (`ExecuteReader`, `ExecuteScalar`, `ExecuteNonQuery`,
+  and the `CommandBehavior` overloads) now runs on a native synchronous streaming pipeline
+  instead of blocking on the async path through `GetAwaiter().GetResult()`, so large result
+  sets stream row-by-row without buffering the whole set or pinning a thread-pool thread on an
+  async continuation. `DotRocksDataReader` gains a `DisposeAsync()` override, and
+  `ExecuteScalar`/`ExecuteScalarAsync` now request a single row instead of draining the rest of
+  the result set.
+- Compilable samples for secure (TLS) connections, connection pooling, transactions, and Stream
+  Load transactions (`DotRocks.Samples.SecureConnection`, `.ConnectionPooling`, `.Transactions`,
+  and `.StreamLoadTransaction`).
+- Expanded performance benchmark coverage — analyzer execution, EF Core materialization, protocol
+  hot paths, packet framing, and Stream Load — with a broadened performance-budget guard.
+
+### Changed
+- Documentation refresh: new connection-string, security, Stream Load, observability, and
+  analyzer guides; corrected Stream Load result and transaction guidance; documented the bounded
+  metric tags and the canonical EF Core mapping APIs; and clarified analyzer code-fix availability.
+
+### Fixed
+- The transitive Roslyn workspace packages are pinned so the analyzer projects can no longer pick
+  up a conflicting `Microsoft.CodeAnalysis.*` transitive dependency version.
+
 ## [1.3.2] - 2026-07-08
 
 ### Fixed
@@ -271,7 +296,8 @@ version is derived from the release tag at publish time.
 - Stream Load refuses to forward credentials over a downgraded (HTTPS→HTTP) redirect.
 - NuGet vulnerability auditing and CodeQL analysis in CI.
 
-[Unreleased]: https://github.com/kidoz/dotrocks/compare/v1.3.2...HEAD
+[Unreleased]: https://github.com/kidoz/dotrocks/compare/v1.3.3...HEAD
+[1.3.3]: https://github.com/kidoz/dotrocks/compare/v1.3.2...v1.3.3
 [1.3.2]: https://github.com/kidoz/dotrocks/compare/v1.3.1...v1.3.2
 [1.3.1]: https://github.com/kidoz/dotrocks/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/kidoz/dotrocks/compare/v1.2.0...v1.3.0
