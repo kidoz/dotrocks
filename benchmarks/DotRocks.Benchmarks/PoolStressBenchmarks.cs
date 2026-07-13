@@ -32,6 +32,13 @@ public class PoolStressBenchmarks
     }
 
     [Benchmark]
+    public async Task OpenAndCloseWarmPool()
+    {
+        await using var connection = new DotRocksConnection(_connectionString);
+        await connection.OpenAsync();
+    }
+
+    [Benchmark]
     [SuppressMessage(
         "Performance",
         "CA1822:Mark members as static",

@@ -26,6 +26,11 @@ internal sealed record PerformanceBudgetViolation(
     long? MaxAllocatedBytes = null
 );
 
+internal readonly record struct PerformanceReportDisposition(
+    bool IsServerBacked,
+    PerformanceBudgetViolation? ExecutionViolation
+);
+
 internal sealed class PerformanceBudgetResult(IReadOnlyList<PerformanceBudgetViolation> violations)
 {
     public IReadOnlyList<PerformanceBudgetViolation> Violations { get; } =
@@ -109,6 +114,11 @@ internal static class PerformanceBudgetCatalog
                     MaxMeanNanoseconds: 20_000,
                     MaxAllocatedBytes: 16_384
                 ),
+                ["ReadSinglePacketPayloadSynchronously"] = new(
+                    "ReadSinglePacketPayloadSynchronously",
+                    MaxMeanNanoseconds: 5_000,
+                    MaxAllocatedBytes: 1_024
+                ),
                 // Parameter binding for a repeatedly executed command. Budgets set from measured
                 // values with CI headroom; the prepared variant should not regress past the
                 // re-scan variant.
@@ -121,6 +131,31 @@ internal static class PerformanceBudgetCatalog
                     "BindPreparedParameterized",
                     MaxMeanNanoseconds: 5_000,
                     MaxAllocatedBytes: 2_048
+                ),
+                ["ParseHandshake"] = new(
+                    "ParseHandshake",
+                    MaxMeanNanoseconds: 500,
+                    MaxAllocatedBytes: 512
+                ),
+                ["SerializePreparedParameters"] = new(
+                    "SerializePreparedParameters",
+                    MaxMeanNanoseconds: 2_000,
+                    MaxAllocatedBytes: 2_048
+                ),
+                ["ParseDotRocksDecimal"] = new(
+                    "ParseDotRocksDecimal",
+                    MaxMeanNanoseconds: 1_000,
+                    MaxAllocatedBytes: 512
+                ),
+                ["DrainDiscardedRows"] = new(
+                    "DrainDiscardedRows",
+                    MaxMeanNanoseconds: 20_000,
+                    MaxAllocatedBytes: 16_384
+                ),
+                ["AnalyzeRepresentativeCompilation"] = new(
+                    "AnalyzeRepresentativeCompilation",
+                    MaxMeanNanoseconds: 15_000_000,
+                    MaxAllocatedBytes: 4_194_304
                 ),
             }
         );
@@ -140,22 +175,38 @@ internal static class PerformanceBudgetValidator
         List<PerformanceBudgetViolation> reportViolations = [];
         List<PerformanceBudgetMeasurement> measurements = [];
         bool sawServerBackedReport = false;
+        bool sawNonServerBackedReport = false;
         foreach (Summary summary in summaries)
         {
             foreach (BenchmarkReport report in summary.Reports)
             {
                 string benchmarkName = report.BenchmarkCase.Descriptor.WorkloadMethod.Name;
 
-                // Server-backed benchmarks are observational and need a live server, so they are
-                // never gated against the budget catalog.
-                if (
-                    report.BenchmarkCase.Descriptor.Categories.Contains(
-                        BenchmarkCategories.ServerBacked,
-                        StringComparer.Ordinal
-                    )
-                )
+                PerformanceReportDisposition disposition = ClassifyReport(
+                    benchmarkName,
+                    report.BenchmarkCase.Descriptor.Categories,
+                    report.Success
+                );
+                if (disposition.IsServerBacked)
                 {
                     sawServerBackedReport = true;
+                }
+                else
+                {
+                    sawNonServerBackedReport = true;
+                }
+
+                if (disposition.ExecutionViolation is not null)
+                {
+                    reportViolations.Add(disposition.ExecutionViolation);
+                    continue;
+                }
+
+                // Server-backed benchmarks are observational and need a live server, so they are
+                // never gated against the budget catalog. Execution failures are checked above so
+                // an unavailable or broken workload cannot produce a successful process exit.
+                if (disposition.IsServerBacked)
+                {
                     continue;
                 }
 
@@ -166,19 +217,8 @@ internal static class PerformanceBudgetValidator
                     continue;
                 }
 
-                // A failed or statistics-less report must surface as a violation rather than be
-                // silently dropped, otherwise a broken benchmark would pass the performance gate.
-                if (!report.Success)
-                {
-                    reportViolations.Add(
-                        new PerformanceBudgetViolation(
-                            benchmarkName,
-                            $"Benchmark '{benchmarkName}' failed to run; no measurement was produced."
-                        )
-                    );
-                    continue;
-                }
-
+                // A statistics-less report must surface as a violation rather than be silently
+                // dropped, otherwise a broken benchmark would pass the performance gate.
                 if (report.ResultStatistics is null)
                 {
                     reportViolations.Add(
@@ -202,7 +242,13 @@ internal static class PerformanceBudgetValidator
 
         // A server-backed-only run (no budgeted measurements, but server benchmarks did run) is
         // not a gate run, so it must not trip the empty-measurement guard below.
-        if (measurements.Count == 0 && sawServerBackedReport)
+        if (
+            IsServerBackedOnlyRun(
+                measurements.Count,
+                sawServerBackedReport,
+                sawNonServerBackedReport
+            )
+        )
         {
             return new PerformanceBudgetResult(reportViolations);
         }
@@ -213,6 +259,32 @@ internal static class PerformanceBudgetValidator
         );
         return new PerformanceBudgetResult([.. reportViolations, .. budgetResult.Violations]);
     }
+
+    internal static PerformanceReportDisposition ClassifyReport(
+        string benchmarkName,
+        IEnumerable<string> categories,
+        bool succeeded
+    )
+    {
+        ArgumentNullException.ThrowIfNull(categories);
+        bool isServerBacked = categories.Contains(
+            BenchmarkCategories.ServerBacked,
+            StringComparer.Ordinal
+        );
+        PerformanceBudgetViolation? violation = succeeded
+            ? null
+            : new PerformanceBudgetViolation(
+                benchmarkName,
+                $"Benchmark '{benchmarkName}' failed to run; no measurement was produced."
+            );
+        return new PerformanceReportDisposition(isServerBacked, violation);
+    }
+
+    internal static bool IsServerBackedOnlyRun(
+        int measurementCount,
+        bool sawServerBackedReport,
+        bool sawNonServerBackedReport
+    ) => measurementCount == 0 && sawServerBackedReport && !sawNonServerBackedReport;
 
     [SuppressMessage(
         "Globalization",

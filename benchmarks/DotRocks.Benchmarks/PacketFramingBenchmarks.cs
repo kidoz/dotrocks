@@ -47,6 +47,14 @@ public class PacketFramingBenchmarks
     }
 
     [Benchmark]
+    public int ReadSinglePacketPayloadSynchronously()
+    {
+        using var stream = new MemoryStream(_singlePacket);
+        var reader = new PacketReader(stream);
+        return reader.ReadPayload().Length;
+    }
+
+    [Benchmark]
     [SuppressMessage(
         "Performance",
         "CA1822:Mark members as static",

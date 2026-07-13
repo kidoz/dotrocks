@@ -333,12 +333,17 @@
           "xunit.v3.runner.common": "[3.2.2]"
         }
       },
+      "dotrocks.analyzers": {
+        "type": "Project"
+      },
       "dotrocks.benchmarks": {
         "type": "Project",
         "dependencies": {
           "BenchmarkDotNet": "[0.15.8, )",
+          "DotRocks.Analyzers": "[1.0.0, )",
           "DotRocks.Data": "[1.0.0, )",
           "DotRocks.EntityFrameworkCore": "[1.0.0, )",
+          "Microsoft.CodeAnalysis.CSharp": "[5.0.0, )",
           "Microsoft.EntityFrameworkCore": "[10.0.9, )"
         }
       },

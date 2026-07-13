@@ -514,9 +514,10 @@ Benchmark results fail the process if a measured benchmark exceeds its configure
 time or allocation budget, if a new budgeted benchmark is added without a budget entry, or if
 no measurements were validated at all (for example a typoed filter or a Dry-only run).
 
-Server-backed stress benchmarks (pool lease latency, lease contention, cancellation discard, and
-large-result streaming) need a live StarRocks server and are observational, so they are excluded
-from the budget gate:
+Server-backed stress benchmarks (warm-pool open, lease latency and contention, cancellation
+discard, large-result streaming, EF Core materialization, and Stream Load throughput) need a live
+StarRocks server and are observational, so they are excluded from the numeric budget gate. A
+benchmark execution or setup failure still fails the process:
 
 ```bash
 just starrocks-up     # start StarRocks

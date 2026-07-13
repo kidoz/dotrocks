@@ -125,6 +125,44 @@ public sealed class PerformanceBudgetValidatorTests
     }
 
     [Fact]
+    public void ClassifyReport_WhenServerBackedBenchmarkFails_ReportsViolationBeforeSkippingBudget()
+    {
+        PerformanceReportDisposition disposition = PerformanceBudgetValidator.ClassifyReport(
+            "StreamLargeResult",
+            [BenchmarkCategories.ServerBacked],
+            succeeded: false
+        );
+
+        Assert.True(disposition.IsServerBacked);
+        Assert.NotNull(disposition.ExecutionViolation);
+        Assert.Equal("StreamLargeResult", disposition.ExecutionViolation.BenchmarkName);
+        Assert.Contains(
+            "failed to run",
+            disposition.ExecutionViolation.Message,
+            StringComparison.Ordinal
+        );
+    }
+
+    [Fact]
+    public void IsServerBackedOnlyRun_WhenLocalDryReportWasSeen_DoesNotBypassEmptyGuard()
+    {
+        Assert.False(
+            PerformanceBudgetValidator.IsServerBackedOnlyRun(
+                measurementCount: 0,
+                sawServerBackedReport: true,
+                sawNonServerBackedReport: true
+            )
+        );
+        Assert.True(
+            PerformanceBudgetValidator.IsServerBackedOnlyRun(
+                measurementCount: 0,
+                sawServerBackedReport: true,
+                sawNonServerBackedReport: false
+            )
+        );
+    }
+
+    [Fact]
     public void BudgetCatalog_CoversEveryBudgetedBenchmarkInTheAssembly()
     {
         // Server-backed benchmarks are observational and intentionally have no budget, so they are
@@ -146,6 +184,20 @@ public sealed class PerformanceBudgetValidatorTests
         Assert.Equal(
             benchmarkNames,
             PerformanceBudgetCatalog.Budgets.Keys.Order(StringComparer.Ordinal)
+        );
+    }
+
+    [Fact]
+    public void StreamLoadBenchmark_ResetsTableBeforeEveryMeasuredIteration()
+    {
+        System.Reflection.MethodInfo? resetMethod = typeof(StreamLoadBenchmarks).GetMethod(
+            nameof(StreamLoadBenchmarks.ResetTable)
+        );
+
+        Assert.NotNull(resetMethod);
+        Assert.Contains(
+            resetMethod.GetCustomAttributes(inherit: false),
+            attribute => attribute.GetType().Name == "IterationSetupAttribute"
         );
     }
 
