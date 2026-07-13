@@ -2,7 +2,11 @@
 [Bb]in/
 [Oo]bj/
 artifacts/
+tmp/
 *.user
+
+# Benchmark output
+BenchmarkDotNet.Artifacts/
 
 # Test results
 [Tt]est[Rr]esults/
