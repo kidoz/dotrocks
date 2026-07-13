@@ -4,7 +4,7 @@ DotRocks is a native .NET driver, Entity Framework Core provider, and Roslyn ana
 built specifically for [StarRocks](https://www.starrocks.io/). It implements its own managed
 StarRocks client protocol and takes no dependency on any MySQL driver.
 
-The latest tagged release is 1.3.2. The `main` branch is post-1.3.2; use the repository
+The latest tagged release is 1.3.3. The `main` branch is post-1.3.3; use the repository
 README and changelog for unreleased behavior.
 
 ## Packages
