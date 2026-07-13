@@ -315,6 +315,17 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
         );
     }
 
+    public QueryResult ExecuteQuery(string commandText)
+    {
+        MarkSessionDirtyIfMutating(commandText);
+        return ExecuteExchange(
+            QueryCommandBuilder.Build(commandText),
+            "I/O failed while executing the StarRocks command.",
+            static (firstPayload, reader) =>
+                TextResultParser.Read(firstPayload, reader, connectionId: null)
+        );
+    }
+
     /// <summary>
     /// Sends one command payload and parses its response with <paramref name="parseResponse"/>.
     /// Owns the shared exchange preamble (write the request, continue the packet sequence into the
@@ -385,6 +396,59 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
         }
     }
 
+    private T ExecuteExchange<T>(
+        byte[] payload,
+        string ioFailureMessage,
+        Func<byte[], PacketReader, T> parseResponse
+    )
+    {
+        if (_isDisposed)
+        {
+            throw new InvalidOperationException("The physical StarRocks connection is closed.");
+        }
+
+        try
+        {
+            var writer = new PacketWriter(_stream);
+            writer.ResetSequence();
+            writer.WritePayload(payload);
+
+            var reader = new PacketReader(_stream);
+            reader.ResetSequence(writer.SequenceId);
+            byte[] firstPayload = reader.ReadPayload();
+            return parseResponse(firstPayload, reader);
+        }
+        catch (MalformedPacketException ex)
+        {
+            MarkBroken();
+            throw new DotRocksException("StarRocks returned malformed protocol bytes.", ex);
+        }
+        catch (IOException ex)
+        {
+            MarkBroken();
+            throw new DotRocksException(
+                ioFailureMessage,
+                serverErrorCode: null,
+                sqlState: null,
+                isTransient: true,
+                connectionId: null,
+                innerException: ex
+            );
+        }
+        catch (ObjectDisposedException ex)
+        {
+            MarkBroken();
+            throw new DotRocksException(
+                "The StarRocks connection was closed while executing a command.",
+                serverErrorCode: null,
+                sqlState: null,
+                isTransient: true,
+                connectionId: null,
+                innerException: ex
+            );
+        }
+    }
+
     /// <summary>
     /// Sends <c>COM_STMT_PREPARE</c> for the given SQL and parses the prepare response, consuming the
     /// parameter and column definition packets (and their trailing EOF packets, since DotRocks does
@@ -405,6 +469,16 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
             static (firstPayload, reader, ct) =>
                 ParsePrepareResponseAsync(firstPayload, reader, ct),
             cancellationToken
+        );
+    }
+
+    public StatementPrepareResult Prepare(string commandText)
+    {
+        MarkSessionDirtyIfMutating(commandText);
+        return ExecuteExchange(
+            StatementCommandBuilder.BuildPrepare(commandText),
+            "I/O failed while preparing the StarRocks statement.",
+            ParsePrepareResponse
         );
     }
 
@@ -446,6 +520,33 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
         return new StatementPrepareResult(statementId, parameterCount, columnCount);
     }
 
+    private static StatementPrepareResult ParsePrepareResponse(
+        byte[] firstPayload,
+        PacketReader reader
+    )
+    {
+        if (ResultPacket.IsError(firstPayload))
+        {
+            throw ResultPacket.ReadError(firstPayload, connectionId: null);
+        }
+
+        var protocolReader = new ProtocolReader(firstPayload);
+        byte status = protocolReader.ReadByte();
+        if (status != 0x00)
+        {
+            throw new MalformedPacketException(
+                $"Unexpected COM_STMT_PREPARE response status 0x{status:X2}."
+            );
+        }
+
+        uint statementId = (uint)protocolReader.ReadFixedInteger(4);
+        int columnCount = (int)protocolReader.ReadFixedInteger(2);
+        int parameterCount = (int)protocolReader.ReadFixedInteger(2);
+        ConsumeDefinitionBlock(reader, parameterCount);
+        ConsumeDefinitionBlock(reader, columnCount);
+        return new StatementPrepareResult(statementId, parameterCount, columnCount);
+    }
+
     /// <summary>
     /// Returns a prepared statement for the given SQL, reusing a cached one for this connection when
     /// possible (since prepared statements are session-scoped) and otherwise preparing it and adding
@@ -479,12 +580,33 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
         return prepared;
     }
 
+    public StatementPrepareResult PrepareCached(string commandText)
+    {
+        if (_preparedStatements.TryGetValue(commandText, out StatementPrepareResult cached))
+        {
+            return cached;
+        }
+
+        StatementPrepareResult prepared = Prepare(commandText);
+        if (_preparedStatements.Count >= MaxCachedPreparedStatements)
+        {
+            string evictedKey = _preparedStatementOrder.Dequeue();
+            if (_preparedStatements.Remove(evictedKey, out StatementPrepareResult evicted))
+            {
+                ClosePreparedStatement(evicted.StatementId);
+            }
+        }
+
+        _preparedStatements[commandText] = prepared;
+        _preparedStatementOrder.Enqueue(commandText);
+        return prepared;
+    }
+
     /// <summary>
     /// Sends <c>COM_STMT_EXECUTE</c> for a prepared statement with the given positional parameter
-    /// values and reads the binary result set into a buffered <see cref="QueryResult"/>. The whole
-    /// result is buffered so the statement can be closed immediately after.
+    /// values and returns a streaming binary result.
     /// </summary>
-    public ValueTask<QueryResult> ExecutePreparedAsync(
+    public ValueTask<StreamingQueryResult> ExecutePreparedStreamingAsync(
         uint statementId,
         IReadOnlyList<object?> parameterValues,
         CancellationToken cancellationToken
@@ -493,8 +615,24 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
             BinaryParameterEncoder.BuildExecute(statementId, parameterValues),
             "I/O failed while executing the prepared StarRocks statement.",
             static (firstPayload, reader, ct) =>
-                TextResultParser.ReadBinaryAsync(firstPayload, reader, connectionId: null, ct),
+                TextResultParser.ReadBinaryStreamingAsync(
+                    firstPayload,
+                    reader,
+                    connectionId: null,
+                    ct
+                ),
             cancellationToken
+        );
+
+    public StreamingQueryResult ExecutePreparedStreaming(
+        uint statementId,
+        IReadOnlyList<object?> parameterValues
+    ) =>
+        ExecuteExchange(
+            BinaryParameterEncoder.BuildExecute(statementId, parameterValues),
+            "I/O failed while executing the prepared StarRocks statement.",
+            static (firstPayload, reader) =>
+                TextResultParser.ReadBinaryStreaming(firstPayload, reader, connectionId: null)
         );
 
     /// <summary>Sends <c>COM_STMT_CLOSE</c> for the given statement id. The server sends no reply.</summary>
@@ -528,6 +666,26 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
         }
     }
 
+    public void ClosePreparedStatement(uint statementId)
+    {
+        if (_isDisposed)
+        {
+            return;
+        }
+
+        try
+        {
+            byte[] payload = StatementCommandBuilder.BuildClose(statementId);
+            var writer = new PacketWriter(_stream);
+            writer.ResetSequence();
+            writer.WritePayload(payload);
+        }
+        catch (Exception ex) when (ex is IOException or ObjectDisposedException)
+        {
+            MarkBroken();
+        }
+    }
+
     private static async ValueTask ConsumeDefinitionBlockAsync(
         PacketReader reader,
         int count,
@@ -546,6 +704,27 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
 
         // Without CLIENT_DEPRECATE_EOF the definition block is terminated by an EOF packet.
         byte[] terminator = await reader.ReadPayloadAsync(cancellationToken).ConfigureAwait(false);
+        if (!ResultPacket.IsEndOfResultSet(terminator))
+        {
+            throw new MalformedPacketException(
+                "Expected an EOF packet after a prepared-statement definition block."
+            );
+        }
+    }
+
+    private static void ConsumeDefinitionBlock(PacketReader reader, int count)
+    {
+        if (count == 0)
+        {
+            return;
+        }
+
+        for (int i = 0; i < count; i++)
+        {
+            reader.ReadPayload();
+        }
+
+        byte[] terminator = reader.ReadPayload();
         if (!ResultPacket.IsEndOfResultSet(terminator))
         {
             throw new MalformedPacketException(
@@ -598,6 +777,17 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
             static (firstPayload, reader, ct) =>
                 TextResultParser.ReadStreamingAsync(firstPayload, reader, connectionId: null, ct),
             cancellationToken
+        );
+    }
+
+    public StreamingQueryResult ExecuteQueryStreaming(string commandText)
+    {
+        MarkSessionDirtyIfMutating(commandText);
+        return ExecuteExchange(
+            QueryCommandBuilder.Build(commandText),
+            "I/O failed while executing the StarRocks command.",
+            static (firstPayload, reader) =>
+                TextResultParser.ReadStreaming(firstPayload, reader, connectionId: null)
         );
     }
 

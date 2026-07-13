@@ -472,6 +472,67 @@ public sealed class DotRocksDataReaderTests
     }
 
     [Fact]
+    public void Close_PartiallyReadStreamingResult_DoesNotDecodeDiscardedRows()
+    {
+        using var stream = StarRocksPacketFactory.PayloadStream(
+            firstSequenceId: 0,
+            StarRocksPacketFactory.TextRow("1"),
+            StarRocksPacketFactory.TextRow("not-an-integer"),
+            StarRocksPacketFactory.Eof()
+        );
+        var rowReader = ResultRowReader.ForText(
+            new PacketReader(stream),
+            [Column("value", (byte)ColumnType.Long)],
+            connectionId: null
+        );
+        var reader = new DotRocksDataReader(
+            StreamingQueryResult.FromRows(rowReader.Columns, rowReader)
+        );
+
+        Assert.True(reader.Read());
+        Assert.Equal(1, reader.GetInt32(0));
+
+        // The second value is intentionally invalid for LONG. Closing must frame and discard it,
+        // not parse a value the caller will never observe.
+        reader.Close();
+
+        Assert.True(rowReader.IsConsumed);
+        Assert.Equal(stream.Length, stream.Position);
+    }
+
+    [Fact]
+    public async Task DisposeAsync_PartiallyReadStreamingResult_UsesAsyncDrain()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using MemoryStream packets = StarRocksPacketFactory.PayloadStream(
+            firstSequenceId: 0,
+            StarRocksPacketFactory.TextRow("1"),
+            StarRocksPacketFactory.TextRow("2"),
+            StarRocksPacketFactory.Eof()
+        );
+        var stream = new AsyncReadOnlyStream(packets.ToArray());
+        await using (stream.ConfigureAwait(true))
+        {
+            var rowReader = ResultRowReader.ForText(
+                new PacketReader(stream),
+                [Column("value", (byte)ColumnType.Long)],
+                connectionId: null
+            );
+            var reader = new DotRocksDataReader(
+                StreamingQueryResult.FromRows(rowReader.Columns, rowReader)
+            );
+
+            Assert.True(await reader.ReadAsync(ct).ConfigureAwait(true));
+            Assert.Equal(1, reader.GetInt32(0));
+
+            await reader.DisposeAsync().ConfigureAwait(true);
+
+            Assert.True(rowReader.IsConsumed);
+            Assert.Equal(stream.Length, stream.Position);
+        }
+    }
+
+    [Fact]
     public void Read_StreamingSingleRowBehavior_LeavesRemainingRowsForCloseToDrain()
     {
         using var stream = StarRocksPacketFactory.PayloadStream(
@@ -619,6 +680,61 @@ public sealed class DotRocksDataReaderTests
         Assert.False(reader.Read());
 
         Assert.False(reader.NextResult());
+    }
+
+    private sealed class AsyncReadOnlyStream(byte[] bytes) : Stream
+    {
+        private readonly MemoryStream _inner = new(bytes, writable: false);
+
+        public override bool CanRead => true;
+
+        public override bool CanSeek => true;
+
+        public override bool CanWrite => false;
+
+        public override long Length => _inner.Length;
+
+        public override long Position
+        {
+            get => _inner.Position;
+            set => _inner.Position = value;
+        }
+
+        public override void Flush() { }
+
+        public override int Read(byte[] buffer, int offset, int count) =>
+            throw new InvalidOperationException("DisposeAsync used synchronous stream I/O.");
+
+        public override int Read(Span<byte> buffer) =>
+            throw new InvalidOperationException("DisposeAsync used synchronous stream I/O.");
+
+        public override ValueTask<int> ReadAsync(
+            Memory<byte> buffer,
+            CancellationToken cancellationToken = default
+        ) => _inner.ReadAsync(buffer, cancellationToken);
+
+        public override long Seek(long offset, SeekOrigin origin) => _inner.Seek(offset, origin);
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) =>
+            throw new NotSupportedException();
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                _inner.Dispose();
+            }
+
+            base.Dispose(disposing);
+        }
+
+        public override async ValueTask DisposeAsync()
+        {
+            await _inner.DisposeAsync().ConfigureAwait(false);
+            await base.DisposeAsync().ConfigureAwait(false);
+        }
     }
 
     private static ColumnDefinition Column(

@@ -5,6 +5,7 @@ using DotRocks.Data;
 using DotRocks.Data.Loading;
 using DotRocks.Data.Pooling;
 using DotRocks.Data.Protocol.Framing;
+using DotRocks.Data.Protocol.Results;
 using DotRocks.Protocol.Tests.TestInfrastructure;
 using Xunit;
 
@@ -129,6 +130,65 @@ public sealed class DotRocksConnectionRecoveryTests
     }
 
     [Fact]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Performance",
+        "CA1849:Call async methods when in an async method",
+        Justification = "This regression test intentionally exercises the provider's synchronous ADO.NET path."
+    )]
+    public async Task SynchronousCommandAndReader_ReadResultWithoutBlockingAsyncImplementation()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using var server = FakeStarRocksServer.Start(async stream =>
+        {
+            await FakeStarRocksServer.CompleteAuthenticationAsync(stream).ConfigureAwait(true);
+            _ = await FakeStarRocksServer
+                .ReadCommandAndReplyResultSetAsync(stream, "one", "two")
+                .ConfigureAwait(true);
+        });
+
+        using var connection = new DotRocksConnection(server.ConnectionString);
+        await connection.OpenAsync(ct).ConfigureAwait(true);
+        using DbCommand command = connection.CreateCommand();
+        command.CommandText = "SELECT value FROM t";
+
+        using DbDataReader reader = command.ExecuteReader();
+
+        Assert.True(reader.Read());
+        Assert.Equal("one", reader.GetString(0));
+        Assert.True(reader.Read());
+        Assert.Equal("two", reader.GetString(0));
+        Assert.False(reader.Read());
+    }
+
+    [Fact]
+    public async Task ExecuteScalarAsync_DrainsRemainingRowsWithoutDecodingThem()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using var server = FakeStarRocksServer.Start(async stream =>
+        {
+            await FakeStarRocksServer.CompleteAuthenticationAsync(stream).ConfigureAwait(true);
+            await ReplyWithIntegerAndInvalidDiscardedRowAsync(stream).ConfigureAwait(true);
+            _ = await FakeStarRocksServer.ReadCommandAndReplyOkAsync(stream).ConfigureAwait(true);
+        });
+
+        using var connection = new DotRocksConnection(server.ConnectionString);
+        await connection.OpenAsync(ct).ConfigureAwait(true);
+        using (DbCommand command = connection.CreateCommand())
+        {
+            command.CommandText = "SELECT value FROM t";
+
+            object? value = await command.ExecuteScalarAsync(ct).ConfigureAwait(true);
+
+            Assert.Equal(1, value);
+        }
+
+        Assert.Equal(ConnectionState.Open, connection.State);
+        using DbCommand next = connection.CreateCommand();
+        next.CommandText = "SELECT 1";
+        _ = await next.ExecuteNonQueryAsync(ct).ConfigureAwait(true);
+    }
+
+    [Fact]
     public async Task SchemaOnlyBehavior_ExposesMetadataWithoutRowsAndKeepsConnectionUsable()
     {
         CancellationToken ct = TestContext.Current.CancellationToken;
@@ -229,11 +289,16 @@ public sealed class DotRocksConnectionRecoveryTests
         command.CommandText = "SELECT value FROM t";
         command.ParameterMode = DotRocksParameterMode.ServerPrepared;
 
-        DotRocksException exception = await Assert
-            .ThrowsAsync<DotRocksException>(async () =>
-                _ = await command.ExecuteReaderAsync(ct).ConfigureAwait(true)
-            )
-            .ConfigureAwait(true);
+        DbDataReader reader = await command.ExecuteReaderAsync(ct).ConfigureAwait(true);
+        DotRocksException exception;
+        await using (reader.ConfigureAwait(true))
+        {
+            exception = await Assert
+                .ThrowsAsync<DotRocksException>(async () =>
+                    _ = await reader.ReadAsync(ct).ConfigureAwait(true)
+                )
+                .ConfigureAwait(true);
+        }
 
         // The real server error must surface, not a wrapped malformed-packet failure.
         Assert.Equal(1064, exception.ServerErrorCode);
@@ -347,5 +412,31 @@ public sealed class DotRocksConnectionRecoveryTests
         await writer
             .WritePayloadAsync(StarRocksPacketFactory.Error("Query aborted by server"), ct)
             .ConfigureAwait(true);
+    }
+
+    private static async Task ReplyWithIntegerAndInvalidDiscardedRowAsync(NetworkStream stream)
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        var reader = new PacketReader(stream);
+        reader.ResetSequence(0);
+        _ = await reader.ReadPayloadAsync(ct).ConfigureAwait(true);
+
+        var writer = new PacketWriter(stream);
+        writer.ResetSequence(reader.SequenceId);
+        await writer.WritePayloadAsync(new byte[] { 0x01 }, ct).ConfigureAwait(true);
+        await writer
+            .WritePayloadAsync(
+                StarRocksPacketFactory.ColumnDefinition("value", (byte)ColumnType.Long),
+                ct
+            )
+            .ConfigureAwait(true);
+        await writer.WritePayloadAsync(StarRocksPacketFactory.Eof(), ct).ConfigureAwait(true);
+        await writer
+            .WritePayloadAsync(StarRocksPacketFactory.TextRow("1"), ct)
+            .ConfigureAwait(true);
+        await writer
+            .WritePayloadAsync(StarRocksPacketFactory.TextRow("not-an-integer"), ct)
+            .ConfigureAwait(true);
+        await writer.WritePayloadAsync(StarRocksPacketFactory.Eof(), ct).ConfigureAwait(true);
     }
 }

@@ -307,7 +307,10 @@ public sealed class DotRocksConnection : DbConnection
             physical.ExecuteQueryAsync(commandText, cancellationToken)
         );
 
-    internal ValueTask<QueryResult> ExecutePreparedQueryAsync(
+    internal QueryResult ExecuteQuery(string commandText) =>
+        ExecuteOnPhysical(physical => physical.ExecuteQuery(commandText));
+
+    internal ValueTask<StreamingQueryResult> ExecutePreparedStreamingQueryAsync(
         string commandText,
         IReadOnlyList<object?> parameterValues,
         CancellationToken cancellationToken
@@ -328,8 +331,29 @@ public sealed class DotRocksConnection : DbConnection
             }
 
             return await physical
-                .ExecutePreparedAsync(prepared.StatementId, parameterValues, cancellationToken)
+                .ExecutePreparedStreamingAsync(
+                    prepared.StatementId,
+                    parameterValues,
+                    cancellationToken
+                )
                 .ConfigureAwait(false);
+        });
+
+    internal StreamingQueryResult ExecutePreparedStreamingQuery(
+        string commandText,
+        IReadOnlyList<object?> parameterValues
+    ) =>
+        ExecuteOnPhysical(physical =>
+        {
+            StatementPrepareResult prepared = physical.PrepareCached(commandText);
+            if (prepared.ParameterCount != parameterValues.Count)
+            {
+                throw new DotRocksException(
+                    $"The prepared statement expects {prepared.ParameterCount} parameter(s) but {parameterValues.Count} were supplied."
+                );
+            }
+
+            return physical.ExecutePreparedStreaming(prepared.StatementId, parameterValues);
         });
 
     internal ValueTask<StreamingQueryResult> ExecuteStreamingQueryAsync(
@@ -339,6 +363,9 @@ public sealed class DotRocksConnection : DbConnection
         ExecuteOnPhysicalAsync(physical =>
             physical.ExecuteQueryStreamingAsync(commandText, cancellationToken)
         );
+
+    internal StreamingQueryResult ExecuteStreamingQuery(string commandText) =>
+        ExecuteOnPhysical(physical => physical.ExecuteQueryStreaming(commandText));
 
     // Shared guard/failure skeleton for executing one operation against the leased physical
     // connection: the connection must be open with no active reader, and failures close the
@@ -365,6 +392,30 @@ public sealed class DotRocksConnection : DbConnection
             // cancellation mid-command). A plain server error leaves the connection at a clean
             // packet boundary and must not close it, even when pool policy (session dirtiness,
             // lifetime) would decline to reuse the physical connection later.
+            if (lease.PhysicalConnection.IsBroken)
+            {
+                CloseCore(reusable: false);
+            }
+
+            throw;
+        }
+    }
+
+    private T ExecuteOnPhysical<T>(Func<DotRocksPhysicalConnection, T> operation)
+    {
+        DotRocksConnectionPoolLease? lease = _lease;
+        if (_state != ConnectionState.Open || lease is null)
+        {
+            throw new InvalidOperationException("The connection is not open.");
+        }
+
+        ValidateNoActiveReader();
+        try
+        {
+            return operation(lease.PhysicalConnection);
+        }
+        catch
+        {
             if (lease.PhysicalConnection.IsBroken)
             {
                 CloseCore(reusable: false);

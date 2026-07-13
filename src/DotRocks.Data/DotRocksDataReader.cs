@@ -473,10 +473,35 @@ public sealed class DotRocksDataReader
             return true;
         }
 
-        return ReadStreamingRowAsync(CancellationToken.None)
-            .ConfigureAwait(false)
-            .GetAwaiter()
-            .GetResult();
+        return ReadStreamingRow();
+    }
+
+    private bool ReadStreamingRow()
+    {
+        if (SuppressesRows || IsRowLimitReached)
+        {
+            _currentRow = null;
+            return false;
+        }
+
+        if (_hasPrefetchedRow)
+        {
+            _currentRow = _prefetchedRow;
+            _prefetchedRow = null;
+            _hasPrefetchedRow = false;
+            _rowIndex++;
+            return true;
+        }
+
+        object?[]? row = FetchStreamingRow();
+        if (row is null)
+        {
+            return false;
+        }
+
+        _rowIndex++;
+        _currentRow = row;
+        return true;
     }
 
     /// <inheritdoc />
@@ -564,6 +589,53 @@ public sealed class DotRocksDataReader
 
             return row;
         }
+        catch (DotRocksException) when (_rowReader.IsConsumed)
+        {
+            _isConsumed = true;
+            ReportConnectionCompletion(reusable: true);
+            throw;
+        }
+        catch
+        {
+            _isConsumed = true;
+            ReportConnectionCompletion(reusable: false);
+            throw;
+        }
+    }
+
+    private object?[]? FetchStreamingRow()
+    {
+        if (_isConsumed)
+        {
+            return null;
+        }
+
+        if (_rowReader is null)
+        {
+            _isConsumed = true;
+            ReportConnectionCompletion(reusable: true);
+            return null;
+        }
+
+        try
+        {
+            object?[]? row = _rowReader.ReadRow();
+            if (row is null)
+            {
+                _isConsumed = true;
+                _currentRow = null;
+                ReportConnectionCompletion(reusable: true);
+                return null;
+            }
+
+            return row;
+        }
+        catch (DotRocksException) when (_rowReader.IsConsumed)
+        {
+            _isConsumed = true;
+            ReportConnectionCompletion(reusable: true);
+            throw;
+        }
         catch
         {
             _isConsumed = true;
@@ -584,10 +656,7 @@ public sealed class DotRocksDataReader
             return true;
         }
 
-        _prefetchedRow = FetchStreamingRowAsync(CancellationToken.None)
-            .ConfigureAwait(false)
-            .GetAwaiter()
-            .GetResult();
+        _prefetchedRow = FetchStreamingRow();
         _hasPrefetchedRow = _prefetchedRow is not null;
         return _hasPrefetchedRow;
     }
@@ -631,13 +700,32 @@ public sealed class DotRocksDataReader
             reusable = TryDrainStreamingRows();
         }
 
-        _isClosed = true;
-        _isConsumed = true;
-        ReportConnectionCompletion(reusable);
-        if ((_behavior & CommandBehavior.CloseConnection) != 0)
+        CompleteClose(reusable)?.Close();
+    }
+
+    /// <inheritdoc />
+    public override async ValueTask DisposeAsync()
+    {
+        if (!_isClosed)
         {
-            _connection?.Close();
+            bool reusable = true;
+            if (
+                !_isConsumed
+                && !_connectionCompletionReported
+                && _streamingResult?.HasResultSet == true
+            )
+            {
+                reusable = await TryDrainStreamingRowsAsync().ConfigureAwait(false);
+            }
+
+            DotRocksConnection? connectionToClose = CompleteClose(reusable);
+            if (connectionToClose is not null)
+            {
+                await connectionToClose.CloseAsync().ConfigureAwait(false);
+            }
         }
+
+        await base.DisposeAsync().ConfigureAwait(false);
     }
 
     private bool TryDrainStreamingRows()
@@ -649,19 +737,8 @@ public sealed class DotRocksDataReader
 
         try
         {
-            while (true)
-            {
-                object?[]? row = _rowReader
-                    .ReadRowAsync(CancellationToken.None)
-                    .AsTask()
-                    .ConfigureAwait(false)
-                    .GetAwaiter()
-                    .GetResult();
-                if (row is null)
-                {
-                    return true;
-                }
-            }
+            _rowReader.Drain();
+            return true;
         }
         catch (DotRocksException)
         {
@@ -676,6 +753,37 @@ public sealed class DotRocksDataReader
             // The wire state is undefined; the connection must be retired, not reused.
             return false;
         }
+    }
+
+    private async ValueTask<bool> TryDrainStreamingRowsAsync()
+    {
+        if (_rowReader is null || _rowReader.IsConsumed)
+        {
+            return true;
+        }
+
+        try
+        {
+            await _rowReader.DrainAsync(CancellationToken.None).ConfigureAwait(false);
+            return true;
+        }
+        catch (DotRocksException)
+        {
+            return true;
+        }
+        catch (Exception ex)
+            when (ex is MalformedPacketException or IOException or ObjectDisposedException)
+        {
+            return false;
+        }
+    }
+
+    private DotRocksConnection? CompleteClose(bool reusable)
+    {
+        _isClosed = true;
+        _isConsumed = true;
+        ReportConnectionCompletion(reusable);
+        return (_behavior & CommandBehavior.CloseConnection) != 0 ? _connection : null;
     }
 
     internal void MarkCompletedBecauseConnectionClosed()

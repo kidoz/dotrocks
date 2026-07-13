@@ -46,39 +46,6 @@ internal static class TextResultParser
         return QueryResult.FromRows(columns!, rows);
     }
 
-    /// <summary>
-    /// Reads a <c>COM_STMT_EXECUTE</c> response into a buffered <see cref="QueryResult"/>. Same
-    /// response shape as the text protocol, but rows use the binary encoding and the
-    /// column-definition block is terminated by an EOF packet only.
-    /// </summary>
-    public static async ValueTask<QueryResult> ReadBinaryAsync(
-        byte[] firstPayload,
-        PacketReader reader,
-        uint? connectionId,
-        CancellationToken cancellationToken
-    )
-    {
-        (OkResult? ok, List<ColumnDefinition>? columns) = await ReadResultSetHeaderAsync(
-                firstPayload,
-                reader,
-                connectionId,
-                okTerminatesColumns: false,
-                cancellationToken
-            )
-            .ConfigureAwait(false);
-        if (ok is { } okResult)
-        {
-            return QueryResult.FromOk(okResult);
-        }
-
-        List<object?[]> rows = await ReadAllRowsAsync(
-                ResultRowReader.ForBinary(reader, columns!, connectionId),
-                cancellationToken
-            )
-            .ConfigureAwait(false);
-        return QueryResult.FromRows(columns!, rows);
-    }
-
     public static async ValueTask<StreamingQueryResult> ReadStreamingAsync(
         byte[] firstPayload,
         PacketReader reader,
@@ -100,6 +67,92 @@ internal static class TextResultParser
                 columns!,
                 ResultRowReader.ForText(reader, columns!, connectionId)
             );
+    }
+
+    public static StreamingQueryResult ReadStreaming(
+        byte[] firstPayload,
+        PacketReader reader,
+        uint? connectionId
+    )
+    {
+        (OkResult? ok, List<ColumnDefinition>? columns) = ReadResultSetHeader(
+            firstPayload,
+            reader,
+            connectionId,
+            okTerminatesColumns: true
+        );
+        return ok is { } okResult
+            ? StreamingQueryResult.FromOk(okResult)
+            : StreamingQueryResult.FromRows(
+                columns!,
+                ResultRowReader.ForText(reader, columns!, connectionId)
+            );
+    }
+
+    public static async ValueTask<StreamingQueryResult> ReadBinaryStreamingAsync(
+        byte[] firstPayload,
+        PacketReader reader,
+        uint? connectionId,
+        CancellationToken cancellationToken
+    )
+    {
+        (OkResult? ok, List<ColumnDefinition>? columns) = await ReadResultSetHeaderAsync(
+                firstPayload,
+                reader,
+                connectionId,
+                okTerminatesColumns: false,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+        return ok is { } okResult
+            ? StreamingQueryResult.FromOk(okResult)
+            : StreamingQueryResult.FromRows(
+                columns!,
+                ResultRowReader.ForBinary(reader, columns!, connectionId)
+            );
+    }
+
+    public static StreamingQueryResult ReadBinaryStreaming(
+        byte[] firstPayload,
+        PacketReader reader,
+        uint? connectionId
+    )
+    {
+        (OkResult? ok, List<ColumnDefinition>? columns) = ReadResultSetHeader(
+            firstPayload,
+            reader,
+            connectionId,
+            okTerminatesColumns: false
+        );
+        return ok is { } okResult
+            ? StreamingQueryResult.FromOk(okResult)
+            : StreamingQueryResult.FromRows(
+                columns!,
+                ResultRowReader.ForBinary(reader, columns!, connectionId)
+            );
+    }
+
+    public static QueryResult Read(byte[] firstPayload, PacketReader reader, uint? connectionId)
+    {
+        (OkResult? ok, List<ColumnDefinition>? columns) = ReadResultSetHeader(
+            firstPayload,
+            reader,
+            connectionId,
+            okTerminatesColumns: true
+        );
+        if (ok is { } okResult)
+        {
+            return QueryResult.FromOk(okResult);
+        }
+
+        var rowReader = ResultRowReader.ForText(reader, columns!, connectionId);
+        var rows = new List<object?[]>();
+        while (rowReader.ReadRow() is { } row)
+        {
+            rows.Add(row);
+        }
+
+        return QueryResult.FromRows(columns!, rows);
     }
 
     /// <summary>
@@ -162,6 +215,67 @@ internal static class TextResultParser
         byte[] columnsTerminator = await reader
             .ReadPayloadAsync(cancellationToken)
             .ConfigureAwait(false);
+        bool terminated =
+            ResultPacket.IsEndOfResultSet(columnsTerminator)
+            || (okTerminatesColumns && ResultPacket.IsOk(columnsTerminator));
+        if (!terminated)
+        {
+            throw new MalformedPacketException(
+                okTerminatesColumns
+                    ? "Expected an EOF or OK packet after column definitions."
+                    : "Expected an EOF packet after the prepared-statement column definitions."
+            );
+        }
+
+        return (null, columns);
+    }
+
+    private static (OkResult? Ok, List<ColumnDefinition>? Columns) ReadResultSetHeader(
+        byte[] firstPayload,
+        PacketReader reader,
+        uint? connectionId,
+        bool okTerminatesColumns
+    )
+    {
+        ArgumentNullException.ThrowIfNull(firstPayload);
+        ArgumentNullException.ThrowIfNull(reader);
+
+        if (firstPayload.Length == 0)
+        {
+            throw new MalformedPacketException("Empty query response packet.");
+        }
+
+        if (ResultPacket.IsError(firstPayload))
+        {
+            throw ResultPacket.ReadError(firstPayload, connectionId);
+        }
+
+        if (ResultPacket.IsOk(firstPayload))
+        {
+            return (ResultPacket.ReadOk(firstPayload), null);
+        }
+
+        if (firstPayload[0] == ResultPacket.LocalInFileHeader)
+        {
+            throw new DotRocksException(
+                "StarRocks requested LOCAL INFILE, which DotRocks does not support."
+            );
+        }
+
+        int columnCount = ReadColumnCount(firstPayload);
+        var columns = new List<ColumnDefinition>(columnCount);
+        for (int i = 0; i < columnCount; i++)
+        {
+            byte[] columnPayload = reader.ReadPayload();
+            if (ResultPacket.IsError(columnPayload))
+            {
+                throw ResultPacket.ReadError(columnPayload, connectionId);
+            }
+
+            columns.Add(ReadColumnDefinition(columnPayload));
+        }
+
+        byte[] columnsTerminator = reader.ReadPayload();
         bool terminated =
             ResultPacket.IsEndOfResultSet(columnsTerminator)
             || (okTerminatesColumns && ResultPacket.IsOk(columnsTerminator));

@@ -180,6 +180,38 @@ public sealed class TextResultParserTests
     }
 
     [Fact]
+    public async Task ReadBinaryStreamingAsync_ReturnsMetadataBeforeReadingRows()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        byte[] binaryRow = [0x00, 0x00, 0x02, (byte)'h', (byte)'i'];
+        using MemoryStream stream = StarRocksPacketFactory.PayloadStream(
+            firstSequenceId: 1,
+            StarRocksPacketFactory.ColumnDefinition("value"),
+            StarRocksPacketFactory.Eof(),
+            binaryRow,
+            StarRocksPacketFactory.Eof()
+        );
+        var packetReader = new PacketReader(stream);
+        packetReader.ResetSequence(1);
+
+        StreamingQueryResult result = await TextResultParser.ReadBinaryStreamingAsync(
+            [0x01],
+            packetReader,
+            null,
+            ct
+        );
+
+        Assert.True(result.HasResultSet);
+        Assert.NotNull(result.RowReader);
+        Assert.True(stream.Position < stream.Length);
+
+        object?[]? row = await result.RowReader.ReadRowAsync(ct);
+        Assert.NotNull(row);
+        Assert.Equal("hi", row[0]);
+        Assert.Null(await result.RowReader.ReadRowAsync(ct));
+    }
+
+    [Fact]
     public async Task ReadAsync_ErrorPacket_ThrowsDotRocksException()
     {
         CancellationToken ct = TestContext.Current.CancellationToken;

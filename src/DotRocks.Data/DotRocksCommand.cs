@@ -165,15 +165,15 @@ public sealed class DotRocksCommand : DbCommand
     /// <inheritdoc />
     public override object? ExecuteScalar()
     {
-        using DbDataReader reader = ExecuteDbDataReader(CommandBehavior.SingleResult);
+        using DbDataReader reader = ExecuteDbDataReader(
+            CommandBehavior.SingleResult | CommandBehavior.SingleRow
+        );
         if (!reader.Read())
         {
             return null;
         }
 
         object? value = reader.FieldCount == 0 ? null : reader.GetValue(0);
-        while (reader.Read()) { }
-
         return value == DBNull.Value ? null : value;
     }
 
@@ -201,42 +201,125 @@ public sealed class DotRocksCommand : DbCommand
     /// <inheritdoc />
     public override async Task<int> ExecuteNonQueryAsync(CancellationToken cancellationToken)
     {
-        using DbDataReader reader = await ExecuteDbDataReaderAsync(
+        DbDataReader reader = await ExecuteDbDataReaderAsync(
                 CommandBehavior.Default,
                 cancellationToken
             )
             .ConfigureAwait(false);
-        return reader.RecordsAffected;
+        await using (reader.ConfigureAwait(false))
+        {
+            return reader.RecordsAffected;
+        }
     }
 
     /// <inheritdoc />
     public override async Task<object?> ExecuteScalarAsync(CancellationToken cancellationToken)
     {
-        using DbDataReader reader = await ExecuteDbDataReaderAsync(
-                CommandBehavior.SingleResult,
+        DbDataReader reader = await ExecuteDbDataReaderAsync(
+                CommandBehavior.SingleResult | CommandBehavior.SingleRow,
                 cancellationToken
             )
             .ConfigureAwait(false);
-        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        await using (reader.ConfigureAwait(false))
         {
-            return null;
+            if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                return null;
+            }
+
+            object? value = reader.FieldCount == 0 ? null : reader.GetValue(0);
+            return value == DBNull.Value ? null : value;
         }
-
-        object? value = reader.FieldCount == 0 ? null : reader.GetValue(0);
-        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) { }
-
-        return value == DBNull.Value ? null : value;
     }
 
     /// <inheritdoc />
     protected override DbParameter CreateDbParameter() => new DotRocksParameter();
 
     /// <inheritdoc />
-    protected override DbDataReader ExecuteDbDataReader(CommandBehavior behavior) =>
-        ExecuteDbDataReaderAsync(behavior, CancellationToken.None)
-            .ConfigureAwait(false)
-            .GetAwaiter()
-            .GetResult();
+    protected override DbDataReader ExecuteDbDataReader(CommandBehavior behavior)
+    {
+        if (_connection is null)
+        {
+            throw new InvalidOperationException("Command requires a DotRocksConnection.");
+        }
+
+        _connection.ValidateCommandTransaction((DotRocksTransaction?)_transaction);
+        bool serverPrepared = _parameterMode == DotRocksParameterMode.ServerPrepared;
+        string commandText = serverPrepared ? CommandText : BindCommandText();
+        using var scope = new ActiveOperationScope(
+            _activeOperationGate,
+            CommandTimeout,
+            "Concurrent execution of the same DotRocksCommand is not supported.",
+            CancellationToken.None
+        );
+        using CancellationTokenRegistration cancellationRegistration = scope.Token.Register(
+            static state => ((DotRocksConnection)state!).Abort(),
+            _connection
+        );
+        using Activity? activity = DotRocksTelemetry.ActivitySource.StartActivity(
+            "dotrocks.command.execute",
+            ActivityKind.Client
+        );
+        DotRocksTelemetryTags.TagCommandStart(activity, commandText);
+        long startTimestamp = Stopwatch.GetTimestamp();
+        bool succeeded = false;
+        string? errorType = null;
+        string? statusCode = null;
+        try
+        {
+            StreamingQueryResult result = serverPrepared
+                ? _connection.ExecutePreparedStreamingQuery(
+                    commandText,
+                    ExtractServerPreparedValues()
+                )
+                : _connection.ExecuteStreamingQuery(commandText);
+            var reader = new DotRocksDataReader(result, _connection, behavior);
+            if (result.HasResultSet)
+            {
+                _connection.SetActiveReader(reader);
+            }
+
+            succeeded = true;
+            return reader;
+        }
+        catch (Exception ex) when (scope.IsTimeout)
+        {
+            errorType = DotRocksTelemetryTags.ErrorTimeout;
+            _connection.Close();
+            throw CreateCommandTimeoutException(ex);
+        }
+        catch (Exception ex) when (scope.IsCanceledByCancelMethod)
+        {
+            errorType = DotRocksTelemetryTags.ErrorCanceled;
+            _connection.Close();
+            throw new OperationCanceledException(
+                "The DotRocks command was canceled.",
+                ex,
+                scope.OperationToken
+            );
+        }
+        catch (DotRocksException ex)
+        {
+            (errorType, statusCode) = DotRocksTelemetryTags.Classify(ex);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            (errorType, statusCode) = DotRocksTelemetryTags.Classify(ex);
+            throw;
+        }
+        finally
+        {
+            RecordCommandCompletion(
+                activity,
+                startTimestamp,
+                commandText,
+                succeeded,
+                errorType,
+                statusCode
+            );
+        }
+    }
 
     /// <inheritdoc />
     protected override async Task<DbDataReader> ExecuteDbDataReaderAsync(
@@ -275,30 +358,27 @@ public sealed class DotRocksCommand : DbCommand
         string? statusCode = null;
         try
         {
-            DotRocksDataReader reader;
-            bool hasResultSet;
+            StreamingQueryResult result;
             if (serverPrepared)
             {
-                QueryResult preparedResult = await _connection
-                    .ExecutePreparedQueryAsync(
+                result = await _connection
+                    .ExecutePreparedStreamingQueryAsync(
                         commandText,
                         ExtractServerPreparedValues(),
                         scope.Token
                     )
                     .ConfigureAwait(false);
-                reader = new DotRocksDataReader(preparedResult, _connection, behavior);
-                hasResultSet = preparedResult.HasResultSet;
             }
             else
             {
-                StreamingQueryResult result = await _connection
+                result = await _connection
                     .ExecuteStreamingQueryAsync(commandText, scope.Token)
                     .ConfigureAwait(false);
-                reader = new DotRocksDataReader(result, _connection, behavior);
-                hasResultSet = result.HasResultSet;
             }
 
-            if (hasResultSet)
+            var reader = new DotRocksDataReader(result, _connection, behavior);
+
+            if (result.HasResultSet)
             {
                 _connection.SetActiveReader(reader);
             }
@@ -356,28 +436,45 @@ public sealed class DotRocksCommand : DbCommand
         }
         finally
         {
-            if (succeeded)
-            {
-                activity?.SetStatus(ActivityStatusCode.Ok);
-            }
-            else
-            {
-                DotRocksTelemetryTags.TagError(activity, errorType ?? "OTHER", statusCode);
-            }
-
-            // Bounded metric labels only: outcome in {success, error, canceled, timeout} and a
-            // low-cardinality operation name. Never SQL text, parameters, or identifiers.
-            var tags = new TagList
-            {
-                { "outcome", DotRocksTelemetryTags.OutcomeFor(succeeded, errorType) },
-                { "operation", DotRocksTelemetryTags.ClassifyOperation(commandText) },
-            };
-            DotRocksTelemetry.CommandDuration.Record(
-                Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds,
-                tags
+            RecordCommandCompletion(
+                activity,
+                startTimestamp,
+                commandText,
+                succeeded,
+                errorType,
+                statusCode
             );
-            DotRocksTelemetry.CommandsExecuted.Add(1, tags);
         }
+    }
+
+    private static void RecordCommandCompletion(
+        Activity? activity,
+        long startTimestamp,
+        string commandText,
+        bool succeeded,
+        string? errorType,
+        string? statusCode
+    )
+    {
+        if (succeeded)
+        {
+            activity?.SetStatus(ActivityStatusCode.Ok);
+        }
+        else
+        {
+            DotRocksTelemetryTags.TagError(activity, errorType ?? "OTHER", statusCode);
+        }
+
+        var tags = new TagList
+        {
+            { "outcome", DotRocksTelemetryTags.OutcomeFor(succeeded, errorType) },
+            { "operation", DotRocksTelemetryTags.ClassifyOperation(commandText) },
+        };
+        DotRocksTelemetry.CommandDuration.Record(
+            Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds,
+            tags
+        );
+        DotRocksTelemetry.CommandsExecuted.Add(1, tags);
     }
 
     private static DotRocksException CreateCommandTimeoutException(Exception innerException) =>

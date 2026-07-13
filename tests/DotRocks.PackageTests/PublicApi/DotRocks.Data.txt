@@ -140,6 +140,7 @@ public sealed class DotRocks.Data.DotRocksDataReader System.Data.Common.DbDataRe
   public virtual method System.Threading.Tasks.Task<System.Boolean> NextResultAsync(System.Threading.CancellationToken cancellationToken)
   public virtual method System.Threading.Tasks.Task<System.Boolean> ReadAsync(System.Threading.CancellationToken cancellationToken)
   public virtual method System.Threading.Tasks.Task<System.Collections.ObjectModel.ReadOnlyCollection<System.Data.Common.DbColumn>> GetColumnSchemaAsync(System.Threading.CancellationToken cancellationToken)
+  public virtual method System.Threading.Tasks.ValueTask DisposeAsync()
   public virtual method System.Type GetFieldType(System.Int32 ordinal)
   public virtual method System.Void Close()
   public virtual method T GetFieldValue<T>(System.Int32 ordinal)
@@ -319,4 +320,3 @@ public sealed class DotRocks.Data.Loading.DotRocksStreamLoadTransactionOptions
   public property System.String Label { get; set; }
   public property System.TimeSpan? PreparedTimeout { get; set; }
   public property System.TimeSpan? Timeout { get; set; }
-

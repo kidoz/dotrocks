@@ -76,6 +76,26 @@ public sealed class PacketFramingTests
         Assert.Equal(payload, readBack);
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(4)]
+    [InlineData(9)]
+    public void Payloads_RoundTripSynchronously_WithoutAsyncStreamCalls(int length)
+    {
+        const int maxPerPacket = 4;
+        byte[] payload = Enumerable.Range(0, length).Select(i => (byte)i).ToArray();
+        using var stream = new SyncOnlyMemoryStream();
+
+        var writer = new PacketWriter(stream, maxPerPacket);
+        writer.WritePayload(payload);
+
+        stream.Position = 0;
+        var reader = new PacketReader(stream, maxPerPacket);
+        byte[] readBack = reader.ReadPayload();
+
+        Assert.Equal(payload, readBack);
+    }
+
     [Fact]
     public async Task ExactMultiple_EmitsTrailingEmptyPacket()
     {
@@ -185,5 +205,18 @@ public sealed class PacketFramingTests
         }
 
         Assert.Equal(0, writer.SequenceId);
+    }
+
+    private sealed class SyncOnlyMemoryStream : MemoryStream
+    {
+        public override ValueTask<int> ReadAsync(
+            Memory<byte> buffer,
+            CancellationToken cancellationToken = default
+        ) => throw new InvalidOperationException("The synchronous path used ReadAsync.");
+
+        public override ValueTask WriteAsync(
+            ReadOnlyMemory<byte> buffer,
+            CancellationToken cancellationToken = default
+        ) => throw new InvalidOperationException("The synchronous path used WriteAsync.");
     }
 }

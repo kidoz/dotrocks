@@ -94,11 +94,74 @@ internal sealed class PacketReader
         return accumulator.WrittenSpan.ToArray();
     }
 
+    /// <summary>Synchronously reads one logical message payload.</summary>
+    public byte[] ReadPayload()
+    {
+        PacketHeader header = ReadCheckedHeader();
+        if (header.PayloadLength < _maxPayloadPerPacket)
+        {
+            if (header.PayloadLength > _maxLogicalPayloadLength)
+            {
+                throw LogicalPayloadTooLarge();
+            }
+
+            if (header.PayloadLength == 0)
+            {
+                return [];
+            }
+
+            byte[] payload = new byte[header.PayloadLength];
+            ReadExact(payload);
+            return payload;
+        }
+
+        var accumulator = new ArrayBufferWriter<byte>();
+        while (true)
+        {
+            if (header.PayloadLength > 0)
+            {
+                if (header.PayloadLength > _maxLogicalPayloadLength - accumulator.WrittenCount)
+                {
+                    throw LogicalPayloadTooLarge();
+                }
+
+                Span<byte> destination = accumulator.GetSpan(header.PayloadLength)[
+                    ..header.PayloadLength
+                ];
+                ReadExact(destination);
+                accumulator.Advance(header.PayloadLength);
+            }
+
+            if (header.PayloadLength < _maxPayloadPerPacket)
+            {
+                break;
+            }
+
+            header = ReadCheckedHeader();
+        }
+
+        return accumulator.WrittenSpan.ToArray();
+    }
+
     private async ValueTask<PacketHeader> ReadCheckedHeaderAsync(
         CancellationToken cancellationToken
     )
     {
         PacketHeader header = await ReadHeaderAsync(cancellationToken).ConfigureAwait(false);
+        if (header.SequenceId != SequenceId)
+        {
+            throw new MalformedPacketException(
+                $"Out-of-order packet: expected sequence id {SequenceId} but received {header.SequenceId}."
+            );
+        }
+
+        SequenceId = unchecked((byte)(SequenceId + 1));
+        return header;
+    }
+
+    private PacketHeader ReadCheckedHeader()
+    {
+        PacketHeader header = ReadHeader();
         if (header.SequenceId != SequenceId)
         {
             throw new MalformedPacketException(
@@ -133,11 +196,40 @@ internal sealed class PacketReader
         }
     }
 
+    private PacketHeader ReadHeader()
+    {
+        byte[] headerBuffer = ArrayPool<byte>.Shared.Rent(MySqlPacket.HeaderLength);
+        try
+        {
+            ReadExact(headerBuffer.AsSpan(0, MySqlPacket.HeaderLength));
+            return PacketHeader.Parse(headerBuffer.AsSpan(0, MySqlPacket.HeaderLength));
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(headerBuffer);
+        }
+    }
+
     private async ValueTask ReadExactAsync(Memory<byte> buffer, CancellationToken cancellationToken)
     {
         try
         {
             await _stream.ReadExactlyAsync(buffer, cancellationToken).ConfigureAwait(false);
+        }
+        catch (EndOfStreamException ex)
+        {
+            throw new MalformedPacketException(
+                "The connection closed before the expected packet bytes were received.",
+                ex
+            );
+        }
+    }
+
+    private void ReadExact(Span<byte> buffer)
+    {
+        try
+        {
+            _stream.ReadExactly(buffer);
         }
         catch (EndOfStreamException ex)
         {

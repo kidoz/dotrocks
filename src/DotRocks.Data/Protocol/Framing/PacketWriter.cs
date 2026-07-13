@@ -53,6 +53,22 @@ internal sealed class PacketWriter
         }
     }
 
+    /// <summary>Synchronously writes <paramref name="payload"/> as one or more packets.</summary>
+    public void WritePayload(ReadOnlySpan<byte> payload)
+    {
+        int offset = 0;
+        while (true)
+        {
+            int chunk = Math.Min(_maxPayloadPerPacket, payload.Length - offset);
+            WriteOnePacket(payload.Slice(offset, chunk));
+            offset += chunk;
+            if (chunk < _maxPayloadPerPacket)
+            {
+                break;
+            }
+        }
+    }
+
     private async ValueTask WriteOnePacketAsync(
         ReadOnlyMemory<byte> chunk,
         CancellationToken cancellationToken
@@ -70,6 +86,28 @@ internal sealed class PacketWriter
             if (!chunk.IsEmpty)
             {
                 await _stream.WriteAsync(chunk, cancellationToken).ConfigureAwait(false);
+            }
+
+            SequenceId = unchecked((byte)(SequenceId + 1));
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(headerBuffer);
+        }
+    }
+
+    private void WriteOnePacket(ReadOnlySpan<byte> chunk)
+    {
+        byte[] headerBuffer = ArrayPool<byte>.Shared.Rent(MySqlPacket.HeaderLength);
+        try
+        {
+            new PacketHeader(chunk.Length, SequenceId).WriteTo(
+                headerBuffer.AsSpan(0, MySqlPacket.HeaderLength)
+            );
+            _stream.Write(headerBuffer.AsSpan(0, MySqlPacket.HeaderLength));
+            if (!chunk.IsEmpty)
+            {
+                _stream.Write(chunk);
             }
 
             SequenceId = unchecked((byte)(SequenceId + 1));

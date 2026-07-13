@@ -78,8 +78,48 @@ internal sealed class ResultRowReader
         }
 
         byte[] rowPayload = await _reader.ReadPayloadAsync(cancellationToken).ConfigureAwait(false);
+        return DecodeRowPayload(rowPayload);
+    }
+
+    public object?[]? ReadRow()
+    {
+        if (_isConsumed)
+        {
+            return null;
+        }
+
+        return DecodeRowPayload(_reader.ReadPayload());
+    }
+
+    /// <summary>
+    /// Consumes the remaining row packets without decoding their values. This keeps the connection
+    /// at a clean packet boundary when a caller abandons a result while avoiding allocations for
+    /// values that will never be observed.
+    /// </summary>
+    public async ValueTask DrainAsync(CancellationToken cancellationToken)
+    {
+        while (!_isConsumed)
+        {
+            byte[] rowPayload = await _reader
+                .ReadPayloadAsync(cancellationToken)
+                .ConfigureAwait(false);
+            ProcessDrainedPayload(rowPayload);
+        }
+    }
+
+    public void Drain()
+    {
+        while (!_isConsumed)
+        {
+            ProcessDrainedPayload(_reader.ReadPayload());
+        }
+    }
+
+    private object?[]? DecodeRowPayload(byte[] rowPayload)
+    {
         if (ResultPacket.IsError(rowPayload))
         {
+            _isConsumed = true;
             throw ResultPacket.ReadError(rowPayload, _connectionId);
         }
 
@@ -93,5 +133,19 @@ internal sealed class ResultRowReader
         }
 
         return _decodeRow(rowPayload, Columns);
+    }
+
+    private void ProcessDrainedPayload(byte[] rowPayload)
+    {
+        if (ResultPacket.IsError(rowPayload))
+        {
+            _isConsumed = true;
+            throw ResultPacket.ReadError(rowPayload, _connectionId);
+        }
+
+        if (ResultPacket.IsEndOfResultSet(rowPayload))
+        {
+            _isConsumed = true;
+        }
     }
 }
