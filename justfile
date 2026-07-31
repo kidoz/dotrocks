@@ -6,6 +6,7 @@ set shell := ["bash", "-cu"]
 # StarRocks connection defaults (override on the command line, e.g. `just harness 10.0.0.5 9030`).
 fe_host := env_var_or_default("DOTROCKS_HOST", "127.0.0.1")
 fe_port := env_var_or_default("DOTROCKS_PORT", "9030")
+fe_http_port := env_var_or_default("DOTROCKS_FE_HTTP_PORT", "8030")
 config := env_var_or_default("CONFIG", "Release")
 
 # StarRocks test-server Docker Compose file.
@@ -38,9 +39,10 @@ test:
 
 # Run integration tests against an already-running StarRocks FE.
 integration-test:
-    DOTROCKS_RUN_INTEGRATION=1 dotnet test tests/DotRocks.Data.IntegrationTests --configuration {{config}} --no-build
+    DOTROCKS_RUN_INTEGRATION=1 DOTROCKS_FE_HTTP_PORT={{fe_http_port}} dotnet test tests/DotRocks.Data.IntegrationTests --configuration {{config}} --no-build
     DOTROCKS_RUN_INTEGRATION=1 dotnet test tests/DotRocks.Data.DapperTests --configuration {{config}} --no-build
     DOTROCKS_RUN_INTEGRATION=1 dotnet test tests/DotRocks.EntityFrameworkCore.IntegrationTests --configuration {{config}} --no-build
+    DOTROCKS_RUN_INTEGRATION=1 dotnet test tests/DotRocks.FlightSql.IntegrationTests --configuration {{config}} --no-build
 
 # Produce NuGet packages.
 pack:
