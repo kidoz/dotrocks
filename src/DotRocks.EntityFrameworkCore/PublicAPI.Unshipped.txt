@@ -27,6 +27,13 @@ static DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion.operat
 static DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion.operator >(DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion? left, DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion? right) -> bool
 static DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion.operator >=(DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion? left, DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion? right) -> bool
 static DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion.Parse(string! version) -> DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion!
+Microsoft.EntityFrameworkCore.DotRocksDbFunctionsExtensions
+static Microsoft.EntityFrameworkCore.DotRocksDbFunctionsExtensions.Greatest<T>(this Microsoft.EntityFrameworkCore.DbFunctions! _, T value1, T value2) -> T
+static Microsoft.EntityFrameworkCore.DotRocksDbFunctionsExtensions.Greatest<T>(this Microsoft.EntityFrameworkCore.DbFunctions! _, T value1, T value2, T value3) -> T
+static Microsoft.EntityFrameworkCore.DotRocksDbFunctionsExtensions.Greatest<T>(this Microsoft.EntityFrameworkCore.DbFunctions! _, T value1, T value2, T value3, T value4) -> T
+static Microsoft.EntityFrameworkCore.DotRocksDbFunctionsExtensions.Least<T>(this Microsoft.EntityFrameworkCore.DbFunctions! _, T value1, T value2) -> T
+static Microsoft.EntityFrameworkCore.DotRocksDbFunctionsExtensions.Least<T>(this Microsoft.EntityFrameworkCore.DbFunctions! _, T value1, T value2, T value3) -> T
+static Microsoft.EntityFrameworkCore.DotRocksDbFunctionsExtensions.Least<T>(this Microsoft.EntityFrameworkCore.DbFunctions! _, T value1, T value2, T value3, T value4) -> T
 static Microsoft.EntityFrameworkCore.DotRocksEntityTypeBuilderExtensions.DistributedRandomly(this Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder! entityTypeBuilder, int buckets) -> Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder!
 static Microsoft.EntityFrameworkCore.DotRocksEntityTypeBuilderExtensions.HasSortKey(this Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder! entityTypeBuilder, params string![]! columns) -> Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder!
 static Microsoft.EntityFrameworkCore.DotRocksEntityTypeBuilderExtensions.HasStarRocksProperty(this Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder! entityTypeBuilder, string! name, string! value) -> Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder!

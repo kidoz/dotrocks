@@ -95,6 +95,54 @@ public sealed class DotRocksTranslatorTests
         );
     }
 
+    [Fact]
+    public void EfFunctionsGreatest_TranslatesToGreatestFunction()
+    {
+        using var context = CreateContext();
+
+        string sql = context
+            .Events.Where(e => EF.Functions.Greatest(e.Score, 1.5) > 2)
+            .ToQueryString();
+
+        Assert.Contains("greatest(", sql, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void EfFunctionsGreatest_WithThreeArguments_TranslatesToGreatestFunction()
+    {
+        using var context = CreateContext();
+
+        string sql = context
+            .Events.Select(e => EF.Functions.Greatest(e.Score, 1.5, 2.5))
+            .ToQueryString();
+
+        Assert.Contains("greatest(", sql, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void EfFunctionsLeast_TranslatesToLeastFunction()
+    {
+        using var context = CreateContext();
+
+        string sql = context
+            .Events.Where(e =>
+                EF.Functions.Least(e.OccurredAt, e.OccurredAt.AddDays(1)) > DateTime.MinValue
+            )
+            .ToQueryString();
+
+        Assert.Contains("least(", sql, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void EfFunctionsGreatest_InvokedOnClient_ThrowsInvalidOperationException()
+    {
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            EF.Functions.Greatest(1, 2)
+        );
+
+        Assert.Contains("translated", exception.Message, StringComparison.Ordinal);
+    }
+
     private static UnitContext CreateContext()
     {
         var optionsBuilder = new DbContextOptionsBuilder<UnitContext>();

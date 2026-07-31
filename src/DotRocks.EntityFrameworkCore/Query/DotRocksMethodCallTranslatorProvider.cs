@@ -19,6 +19,7 @@ internal sealed class DotRocksMethodCallTranslatorProvider : RelationalMethodCal
             new DotRocksStringMethodTranslator(dependencies.SqlExpressionFactory),
             new DotRocksMathMethodTranslator(dependencies.SqlExpressionFactory),
             new DotRocksDateMethodTranslator(dependencies.SqlExpressionFactory),
+            new DotRocksDbFunctionsMethodTranslator(dependencies.SqlExpressionFactory),
         ]);
     }
 }

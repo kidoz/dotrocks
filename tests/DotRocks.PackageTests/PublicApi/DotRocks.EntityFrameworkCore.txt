@@ -40,6 +40,14 @@ public static class Microsoft.EntityFrameworkCore.DotRocksDbContextOptionsBuilde
   public static method Microsoft.EntityFrameworkCore.DbContextOptionsBuilder UseStarRocks(Microsoft.EntityFrameworkCore.DbContextOptionsBuilder optionsBuilder, System.Data.Common.DbConnection connection, System.Boolean contextOwnsConnection, System.Action<DotRocks.EntityFrameworkCore.Infrastructure.DotRocksDbContextOptionsBuilder> dotRocksOptionsAction)
   public static method Microsoft.EntityFrameworkCore.DbContextOptionsBuilder UseStarRocks(Microsoft.EntityFrameworkCore.DbContextOptionsBuilder optionsBuilder, System.String connectionString, System.Action<DotRocks.EntityFrameworkCore.Infrastructure.DotRocksDbContextOptionsBuilder> dotRocksOptionsAction)
 
+public static class Microsoft.EntityFrameworkCore.DotRocksDbFunctionsExtensions
+  public static method T Greatest<T>(Microsoft.EntityFrameworkCore.DbFunctions _, T value1, T value2)
+  public static method T Greatest<T>(Microsoft.EntityFrameworkCore.DbFunctions _, T value1, T value2, T value3)
+  public static method T Greatest<T>(Microsoft.EntityFrameworkCore.DbFunctions _, T value1, T value2, T value3, T value4)
+  public static method T Least<T>(Microsoft.EntityFrameworkCore.DbFunctions _, T value1, T value2)
+  public static method T Least<T>(Microsoft.EntityFrameworkCore.DbFunctions _, T value1, T value2, T value3)
+  public static method T Least<T>(Microsoft.EntityFrameworkCore.DbFunctions _, T value1, T value2, T value3, T value4)
+
 public static class Microsoft.EntityFrameworkCore.DotRocksEntityTypeBuilderExtensions
   public static method Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder DistributedRandomly(Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder entityTypeBuilder, System.Int32 buckets)
   public static method Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder HasSortKey(Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder entityTypeBuilder, System.String[] columns)
