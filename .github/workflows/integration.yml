@@ -76,7 +76,9 @@ jobs:
           done
 
           starrocks_ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' dotrocks-starrocks)
-          echo "DOTROCKS_FLIGHT_ALLOWED_ENDPOINTS=grpc://${starrocks_ip}:9408,grpc://${starrocks_ip}:9419,grpc://dotrocks-starrocks:9408,grpc://dotrocks-starrocks:9419,grpc://starrocks:9408,grpc://starrocks:9419" >> "$GITHUB_ENV"
+          # StarRocks 3.5 allin1 registers its BE with the FE as 127.0.0.1, so query endpoints are
+          # advertised at loopback; the published container port makes that address reachable.
+          echo "DOTROCKS_FLIGHT_ALLOWED_ENDPOINTS=grpc://127.0.0.1:9408,grpc://127.0.0.1:9419,grpc://${starrocks_ip}:9408,grpc://${starrocks_ip}:9419,grpc://dotrocks-starrocks:9408,grpc://dotrocks-starrocks:9419,grpc://starrocks:9408,grpc://starrocks:9419" >> "$GITHUB_ENV"
 
           for attempt in {1..120}; do
             if (echo > /dev/tcp/127.0.0.1/${DOTROCKS_FE_FLIGHT_PORT}) 2>/dev/null; then

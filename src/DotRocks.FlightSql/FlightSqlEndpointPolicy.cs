@@ -48,8 +48,12 @@ internal sealed class FlightSqlEndpointPolicy
         Uri normalized = NormalizeAddress(endpoint, _allowInsecureTransport);
         if (!_allowedAddresses.Contains(normalized.AbsoluteUri))
         {
+            // The server-supplied address is deliberately not echoed here; the tests pin that
+            // untrusted input stays out of exception messages.
             throw new InvalidOperationException(
-                "The Flight SQL server returned an endpoint address that is not trusted."
+                "The Flight SQL server returned an endpoint address that is not trusted. If the "
+                    + "backend endpoint is legitimate, add it to "
+                    + "DotRocksFlightSqlOptions.AllowedEndpointAddresses."
             );
         }
 
