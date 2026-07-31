@@ -98,6 +98,47 @@ public sealed class DotRocksJoinAndAggregateQueryTests
         Assert.Contains("MAX(", sql, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void ConditionalAggregate_SumOverConditional_GeneratesSumCaseWhen()
+    {
+        using var context = CreateContext();
+
+        string sql = context
+            .Widgets.GroupBy(widget => widget.Category)
+            .Select(group => new
+            {
+                Category = group.Key,
+                Total = group.Sum(widget => widget.Name == "bet" ? (int?)widget.Id : null),
+            })
+            .ToQueryString();
+
+        Assert.Contains("SUM(CASE", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("WHEN", sql, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ConditionalAggregate_MultiMeasureWithCoalesceAndAbs_GeneratesSingleQuery()
+    {
+        using var context = CreateContext();
+
+        // The FR-3 shape: several coalesce(sum(case when ... then ... end), 0) measures plus
+        // abs() computed over one scan, expressed in translatable LINQ.
+        string sql = context
+            .Widgets.GroupBy(widget => 1)
+            .Select(group => new
+            {
+                Bets = Math.Abs(
+                    group.Sum(widget => widget.Name == "bet" ? (long?)widget.Id : null) ?? 0
+                ),
+                Wins = group.Sum(widget => widget.Name == "win" ? (long?)widget.Id : null) ?? 0,
+            })
+            .ToQueryString();
+
+        Assert.Contains("SUM(CASE", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("COALESCE(", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("abs(", sql, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static UnitContext CreateContext()
     {
         var optionsBuilder = new DbContextOptionsBuilder<UnitContext>();
