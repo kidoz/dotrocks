@@ -86,6 +86,10 @@ internal sealed record DotRocksConnectionOptions(
     public static DotRocksConnectionOptions Parse(DbConnectionStringBuilder builder)
     {
         ArgumentNullException.ThrowIfNull(builder);
+        // Fail explicitly on any keyword the parser would not resolve; a silently ignored
+        // misspelling would otherwise fall back to defaults (fail open for security keywords
+        // such as Ssl Mode).
+        ValidateKeywords(builder);
 
         string server = GetString(builder, "Server", DefaultServer);
         int port = GetInt32(builder, "Port", DefaultPort);

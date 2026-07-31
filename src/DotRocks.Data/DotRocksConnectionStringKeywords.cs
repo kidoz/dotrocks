@@ -17,6 +17,8 @@ internal static class DotRocksConnectionStringKeywords
         new Dictionary<string, ImmutableArray<string>>(StringComparer.Ordinal)
         {
             ["Server"] = ["Server", "Host", "Data Source"],
+            ["Port"] = ["Port"],
+            ["Pooling"] = ["Pooling"],
             ["User ID"] = ["User ID", "UserID", "User", "Uid", "Username"],
             ["Password"] = ["Password", "Pwd"],
             ["Database"] = ["Database", "Initial Catalog"],
@@ -66,6 +68,33 @@ internal static class DotRocksConnectionStringKeywords
                 "Compatibility Level",
             ],
         }.ToFrozenDictionary(StringComparer.Ordinal);
+
+    // Every spelling the parser resolves, for whole-string validation. Keyword matching is
+    // case-insensitive (DbConnectionStringBuilder lower-cases parsed keywords).
+    private static readonly FrozenSet<string> AcceptedSpellings = AliasesByCanonical
+        .Values.SelectMany(aliases => aliases)
+        .ToFrozenSet(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Rejects any keyword the DotRocks parser does not resolve. Without this check a misspelled
+    /// keyword is silently ignored and its option falls back to the default — for a
+    /// security-relevant keyword such as <c>Ssl Mode</c> that would fail open (e.g.
+    /// <c>Ssl Mdoe=Required</c> silently becoming <c>Ssl Mode=Preferred</c> with plaintext
+    /// fallback), so unrecognized configuration must fail explicitly instead.
+    /// </summary>
+    public static void ValidateKeywords(DbConnectionStringBuilder builder)
+    {
+        foreach (string keyword in builder.Keys.Cast<string>())
+        {
+            if (!AcceptedSpellings.Contains(keyword))
+            {
+                throw new ArgumentException(
+                    $"Connection string keyword '{keyword}' is not supported.",
+                    nameof(builder)
+                );
+            }
+        }
+    }
 
     /// <summary>
     /// Returns the accepted spellings for a canonical keyword, or just the keyword itself when it

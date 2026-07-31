@@ -1,4 +1,5 @@
 using System.Data.Common;
+using DotRocks.Data;
 using DotRocks.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 
@@ -16,6 +17,11 @@ public static class DotRocksDbContextOptionsBuilderExtensions
     /// <param name="connectionString">The DotRocks connection string.</param>
     /// <param name="dotRocksOptionsAction">The optional DotRocks provider options action.</param>
     /// <returns>The same builder so calls can be chained.</returns>
+    /// <exception cref="ArgumentException">
+    /// The connection string is missing, empty, or cannot be parsed as a DotRocks connection
+    /// string. The failure surfaces at registration so a configuration mistake does not turn
+    /// into an obscure error on first context use.
+    /// </exception>
     public static DbContextOptionsBuilder UseStarRocks(
         this DbContextOptionsBuilder optionsBuilder,
         string connectionString,
@@ -23,7 +29,7 @@ public static class DotRocksDbContextOptionsBuilderExtensions
     )
     {
         ArgumentNullException.ThrowIfNull(optionsBuilder);
-        ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
+        ValidateConnectionString(connectionString);
 
         var extension =
             GetOrCreateExtension(optionsBuilder).WithConnectionString(connectionString)
@@ -109,4 +115,39 @@ public static class DotRocksDbContextOptionsBuilderExtensions
     ) =>
         optionsBuilder.Options.FindExtension<DotRocksOptionsExtension>()
         ?? new DotRocksOptionsExtension();
+
+    // A missing or malformed connection string must fail here, at registration, with a
+    // configuration-oriented message — not later as an opaque failure deep inside first
+    // context use.
+    private static void ValidateConnectionString(string connectionString)
+    {
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            throw new ArgumentException(
+                "The DotRocks connection string is not configured. Pass a non-empty connection "
+                    + "string to UseStarRocks, for example "
+                    + "\"Server=<host>;Port=9030;User ID=<user>;Password=<password>\".",
+                nameof(connectionString)
+            );
+        }
+
+        try
+        {
+            // Round-tripping through the builder runs the full DotRocks connection string
+            // parser and option validation without opening a connection.
+            _ = new DotRocksConnectionStringBuilder(connectionString).ToString();
+        }
+        catch (Exception exception)
+            when (exception is ArgumentException or FormatException or OverflowException)
+        {
+            throw new ArgumentException(
+                "The DotRocks connection string is invalid: "
+                    + exception.Message
+                    + " See the DotRocks connection-strings documentation for the supported "
+                    + "keywords and values.",
+                nameof(connectionString),
+                exception
+            );
+        }
+    }
 }

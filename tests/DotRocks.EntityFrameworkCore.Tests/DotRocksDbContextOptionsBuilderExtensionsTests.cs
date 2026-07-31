@@ -49,6 +49,48 @@ public sealed class DotRocksDbContextOptionsBuilderExtensionsTests
         Assert.True(HasDotRocksExtension(nonGenericBuilder.Options));
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void UseStarRocks_MissingConnectionString_ThrowsDescriptiveConfigurationError(
+        string? connectionString
+    )
+    {
+        var optionsBuilder = new DbContextOptionsBuilder<SampleContext>();
+
+        ArgumentException exception = Assert.Throws<ArgumentException>(() =>
+            optionsBuilder.UseStarRocks(connectionString!)
+        );
+
+        // The message must point at the configuration mistake, not surface as a framework
+        // NullReferenceException (or bare ThrowIfNullOrWhiteSpace text) deep in context use.
+        Assert.Contains("not configured", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("UseStarRocks", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("Server=127.0.0.1;Port=notanumber;User ID=root")]
+    [InlineData("Server=127.0.0.1;Port=0;User ID=root")]
+    [InlineData("Server=127.0.0.1;Port=9030;User ID=root;Trust Server Certificate=true")]
+    // A misspelled security keyword must fail at registration, not silently fall back to the
+    // default Ssl Mode (fail open).
+    [InlineData("Server=127.0.0.1;Port=9030;User ID=root;Ssl Mdoe=Required")]
+    public void UseStarRocks_InvalidConnectionString_FailsAtRegistration(string connectionString)
+    {
+        var optionsBuilder = new DbContextOptionsBuilder<SampleContext>();
+
+        ArgumentException exception = Assert.Throws<ArgumentException>(() =>
+            optionsBuilder.UseStarRocks(connectionString)
+        );
+
+        Assert.Contains(
+            "connection string is invalid",
+            exception.Message,
+            StringComparison.Ordinal
+        );
+    }
+
     private static bool HasDotRocksExtension(DbContextOptions options) =>
         options.Extensions.Any(extension =>
             string.Equals(

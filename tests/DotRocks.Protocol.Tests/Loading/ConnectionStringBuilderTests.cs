@@ -195,6 +195,32 @@ public sealed class ConnectionStringBuilderTests
         Assert.Throws<ArgumentException>(() => _ = builder.BuildOptions());
     }
 
+    [Theory]
+    [InlineData("Server=h;User ID=alice;Ssl Mdoe=Required", "ssl mdoe")]
+    [InlineData("Server=h;User ID=alice;Trust Server Certifcate=true", "trust server certifcate")]
+    [InlineData("Server=h;User ID=alice;Application Name=app", "application name")]
+    public void UnknownKeyword_FailsClosed(string connectionString, string reportedKeyword)
+    {
+        // A keyword the parser does not resolve was previously ignored and its option fell back
+        // to the default. For a misspelled security keyword ("Ssl Mdoe=Required") that fails
+        // open: Ssl Mode silently becomes Preferred with plaintext fallback. Unknown keywords
+        // must fail explicitly instead.
+        ArgumentException exception = Assert.Throws<ArgumentException>(() =>
+            _ = DotRocksConnectionOptions.Parse(connectionString)
+        );
+
+        Assert.Contains("is not supported", exception.Message, StringComparison.Ordinal);
+        Assert.Contains(reportedKeyword, exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void UnknownKeyword_FailsAtConnectionConstruction()
+    {
+        Assert.Throws<ArgumentException>(() =>
+            _ = new DotRocksConnection("Server=h;User ID=alice;Ssl Mdoe=Required")
+        );
+    }
+
     [Fact]
     public void MaximumPoolSize_AboveCap_Throws()
     {

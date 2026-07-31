@@ -47,6 +47,11 @@ single-token alias (`Uid`) instead.
 | `Allow Insecure Stream Load` | `AllowInsecureStreamLoad`, `Allow Insecure StreamLoad` | bool | `false` | — |
 | `Server Compatibility Level` | `ServerCompatibilityLevel`, `Compatibility Level` | StarRocks version | auto-detect | valid version string |
 
+Keywords match case-insensitively. **Any keyword outside this table is rejected** with
+`Connection string keyword '...' is not supported.` — a misspelled keyword (for example
+`Ssl Mdoe=Required`) fails explicitly instead of being silently ignored and falling back to
+the default, which for security keywords would fail open.
+
 ## TLS modes
 
 The `Ssl Mode` keyword controls TLS on the **SQL query protocol** connection (the MySQL
@@ -144,6 +149,14 @@ await using var connection = new DotRocksConnection(builder.ConnectionString);
 The builder validates bounds at the setter (for example `Port` range, `MaximumPoolSize`
 ceiling, defined `SslMode`), so a misconfiguration fails immediately rather than at
 `Open()`.
+
+## Validation at EF Core registration
+
+`UseStarRocks(connectionString)` validates the connection string when the options are
+configured. A missing/empty connection string (for example a configuration key that
+resolved to `null`) and a string that fails to parse both throw an `ArgumentException`
+with a configuration-oriented message at registration — not an obscure failure on first
+context use — so consumers do not need their own guard clauses.
 
 ## Credential redaction
 
