@@ -8,10 +8,10 @@
 Install the packages you use:
 
 ```xml
-<PackageReference Include="DotRocks.Data" Version="1.3.5" />
-<PackageReference Include="DotRocks.EntityFrameworkCore" Version="1.3.5" />
-<PackageReference Include="DotRocks.EntityFrameworkCore.Design" Version="1.3.5" PrivateAssets="all" />
-<PackageReference Include="DotRocks.Analyzers" Version="1.3.5" PrivateAssets="all" />
+<PackageReference Include="DotRocks.Data" Version="1.4.0" />
+<PackageReference Include="DotRocks.EntityFrameworkCore" Version="1.4.0" />
+<PackageReference Include="DotRocks.EntityFrameworkCore.Design" Version="1.4.0" PrivateAssets="all" />
+<PackageReference Include="DotRocks.Analyzers" Version="1.4.0" PrivateAssets="all" />
 ```
 
 ## ADO.NET
