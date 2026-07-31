@@ -35,7 +35,7 @@ All diagnostics default to **Warning** severity and are enabled by default.
 | ID | Trigger | Recommendation |
 |---|---|---|
 | **DTR0001** | A connection string uses an HTTP Stream Load endpoint with credentials. | Use HTTPS for the `Stream Load Endpoint` so Basic credentials are not sent in cleartext. See [Security](security.md). |
-| **DTR0009** | Interpolated or concatenated SQL is assigned to `DotRocksCommand.CommandText`. | Use parameter placeholders (e.g. `@id`) with `DotRocksParameter` values. This is an SQL-injection signal. |
+| **DTR0009** | Interpolated or concatenated SQL is assigned to `DotRocksCommand.CommandText` or `DotRocksFlightSqlCommand.CommandText`. | Use parameter placeholders (e.g. `@id`) with `DotRocksParameter` values. This is an SQL-injection signal. |
 | **DTR0012** | A DotRocks connection string contains a literal password. | Load the password from configuration, environment, or a secret store. |
 
 ### Usage — EF Core

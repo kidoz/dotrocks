@@ -74,6 +74,56 @@ public sealed class DotRocksDriverSecurityAnalyzerTests
     }
 
     [Fact]
+    public async Task InterpolatedFlightSqlCommandText_ReportsUnsafeSql()
+    {
+        Diagnostic[] diagnostics = await AnalyzeAsync(
+                """
+                internal static class Sample
+                {
+                    public static void Run(
+                        DotRocks.FlightSql.DotRocksFlightSqlCommand command,
+                        string id)
+                    {
+                        command.CommandText = $"SELECT * FROM events WHERE id = {id}";
+                    }
+                }
+                """
+            )
+            .ConfigureAwait(true);
+
+        AssertHasDiagnostic(
+            diagnostics,
+            DotRocksDiagnosticDescriptors.UnsafeCommandTextDiagnosticId
+        );
+    }
+
+    [Fact]
+    public async Task InterpolatedFlightSqlCommandConstructor_ReportsUnsafeSql()
+    {
+        Diagnostic[] diagnostics = await AnalyzeAsync(
+                """
+                internal static class Sample
+                {
+                    public static void Run(
+                        DotRocks.FlightSql.DotRocksFlightSqlDbConnection connection,
+                        string id)
+                    {
+                        _ = new DotRocks.FlightSql.DotRocksFlightSqlCommand(
+                            $"SELECT * FROM events WHERE id = {id}",
+                            connection);
+                    }
+                }
+                """
+            )
+            .ConfigureAwait(true);
+
+        AssertHasDiagnostic(
+            diagnostics,
+            DotRocksDiagnosticDescriptors.UnsafeCommandTextDiagnosticId
+        );
+    }
+
+    [Fact]
     public async Task ConstantCommandText_DoesNotReportUnsafeSql()
     {
         Diagnostic[] diagnostics = await AnalyzeAsync(

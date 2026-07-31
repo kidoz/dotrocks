@@ -14,7 +14,8 @@ namespace DotRocks.Analyzers.Driver;
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class UnsafeCommandTextAnalyzer : DiagnosticAnalyzer
 {
-    private const string CommandTypeName = "DotRocks.Data.DotRocksCommand";
+    private const string DataCommandTypeName = "DotRocks.Data.DotRocksCommand";
+    private const string FlightSqlCommandTypeName = "DotRocks.FlightSql.DotRocksFlightSqlCommand";
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
@@ -53,10 +54,7 @@ public sealed class UnsafeCommandTextAnalyzer : DiagnosticAnalyzer
         }
 
         ITypeSymbol? receiverType = context.SemanticModel.GetTypeInfo(memberAccess.Expression).Type;
-        if (
-            AnalyzerSyntaxHelpers.IsNamedType(receiverType, CommandTypeName)
-            && IsUnsafeSqlExpression(context, assignment.Right)
-        )
+        if (IsCommandType(receiverType) && IsUnsafeSqlExpression(context, assignment.Right))
         {
             Report(context, assignment.Right);
         }
@@ -65,12 +63,7 @@ public sealed class UnsafeCommandTextAnalyzer : DiagnosticAnalyzer
     private static void AnalyzeObjectCreation(SyntaxNodeAnalysisContext context)
     {
         var objectCreation = (ObjectCreationExpressionSyntax)context.Node;
-        if (
-            !AnalyzerSyntaxHelpers.IsNamedType(
-                context.SemanticModel.GetTypeInfo(objectCreation).Type,
-                CommandTypeName
-            )
-        )
+        if (!IsCommandType(context.SemanticModel.GetTypeInfo(objectCreation).Type))
         {
             return;
         }
@@ -115,6 +108,10 @@ public sealed class UnsafeCommandTextAnalyzer : DiagnosticAnalyzer
         ITypeSymbol? type = context.SemanticModel.GetTypeInfo(expression).Type;
         return type?.SpecialType == SpecialType.System_String;
     }
+
+    private static bool IsCommandType(ITypeSymbol? type) =>
+        AnalyzerSyntaxHelpers.IsNamedType(type, DataCommandTypeName)
+        || AnalyzerSyntaxHelpers.IsNamedType(type, FlightSqlCommandTypeName);
 
     private static ExpressionSyntax Unwrap(ExpressionSyntax expression) =>
         expression is ParenthesizedExpressionSyntax parenthesized

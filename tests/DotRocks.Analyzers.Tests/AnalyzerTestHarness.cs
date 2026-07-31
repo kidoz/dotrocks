@@ -114,6 +114,22 @@ internal static class AnalyzerTestHarness
             }
         }
 
+        namespace DotRocks.FlightSql
+        {
+            public sealed class DotRocksFlightSqlDbConnection { }
+
+            public sealed class DotRocksFlightSqlCommand
+            {
+                public DotRocksFlightSqlCommand() { }
+
+                public DotRocksFlightSqlCommand(
+                    string commandText,
+                    DotRocksFlightSqlDbConnection connection) { }
+
+                public string CommandText { get; set; } = string.Empty;
+            }
+        }
+
         """;
 
     public const string EfStubs = """
