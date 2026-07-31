@@ -912,6 +912,51 @@ public sealed class DotRocksEfCoreIntegrationTests
     }
 
     [Fact]
+    public async Task RelationalGreatestLeastForms_ExecuteAgainstStarRocks()
+    {
+        IntegrationTestEnvironment.SkipUnlessEnabled();
+
+        await using var context = CreateLiveContext();
+        await EnsureWidgetTableAsync(context).ConfigureAwait(true);
+
+        try
+        {
+            // The EF-standard forms all flow through the GenerateGreatest/GenerateLeast visitor
+            // hooks: the relational params overload (5 arguments exceed the DotRocks 2-4
+            // argument sugar), Math.Max/Min, and inline-collection Max/Min.
+            // Seeded widgets: (id 1, category 1, priority 2, score NULL),
+            // (id 2, category 1, priority 1, score 20), (id 3, category 2, priority 1, score 30).
+            var rows = await context
+                .Widgets.Select(widget => new
+                {
+                    widget.Id,
+                    ParamsForm = EF.Functions.Greatest(
+                        widget.Id,
+                        widget.Category,
+                        widget.Priority,
+                        widget.OptionalScore ?? 0,
+                        2
+                    ),
+                    MathMax = Math.Max(widget.Id, widget.Priority),
+                    MathMin = Math.Min(widget.Id, widget.Priority),
+                    InlineMax = new[] { widget.Id, widget.Category, widget.Priority }.Max(),
+                })
+                .OrderBy(row => row.Id)
+                .ToListAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+
+            Assert.Equal([2, 20, 30], rows.Select(row => row.ParamsForm));
+            Assert.Equal([2, 2, 3], rows.Select(row => row.MathMax));
+            Assert.Equal([1, 1, 1], rows.Select(row => row.MathMin));
+            Assert.Equal([2, 2, 3], rows.Select(row => row.InlineMax));
+        }
+        finally
+        {
+            await DropWidgetTableAsync(context).ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
     public async Task EfFunctionsGreatest_NullArgument_ReturnsNullPerMySqlSemantics()
     {
         IntegrationTestEnvironment.SkipUnlessEnabled();

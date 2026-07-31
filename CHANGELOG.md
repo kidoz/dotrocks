@@ -8,6 +8,15 @@ version is derived from the release tag at publish time.
 
 ## [Unreleased]
 
+### Added
+- EF Core: the EF-standard relational `EF.Functions.Greatest`/`Least` params-array overloads
+  (any argument count), `Math.Max`/`Math.Min`, and inline-collection `Max()`/`Min()` now
+  translate to the native StarRocks `greatest()`/`least()` functions through the relational
+  `GenerateGreatest`/`GenerateLeast` visitor hooks, with MySQL NULL semantics (the result is
+  NULL when any argument is NULL) encoded in the nullability annotations. The DotRocks 2–4
+  argument `EF.Functions.Greatest`/`Least` overloads shipped in 1.3.4 remain as compatible
+  sugar.
+
 ## [1.3.4] - 2026-07-31
 
 ### Added

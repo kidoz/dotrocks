@@ -134,6 +134,69 @@ public sealed class DotRocksTranslatorTests
     }
 
     [Fact]
+    public void EfStandardGreatest_WithArrayForm_TranslatesToGreatestFunction()
+    {
+        using var context = CreateContext();
+
+        // An explicit array binds to the EF-standard relational params overload
+        // (RelationalDbFunctionsExtensions.Greatest), which translates through the
+        // GenerateGreatest visitor hook rather than the DotRocks method translator.
+        string sql = context
+            .Events.Select(e => EF.Functions.Greatest(new[] { e.Score, 1.5, 2.5 }))
+            .ToQueryString();
+
+        Assert.Contains("greatest(", sql, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void EfStandardGreatest_WithFiveArguments_TranslatesToGreatestFunction()
+    {
+        using var context = CreateContext();
+
+        // Five arguments exceed the DotRocks 2-4 argument overloads, so the call binds to the
+        // EF-standard relational params overload.
+        string sql = context
+            .Events.Select(e => EF.Functions.Greatest(e.Score, 1.0, 2.0, 3.0, 4.0))
+            .ToQueryString();
+
+        Assert.Contains("greatest(", sql, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void MathMaxAndMin_TranslateToGreatestAndLeast()
+    {
+        using var context = CreateContext();
+
+        string sql = context
+            .Events.Select(e => new
+            {
+                Larger = Math.Max(e.Score, 1.5),
+                Smaller = Math.Min(e.Score, 1.5),
+            })
+            .ToQueryString();
+
+        Assert.Contains("greatest(", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("least(", sql, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void InlineCollectionMaxAndMin_TranslateToGreatestAndLeast()
+    {
+        using var context = CreateContext();
+
+        string sql = context
+            .Events.Select(e => new
+            {
+                Largest = new[] { e.Score, 1.5, 2.5 }.Max(),
+                Smallest = new[] { e.Score, 1.5, 2.5 }.Min(),
+            })
+            .ToQueryString();
+
+        Assert.Contains("greatest(", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("least(", sql, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void EfFunctionsGreatest_InvokedOnClient_ThrowsInvalidOperationException()
     {
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>

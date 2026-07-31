@@ -176,11 +176,14 @@ Supported EF Core query surface:
 - Conditional aggregation: `Sum(x => x.Kind == "bet" ? x.Amount : (decimal?)null)` translates
   to `SUM(CASE WHEN ... END)`, `??` over an aggregate result to `COALESCE(...)`, and
   `Math.Abs` to `abs(...)`, so multi-measure analytical queries run in one scan.
-- `EF.Functions.Greatest(...)` / `EF.Functions.Least(...)` (2–4 arguments) translate to the
-  native StarRocks `greatest()` / `least()` functions. **NULL semantics:** StarRocks follows
-  MySQL — the result is `NULL` when *any* argument is `NULL`, unlike PostgreSQL, which
-  ignores NULLs. Coalesce nullable arguments (`x.Value ?? DateTime.MinValue`) when NULL rows
-  must not drop out of filters or projections.
+- `EF.Functions.Greatest(...)` / `EF.Functions.Least(...)` translate to the native StarRocks
+  `greatest()` / `least()` functions — both the EF-standard relational params-array overloads
+  (any argument count) and the DotRocks 2–4 argument overloads. `Math.Max` / `Math.Min` and
+  inline-collection `Max()` / `Min()` (`new[] { a, b, c }.Max()`) translate the same way.
+  **NULL semantics:** StarRocks follows MySQL — the result is `NULL` when *any* argument is
+  `NULL`, unlike PostgreSQL and SQL Server, which ignore NULLs. Coalesce nullable arguments
+  (`x.Value ?? DateTime.MinValue`) when NULL rows must not drop out of filters or
+  projections.
 - Explicit relational joins via `Join` and `GroupJoin`/`SelectMany`+`DefaultIfEmpty`
   (`INNER JOIN` / `LEFT JOIN`) and cross joins, translated to StarRocks SQL.
 - `GroupBy` with key projection, `HAVING` predicates, and the aggregate functions above.
