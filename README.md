@@ -15,6 +15,7 @@ Roslyn analyzer suite built specifically for [StarRocks](https://www.starrocks.i
 | Package | Description |
 |---|---|
 | `DotRocks.Data` | Native ADO.NET provider with its own managed StarRocks protocol implementation. |
+| `DotRocks.FlightSql` | Experimental Flight SQL transport with Arrow batches, async ADO.NET, EF Core integration, and explicit fallback. |
 | `DotRocks.EntityFrameworkCore` | EF Core relational provider built on `DotRocks.Data`. |
 | `DotRocks.EntityFrameworkCore.Design` | Design-time EF Core services for migrations. |
 | `DotRocks.Analyzers` | Roslyn analyzers for correct, secure DotRocks usage. |
@@ -26,9 +27,9 @@ The latest tagged release is DotRocks 1.3.5. The `main` branch is post-1.3.5; th
 README tracks `main`, and unreleased changes are listed in
 [CHANGELOG.md](https://github.com/kidoz/dotrocks/blob/main/CHANGELOG.md).
 The ADO.NET driver (`DotRocks.Data`), EF Core provider (`DotRocks.EntityFrameworkCore`),
-and analyzer suite (`DotRocks.Analyzers`) are validated against live StarRocks 3.5.5 and
-4.0.7 in CI. Supported features are implemented and tested; unsupported behavior fails
-explicitly.
+Flight SQL transport (`DotRocks.FlightSql`), and analyzer suite (`DotRocks.Analyzers`) are
+validated against live StarRocks 3.5.5 and 4.0.7 in CI. Supported features are implemented and
+tested; unsupported behavior fails explicitly.
 
 DotRocks implements **its own** managed StarRocks client protocol. It takes no runtime
 dependency on MySqlConnector, Oracle MySQL Connector/NET, Pomelo, or any other MySQL
@@ -45,6 +46,7 @@ driver, and it is not a general-purpose MySQL driver.
 
 - [Getting started](https://github.com/kidoz/dotrocks/blob/main/docs/articles/getting-started.md)
 - [Connection strings](https://github.com/kidoz/dotrocks/blob/main/docs/articles/connection-strings.md)
+- [Arrow Flight SQL](https://github.com/kidoz/dotrocks/blob/main/docs/articles/arrow-flight-sql.md)
 - [Security](https://github.com/kidoz/dotrocks/blob/main/docs/articles/security.md)
 - [Stream Load](https://github.com/kidoz/dotrocks/blob/main/docs/articles/stream-load.md)
 - [Observability](https://github.com/kidoz/dotrocks/blob/main/docs/articles/observability.md)

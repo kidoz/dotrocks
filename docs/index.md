@@ -12,6 +12,7 @@ README and changelog for unreleased behavior.
 | Package | Description |
 |---|---|
 | `DotRocks.Data` | Native ADO.NET provider with its own managed StarRocks protocol implementation. |
+| `DotRocks.FlightSql` | Experimental Flight SQL transport with Arrow batches, async ADO.NET, EF Core integration, and explicit fallback. |
 | `DotRocks.EntityFrameworkCore` | EF Core relational provider built on `DotRocks.Data`. |
 | `DotRocks.EntityFrameworkCore.Design` | Design-time EF Core services for migrations. |
 | `DotRocks.Analyzers` | Roslyn analyzers for correct, secure DotRocks usage. |
@@ -21,6 +22,7 @@ README and changelog for unreleased behavior.
 
 - [Getting started](articles/getting-started.md)
 - [Connection strings](articles/connection-strings.md)
+- [Arrow Flight SQL](articles/arrow-flight-sql.md)
 - [Security](articles/security.md)
 - [Stream Load](articles/stream-load.md)
 - [Observability](articles/observability.md)

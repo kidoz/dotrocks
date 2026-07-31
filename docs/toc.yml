@@ -4,3 +4,5 @@
   href: articles/
 - name: API
   uid: DotRocks.Data
+- name: Flight SQL API
+  uid: DotRocks.FlightSql

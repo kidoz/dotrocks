@@ -6,6 +6,7 @@
           "src": "../src",
           "files": [
             "DotRocks.Data/DotRocks.Data.csproj",
+            "DotRocks.FlightSql/DotRocks.FlightSql.csproj",
             "DotRocks.EntityFrameworkCore/DotRocks.EntityFrameworkCore.csproj",
             "DotRocks.EntityFrameworkCore.Design/DotRocks.EntityFrameworkCore.Design.csproj"
           ]

@@ -2,6 +2,8 @@
   href: getting-started.md
 - name: Connection strings
   href: connection-strings.md
+- name: Arrow Flight SQL
+  href: arrow-flight-sql.md
 - name: Security
   href: security.md
 - name: Stream Load
