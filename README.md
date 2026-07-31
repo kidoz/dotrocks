@@ -159,7 +159,10 @@ int count = await context.Widgets
 Supported EF Core query surface:
 
 - `Database.ExecuteSqlRawAsync` for raw SQL commands.
-- `DbSet<TEntity>.FromSqlRaw("SELECT ...")` materialization.
+- `DbSet<TEntity>.FromSqlRaw("SELECT ...")` materialization, including positional `{0}`
+  placeholders, plus the EF-standard interpolated overloads — `FromSql($"... {value} ...")`
+  and `Database.SqlQuery<T>($"... {value} ...")` — which parameterize every interpolated
+  value automatically; no hand-built `DotRocksParameter` objects are needed.
 - LINQ `Where`, comparison operators, boolean `&&` / `||`, nullable comparisons.
 - Captured scalar LINQ parameters render as `@...` placeholders with values carried in
   `DbParameter`s, including strings, decimals, nullable values, bools, and
@@ -170,14 +173,23 @@ Supported EF Core query surface:
   backslash-escaped; StarRocks does not accept an `ESCAPE` clause and is not emitted one).
 - `FirstOrDefaultAsync`, `SingleAsync`, `ToListAsync`, `CountAsync`, `AnyAsync`.
 - Aggregate basics: `Min`, `Max`, `Sum`, `Average`.
+- Conditional aggregation: `Sum(x => x.Kind == "bet" ? x.Amount : (decimal?)null)` translates
+  to `SUM(CASE WHEN ... END)`, `??` over an aggregate result to `COALESCE(...)`, and
+  `Math.Abs` to `abs(...)`, so multi-measure analytical queries run in one scan.
+- `EF.Functions.Greatest(...)` / `EF.Functions.Least(...)` (2–4 arguments) translate to the
+  native StarRocks `greatest()` / `least()` functions. **NULL semantics:** StarRocks follows
+  MySQL — the result is `NULL` when *any* argument is `NULL`, unlike PostgreSQL, which
+  ignores NULLs. Coalesce nullable arguments (`x.Value ?? DateTime.MinValue`) when NULL rows
+  must not drop out of filters or projections.
 - Explicit relational joins via `Join` and `GroupJoin`/`SelectMany`+`DefaultIfEmpty`
   (`INNER JOIN` / `LEFT JOIN`) and cross joins, translated to StarRocks SQL.
 - `GroupBy` with key projection, `HAVING` predicates, and the aggregate functions above.
 - Projection into anonymous objects and simple DTOs.
-- `SaveChangesAsync` for a constrained single-table write model: explicit primary key,
-  scalar properties only, single-column keys, `ValueGeneratedNever()`, no navigations, no
-  generated values, and no concurrency tokens. Supported DML is parameterized `INSERT`,
-  `UPDATE ... WHERE pk = @p`, and `DELETE ... WHERE pk = @p`. Save **one row per
+- `SaveChangesAsync` for a constrained single-table write model: explicit primary key
+  (single-column or composite), scalar properties only, `ValueGeneratedNever()`, no
+  navigations, no generated values, and no concurrency tokens. Supported DML is parameterized
+  `INSERT`, `UPDATE ... WHERE <key column> = @p [AND ...]`, and
+  `DELETE ... WHERE <key column> = @p [AND ...]`, with one condition per key column. Save **one row per
   `SaveChanges`**: StarRocks rejects a second DML against a table already written in the same
   transaction (error 5303), so a multi-row `SaveChanges` to one table fails — use one row per
   call, or Stream Load for bulk. `SaveChanges` inside a user transaction works; StarRocks has
@@ -204,7 +216,7 @@ Unsupported EF Core behavior is explicit:
   creation/drop, including `DROP DATABASE`, add/drop/alter/rename column, rename table,
   indexes, add/drop primary key, foreign keys, defaults, and computed columns.
 - idempotent migration scripts.
-- composite-key writes, and multi-row `SaveChanges` to a single table (StarRocks error 5303).
+- multi-row `SaveChanges` to a single table (StarRocks error 5303).
 - `SAVEPOINT` (unsupported by StarRocks; EF savepoints are disabled).
 - `Include`, navigation materialization, and navigation-based joins: relationships are
   rejected at model validation, so joins must be expressed explicitly across `DbSet`s.
@@ -213,7 +225,7 @@ Unsupported EF Core behavior is explicit:
 
 These constraints are enforced at **model validation**, when the model is first built.
 DotRocks requires the whole mapped model to be write-safe: any keyed entity with a
-navigation, complex property, composite key, concurrency token, generated/default/computed
+navigation, complex property, concurrency token, generated/default/computed
 value, or binary property is rejected up front, even for a query-only `DbContext`.
 Configure mapped properties accordingly, for example `ValueGeneratedNever()` on keys.
 
@@ -322,7 +334,6 @@ Current diagnostics:
 | `DTR0005` | Warning | EF Core `EnsureCreated` / `EnsureDeleted` calls. | Use migrations for conservative StarRocks DDL; these database creator APIs are unsupported. |
 | `DTR0006` | Warning | EF Core `ExecuteUpdate` / `ExecuteDelete` calls. | Use tracked single-row `SaveChanges` or raw SQL with explicit parameters; bulk LINQ DML is not translated. |
 | `DTR0007` | Warning | Source-visible `AddRange` / `UpdateRange` / `RemoveRange` followed by one `SaveChanges` call. | Save one row per `SaveChanges`, or use Stream Load for bulk ingestion. |
-| `DTR0008` | Warning | EF Core entities configured with a composite primary key (`HasKey(e => new { ... })`) in `OnModelCreating`. | Use a single-column primary key for writable entities, or `HasNoKey()` for read-only entities. Escalate to a build error with `dotnet_diagnostic.DTR0008.severity = error`. No automatic fix is provided. |
 | `DTR0009` | Warning | Interpolated or concatenated SQL assigned to `DotRocksCommand.CommandText` or passed to its constructor. | Use parameter placeholders (for example `@id`) with `DotRocksParameter` values. Escalate to a build error with `dotnet_diagnostic.DTR0009.severity = error`. No automatic fix is provided because parameterization needs human intent. |
 | `DTR0010` | Warning | An async DotRocks call that accepts a `CancellationToken` but does not pass the one available in the enclosing method. | Pass the available `CancellationToken` to the async call. No automatic fix is provided. |
 | `DTR0011` | Warning | Blocking on an async DotRocks call with `.Result`, `.Wait()`, or `.GetAwaiter().GetResult()`. | `await` the operation instead of blocking on it. No automatic fix is provided. |

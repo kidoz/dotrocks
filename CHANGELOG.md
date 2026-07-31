@@ -8,6 +8,35 @@ version is derived from the release tag at publish time.
 
 ## [Unreleased]
 
+### Added
+- EF Core: `EF.Functions.Greatest(...)` and `EF.Functions.Least(...)` (2–4 arguments)
+  translate to the native StarRocks `greatest()`/`least()` functions. StarRocks follows
+  MySQL NULL semantics — the result is NULL when any argument is NULL, unlike PostgreSQL —
+  which is documented on the API and in the README.
+- EF Core: composite primary keys are supported on writable entities. `UPDATE`/`DELETE`
+  emit one `WHERE` condition per key column, `Find`/`FindAsync` resolve by the full key,
+  and migrations create multi-column StarRocks `PRIMARY KEY` tables. The DTR0008 analyzer
+  rule (composite primary keys) is retired and no longer reports; the id is reserved and
+  will not be reused. The shipped `EfCompositePrimaryKeyAnalyzer` type and
+  `CompositePrimaryKeyDiagnosticId` constant remain as obsolete no-ops for binary
+  compatibility and will be removed in the next major release.
+- EF Core: `UseStarRocks` now validates the connection string at registration and throws a
+  descriptive configuration error for a missing/empty or unparsable connection string,
+  instead of surfacing an obscure failure on first context use.
+- EF Core: verified and pinned test coverage for the EF-standard interpolated raw-SQL
+  overloads (`FromSql($"...")`, `Database.SqlQuery<T>($"...")`) with automatic
+  parameterization, and for conditional aggregation
+  (`Sum(x => cond ? value : null)` → `SUM(CASE WHEN ...)`, `??` → `COALESCE`, `Math.Abs`
+  → `abs`) in a single round trip.
+
+### Changed
+- Connection strings now fail explicitly on unrecognized keywords
+  (`Connection string keyword '...' is not supported.`). Previously an unknown keyword was
+  silently ignored and its option fell back to the default — for a misspelled security
+  keyword such as `Ssl Mdoe=Required` that failed open by leaving `Ssl Mode` at
+  `Preferred` with plaintext fallback. Affects `DotRocksConnection`,
+  `DotRocksConnectionStringBuilder`, and `UseStarRocks` registration.
+
 ## [1.3.3] - 2026-07-13
 
 ### Added
