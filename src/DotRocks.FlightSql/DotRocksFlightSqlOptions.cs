@@ -45,14 +45,15 @@ public sealed class DotRocksFlightSqlOptions
     public bool AllowInsecureTransport { get; init; }
 
     /// <summary>
-    /// Gets or initializes additional endpoint host names that may receive the query ticket and
+    /// Gets or initializes additional endpoint addresses that may receive the query ticket and
     /// authorization header.
     /// </summary>
     /// <remarks>
-    /// The frontend host is always allowed. StarRocks versions before frontend proxy mode can
-    /// return backend hosts here; list each trusted backend host explicitly.
+    /// The exact frontend address is always allowed. StarRocks versions before frontend proxy mode
+    /// can return backend addresses here; list each trusted backend scheme, host, and port
+    /// explicitly.
     /// </remarks>
-    public IReadOnlyCollection<string> AllowedEndpointHosts { get; init; } = [];
+    public IReadOnlyCollection<Uri> AllowedEndpointAddresses { get; init; } = [];
 
     /// <inheritdoc />
     public override string ToString()

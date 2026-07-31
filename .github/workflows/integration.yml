@@ -76,10 +76,10 @@ jobs:
           done
 
           starrocks_ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' dotrocks-starrocks)
-          echo "DOTROCKS_FLIGHT_ALLOWED_HOSTS=${starrocks_ip},dotrocks-starrocks,starrocks" >> "$GITHUB_ENV"
+          echo "DOTROCKS_FLIGHT_ALLOWED_ENDPOINTS=grpc://${starrocks_ip}:9408,grpc://${starrocks_ip}:9419,grpc://dotrocks-starrocks:9408,grpc://dotrocks-starrocks:9419,grpc://starrocks:9408,grpc://starrocks:9419" >> "$GITHUB_ENV"
 
           for attempt in {1..120}; do
-            if (echo > /dev/tcp/127.0.0.1/${DOTROCKS_FE_FLIGHT_PORT} 2>/dev/null; then
+            if (echo > /dev/tcp/127.0.0.1/${DOTROCKS_FE_FLIGHT_PORT}) 2>/dev/null; then
               break
             fi
             if [ "${attempt}" = "120" ]; then

@@ -63,13 +63,51 @@ public sealed class FlightSqlEndpointPolicyTests
         )
         {
             AllowInsecureTransport = true,
-            AllowedEndpointHosts = ["backend.internal"],
+            AllowedEndpointAddresses = [new Uri("grpc://backend.internal:9410")],
         };
         var policy = new FlightSqlEndpointPolicy(options);
 
         Uri endpoint = policy.Resolve("grpc+tcp://backend.internal:9410");
 
         Assert.Equal("http://backend.internal:9410/", endpoint.AbsoluteUri);
+    }
+
+    [Fact]
+    public void Resolve_RejectsUntrustedPortOnTrustedHost()
+    {
+        var options = new DotRocksFlightSqlOptions(
+            new Uri("grpc://frontend.internal:9408"),
+            "root",
+            ""
+        )
+        {
+            AllowInsecureTransport = true,
+            AllowedEndpointAddresses = [new Uri("grpc://backend.internal:9410")],
+        };
+        var policy = new FlightSqlEndpointPolicy(options);
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            policy.Resolve("grpc+tcp://backend.internal:9999")
+        );
+
+        Assert.DoesNotContain("backend.internal", exception.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("9999", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Constructor_RejectsRelativeAllowedEndpointAddress()
+    {
+        var options = new DotRocksFlightSqlOptions(
+            new Uri("grpc://frontend.internal:9408"),
+            "root",
+            ""
+        )
+        {
+            AllowInsecureTransport = true,
+            AllowedEndpointAddresses = [new Uri("backend.internal/flight", UriKind.Relative)],
+        };
+
+        Assert.Throws<ArgumentException>(() => new DotRocksFlightSqlDataSource(options));
     }
 
     [Fact]

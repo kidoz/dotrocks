@@ -110,7 +110,7 @@ public enum DotRocks.FlightSql.DotRocksFlightSqlFallbackMode
 public sealed class DotRocks.FlightSql.DotRocksFlightSqlOptions
   public DotRocks.FlightSql.DotRocksFlightSqlOptions(System.Uri endpoint, System.String userName, System.String password)
   public property System.Boolean AllowInsecureTransport { get; set; }
-  public property System.Collections.Generic.IReadOnlyCollection<System.String> AllowedEndpointHosts { get; set; }
+  public property System.Collections.Generic.IReadOnlyCollection<System.Uri> AllowedEndpointAddresses { get; set; }
   public property System.TimeSpan CommandTimeout { get; set; }
   public property System.Uri Endpoint { get; }
   public property System.String UserName { get; }

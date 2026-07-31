@@ -1,3 +1,4 @@
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using Apache.Arrow.Flight.Client;
 using Apache.Arrow.Flight.Sql;
@@ -14,7 +15,10 @@ internal sealed class FlightSqlConnection : IDisposable
 
     public FlightSqlConnection(Uri address, string userName, string password)
     {
-        _channel = GrpcChannel.ForAddress(address);
+        _channel = GrpcChannel.ForAddress(
+            address,
+            new GrpcChannelOptions { HttpHandler = CreateHttpHandler(), DisposeHttpClient = true }
+        );
         Client = new FlightClient(_channel);
         SqlClient = new FlightSqlClient(Client);
         _authorizationValue = CreateBasicAuthorizationValue(userName, password);
@@ -27,6 +31,9 @@ internal sealed class FlightSqlConnection : IDisposable
     public Metadata CreateHeaders() => new() { { "authorization", _authorizationValue } };
 
     public void Dispose() => _channel.Dispose();
+
+    internal static SocketsHttpHandler CreateHttpHandler() =>
+        new() { SslOptions = { CertificateRevocationCheckMode = X509RevocationMode.Offline } };
 
     internal static string CreateBasicAuthorizationValue(string userName, string password)
     {

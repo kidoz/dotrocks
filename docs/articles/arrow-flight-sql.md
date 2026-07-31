@@ -19,6 +19,8 @@ through the FE; without it, the BE/CN hosts and ports returned in `FlightInfo` m
 StarRocks commonly documents a plaintext `grpc://` endpoint. Plaintext exposes the Basic
 authorization header, SQL, and results to network observers. Use it only for local development or
 on a trusted private network. DotRocks rejects plaintext unless `AllowInsecureTransport` is set.
+TLS endpoints use platform certificate validation with offline certificate-revocation checks,
+matching the default posture of `DotRocks.Data`.
 
 ## Direct Arrow record batches
 
@@ -29,8 +31,12 @@ var options = new DotRocksFlightSqlOptions(
     Environment.GetEnvironmentVariable("STARROCKS_PASSWORD") ?? string.Empty)
 {
     AllowInsecureTransport = true,
-    // Required only when FlightInfo points at different BE/CN hosts.
-    AllowedEndpointHosts = ["starrocks-be-1.internal", "starrocks-be-2.internal"],
+    // Required only when FlightInfo points at different BE/CN addresses.
+    AllowedEndpointAddresses =
+    [
+        new Uri("grpc+tls://starrocks-be-1.internal:9419"),
+        new Uri("grpc+tls://starrocks-be-2.internal:9419"),
+    ],
 };
 
 using var dataSource = new DotRocksFlightSqlDataSource(options);
@@ -133,9 +139,10 @@ These constraints avoid duplicate writes and cross-transport transaction illusio
 
 ## Endpoint trust and validation
 
-The FE host is trusted automatically. Any different BE/CN host must be listed in
-`AllowedEndpointHosts` before DotRocks opens a channel and forwards authorization. Matching is an
-exact, case-insensitive host comparison; wildcards are not supported.
+The exact FE scheme, host, and port are trusted automatically. Any different BE/CN address must be
+listed in `AllowedEndpointAddresses` before DotRocks opens a channel and forwards authorization.
+Matching uses the normalized scheme, host, and port; wildcards and host-only entries are not
+supported.
 
 The package has in-process protocol tests for reads, standard update `DoPut`, authorization,
 parameter binding, transactions, ADO.NET materialization, and EF Core queries. The live CI matrix

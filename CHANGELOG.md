@@ -14,8 +14,9 @@ version is derived from the release tag at publish time.
   updates, exposes async ADO.NET reader/command/transaction types, and can drive the existing EF
   Core provider through its `DbConnection` overload. Named parameters reuse DotRocks's safe SQL
   binder. Optional MySQL-protocol fallback is explicit: reads retry only safe discovery failures,
-  while writes are routed before Flight so an ambiguous write is never replayed. Endpoint hosts
-  remain allowlisted before credentials or tickets are forwarded. In-process protocol coverage,
+  while writes are routed before Flight so an ambiguous write is never replayed. Exact endpoint
+  scheme, host, and port combinations remain allowlisted before credentials or tickets are
+  forwarded. In-process protocol coverage,
   live StarRocks 3.5.5/4.0.7 Flight-read and fallback-write integration coverage, and comparative
   transport benchmarks are included. The standard Flight update path is retained for compatible
   endpoints; StarRocks 4.0.7 returns `UNIMPLEMENTED` for statement `DoPut` in live validation.

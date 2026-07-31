@@ -21,8 +21,8 @@ DotRocks.FlightSql.DotRocksFlightSqlFallbackMode.WriteCommands = 2 -> DotRocks.F
 DotRocks.FlightSql.DotRocksFlightSqlOptions
 DotRocks.FlightSql.DotRocksFlightSqlOptions.AllowInsecureTransport.get -> bool
 DotRocks.FlightSql.DotRocksFlightSqlOptions.AllowInsecureTransport.init -> void
-DotRocks.FlightSql.DotRocksFlightSqlOptions.AllowedEndpointHosts.get -> System.Collections.Generic.IReadOnlyCollection<string!>!
-DotRocks.FlightSql.DotRocksFlightSqlOptions.AllowedEndpointHosts.init -> void
+DotRocks.FlightSql.DotRocksFlightSqlOptions.AllowedEndpointAddresses.get -> System.Collections.Generic.IReadOnlyCollection<System.Uri!>!
+DotRocks.FlightSql.DotRocksFlightSqlOptions.AllowedEndpointAddresses.init -> void
 DotRocks.FlightSql.DotRocksFlightSqlOptions.CommandTimeout.get -> System.TimeSpan
 DotRocks.FlightSql.DotRocksFlightSqlOptions.CommandTimeout.init -> void
 DotRocks.FlightSql.DotRocksFlightSqlOptions.DotRocksFlightSqlOptions(System.Uri! endpoint, string! userName, string! password) -> void

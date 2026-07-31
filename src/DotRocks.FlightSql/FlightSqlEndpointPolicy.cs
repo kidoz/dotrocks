@@ -4,7 +4,7 @@ internal sealed class FlightSqlEndpointPolicy
 {
     private const string ReuseConnectionLocation = "arrow-flight-reuse-connection://?";
     private readonly bool _allowInsecureTransport;
-    private readonly HashSet<string> _allowedHosts;
+    private readonly HashSet<string> _allowedAddresses;
 
     public FlightSqlEndpointPolicy(DotRocksFlightSqlOptions options)
     {
@@ -13,22 +13,16 @@ internal sealed class FlightSqlEndpointPolicy
 
         PrimaryAddress = NormalizeAddress(options.Endpoint, options.AllowInsecureTransport);
         _allowInsecureTransport = options.AllowInsecureTransport;
-        _allowedHosts = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        _allowedAddresses = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            PrimaryAddress.Host,
+            PrimaryAddress.AbsoluteUri,
         };
 
-        foreach (string host in options.AllowedEndpointHosts)
+        foreach (Uri address in options.AllowedEndpointAddresses)
         {
-            if (string.IsNullOrWhiteSpace(host))
-            {
-                throw new ArgumentException(
-                    "Allowed endpoint hosts cannot contain an empty host name.",
-                    nameof(options)
-                );
-            }
-
-            _allowedHosts.Add(host.Trim());
+            ArgumentNullException.ThrowIfNull(address);
+            Uri normalized = NormalizeAddress(address, options.AllowInsecureTransport);
+            _allowedAddresses.Add(normalized.AbsoluteUri);
         }
     }
 
@@ -52,10 +46,10 @@ internal sealed class FlightSqlEndpointPolicy
         }
 
         Uri normalized = NormalizeAddress(endpoint, _allowInsecureTransport);
-        if (!_allowedHosts.Contains(normalized.Host))
+        if (!_allowedAddresses.Contains(normalized.AbsoluteUri))
         {
             throw new InvalidOperationException(
-                "The Flight SQL server returned an endpoint host that is not trusted."
+                "The Flight SQL server returned an endpoint address that is not trusted."
             );
         }
 
@@ -99,11 +93,16 @@ internal sealed class FlightSqlEndpointPolicy
             );
         }
 
-        ArgumentNullException.ThrowIfNull(options.AllowedEndpointHosts);
+        ArgumentNullException.ThrowIfNull(options.AllowedEndpointAddresses);
     }
 
     private static Uri NormalizeAddress(Uri endpoint, bool allowInsecureTransport)
     {
+        if (!endpoint.IsAbsoluteUri)
+        {
+            throw new ArgumentException("Flight SQL endpoints must be absolute URIs.");
+        }
+
         if (string.IsNullOrWhiteSpace(endpoint.Host))
         {
             throw new ArgumentException("Flight SQL endpoints must include a host name.");

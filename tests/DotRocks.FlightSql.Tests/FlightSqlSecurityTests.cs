@@ -1,3 +1,4 @@
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using DotRocks.FlightSql;
 using Xunit;
@@ -46,6 +47,14 @@ public sealed class FlightSqlSecurityTests
         string decoded = Encoding.UTF8.GetString(Convert.FromBase64String(encoded));
 
         Assert.Equal("üser:päss", decoded);
+    }
+
+    [Fact]
+    public void HttpHandler_UsesOfflineCertificateRevocationChecks()
+    {
+        using SocketsHttpHandler handler = FlightSqlConnection.CreateHttpHandler();
+
+        Assert.Equal(X509RevocationMode.Offline, handler.SslOptions.CertificateRevocationCheckMode);
     }
 
     [Fact]

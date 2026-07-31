@@ -52,9 +52,13 @@ internal static class FlightSqlIntegrationEnvironment
         {
             string host = Environment.GetEnvironmentVariable("DOTROCKS_HOST") ?? "127.0.0.1";
             string port = Environment.GetEnvironmentVariable("DOTROCKS_FE_FLIGHT_PORT") ?? "9408";
-            string[] allowedHosts = (
-                Environment.GetEnvironmentVariable("DOTROCKS_FLIGHT_ALLOWED_HOSTS") ?? string.Empty
-            ).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            Uri[] allowedEndpoints = (
+                Environment.GetEnvironmentVariable("DOTROCKS_FLIGHT_ALLOWED_ENDPOINTS")
+                ?? string.Empty
+            )
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(value => new Uri(value, UriKind.Absolute))
+                .ToArray();
             return new DotRocksFlightSqlOptions(
                 new Uri($"grpc://{host}:{port}"),
                 Environment.GetEnvironmentVariable("DOTROCKS_USER") ?? "root",
@@ -62,7 +66,7 @@ internal static class FlightSqlIntegrationEnvironment
             )
             {
                 AllowInsecureTransport = true,
-                AllowedEndpointHosts = allowedHosts,
+                AllowedEndpointAddresses = allowedEndpoints,
                 CommandTimeout = TimeSpan.FromSeconds(60),
             };
         }

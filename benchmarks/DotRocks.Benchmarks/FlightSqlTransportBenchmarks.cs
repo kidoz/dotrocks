@@ -58,10 +58,13 @@ public class FlightSqlTransportBenchmarks
         string endpoint =
             Environment.GetEnvironmentVariable("DOTROCKS_BENCH_FLIGHT_ENDPOINT")
             ?? "grpc://127.0.0.1:9408";
-        string[] allowedHosts = (
-            Environment.GetEnvironmentVariable("DOTROCKS_BENCH_FLIGHT_ALLOWED_HOSTS")
+        Uri[] allowedEndpoints = (
+            Environment.GetEnvironmentVariable("DOTROCKS_BENCH_FLIGHT_ALLOWED_ENDPOINTS")
             ?? string.Empty
-        ).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        )
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(value => new Uri(value, UriKind.Absolute))
+            .ToArray();
         _flightOptions = new DotRocksFlightSqlOptions(
             new Uri(endpoint),
             Environment.GetEnvironmentVariable("DOTROCKS_BENCH_USER") ?? "root",
@@ -69,7 +72,7 @@ public class FlightSqlTransportBenchmarks
         )
         {
             AllowInsecureTransport = endpoint.StartsWith("grpc://", StringComparison.Ordinal),
-            AllowedEndpointHosts = allowedHosts,
+            AllowedEndpointAddresses = allowedEndpoints,
             CommandTimeout = TimeSpan.FromMinutes(2),
         };
     }
