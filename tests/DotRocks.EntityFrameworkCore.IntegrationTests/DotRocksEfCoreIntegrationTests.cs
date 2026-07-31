@@ -21,6 +21,7 @@ public sealed class DotRocksEfCoreIntegrationTests
     private const string LinqDatabaseName = "dotrocks_ef_core_test";
     private const string WidgetTableName = "widgets";
     private const string WriteWidgetTableName = "ef_write_widgets";
+    private const string CompositeWriteWidgetTableName = "ef_composite_write_widgets";
     private const string MigrationWidgetTableName = "ef_migration_widgets";
     private const string MigrationId = "202606190001_CreateEfMigrationWidget";
     private const string TableShapeMigrationWidgetTableName = "ef_table_shape_migration_widgets";
@@ -713,6 +714,340 @@ public sealed class DotRocksEfCoreIntegrationTests
         {
             await DropWriteWidgetTableAsync(context).ConfigureAwait(true);
         }
+    }
+
+    [Fact]
+    public async Task SaveChangesAsync_CompositeKey_InsertsUpdatesAndDeletesEntity()
+    {
+        IntegrationTestEnvironment.SkipUnlessEnabled();
+
+        var interceptor = new CapturingCommandInterceptor();
+        await using var context = CreateLiveContext(interceptor);
+        await EnsureCompositeWriteWidgetTableAsync(context).ConfigureAwait(true);
+
+        try
+        {
+            var first = new EfCompositeWriteWidget
+            {
+                TenantId = 1,
+                Id = 10,
+                Name = "first",
+                Amount = 12.34m,
+            };
+            context.CompositeWriteWidgets.Add(first);
+            Assert.Equal(
+                1,
+                await context
+                    .SaveChangesAsync(TestContext.Current.CancellationToken)
+                    .ConfigureAwait(true)
+            );
+
+            // A second tenant with the same Id column value proves the full composite key is
+            // the row identity, not the first column alone.
+            var second = new EfCompositeWriteWidget
+            {
+                TenantId = 2,
+                Id = 10,
+                Name = "second",
+                Amount = 23.45m,
+            };
+            context.CompositeWriteWidgets.Add(second);
+            Assert.Equal(
+                1,
+                await context
+                    .SaveChangesAsync(TestContext.Current.CancellationToken)
+                    .ConfigureAwait(true)
+            );
+
+            first.Name = "updated";
+            first.Amount = 56.78m;
+            interceptor.Clear();
+            Assert.Equal(
+                1,
+                await context
+                    .SaveChangesAsync(TestContext.Current.CancellationToken)
+                    .ConfigureAwait(true)
+            );
+            CapturedCommand updateCommand = interceptor.SingleNonQueryCommand("UPDATE");
+            Assert.Contains(
+                "`tenant_id` = @p",
+                updateCommand.CommandText,
+                StringComparison.OrdinalIgnoreCase
+            );
+            Assert.Contains(
+                "`id` = @p",
+                updateCommand.CommandText,
+                StringComparison.OrdinalIgnoreCase
+            );
+            Assert.Contains(" AND ", updateCommand.CommandText, StringComparison.Ordinal);
+
+            EfCompositeWriteWidget updated = await context
+                .CompositeWriteWidgets.AsNoTracking()
+                .SingleAsync(
+                    widget => widget.TenantId == 1 && widget.Id == 10,
+                    TestContext.Current.CancellationToken
+                )
+                .ConfigureAwait(true);
+            Assert.Equal("updated", updated.Name);
+            Assert.Equal(56.78m, updated.Amount);
+
+            EfCompositeWriteWidget untouched = await context
+                .CompositeWriteWidgets.AsNoTracking()
+                .SingleAsync(
+                    widget => widget.TenantId == 2 && widget.Id == 10,
+                    TestContext.Current.CancellationToken
+                )
+                .ConfigureAwait(true);
+            Assert.Equal("second", untouched.Name);
+
+            context.CompositeWriteWidgets.Remove(second);
+            interceptor.Clear();
+            Assert.Equal(
+                1,
+                await context
+                    .SaveChangesAsync(TestContext.Current.CancellationToken)
+                    .ConfigureAwait(true)
+            );
+            CapturedCommand deleteCommand = interceptor.SingleNonQueryCommand("DELETE");
+            Assert.Contains(
+                "`tenant_id` = @p",
+                deleteCommand.CommandText,
+                StringComparison.OrdinalIgnoreCase
+            );
+            Assert.Contains(" AND ", deleteCommand.CommandText, StringComparison.Ordinal);
+
+            Assert.Equal(
+                1,
+                await context
+                    .CompositeWriteWidgets.CountAsync(TestContext.Current.CancellationToken)
+                    .ConfigureAwait(true)
+            );
+        }
+        finally
+        {
+            await DropCompositeWriteWidgetTableAsync(context).ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
+    public async Task FindAsync_CompositeKey_ResolvesEntityByFullKey()
+    {
+        IntegrationTestEnvironment.SkipUnlessEnabled();
+
+        await using var context = CreateLiveContext();
+        await EnsureCompositeWriteWidgetTableAsync(context).ConfigureAwait(true);
+
+        try
+        {
+            context.CompositeWriteWidgets.Add(
+                new EfCompositeWriteWidget
+                {
+                    TenantId = 7,
+                    Id = 70,
+                    Name = "findable",
+                    Amount = 7.77m,
+                }
+            );
+            await context
+                .SaveChangesAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+
+            // Key values follow the declared key order: TenantId, then Id.
+            EfCompositeWriteWidget? found = await context
+                .CompositeWriteWidgets.FindAsync([7, 70], TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+
+            Assert.NotNull(found);
+            Assert.Equal("findable", found.Name);
+
+            EfCompositeWriteWidget? missing = await context
+                .CompositeWriteWidgets.FindAsync([7, 71], TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+
+            Assert.Null(missing);
+        }
+        finally
+        {
+            await DropCompositeWriteWidgetTableAsync(context).ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
+    public async Task EfFunctionsGreatestAndLeast_ExecuteAgainstStarRocks()
+    {
+        IntegrationTestEnvironment.SkipUnlessEnabled();
+
+        await using var context = CreateLiveContext();
+        await EnsureWidgetTableAsync(context).ConfigureAwait(true);
+
+        try
+        {
+            var rows = await context
+                .Widgets.Select(widget => new
+                {
+                    widget.Id,
+                    Larger = EF.Functions.Greatest(widget.Id, widget.Priority),
+                    Smaller = EF.Functions.Least(widget.Id, widget.Priority),
+                })
+                .OrderBy(row => row.Id)
+                .ToListAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+
+            // Seeded widgets: (id 1, priority 2), (id 2, priority 1), (id 3, priority 1).
+            Assert.Equal([2, 2, 3], rows.Select(row => row.Larger));
+            Assert.Equal([1, 1, 1], rows.Select(row => row.Smaller));
+
+            List<int> filtered = await context
+                .Widgets.Where(widget => EF.Functions.Greatest(widget.Id, widget.Priority) >= 3)
+                .Select(widget => widget.Id)
+                .ToListAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+
+            Assert.Equal([3], filtered);
+        }
+        finally
+        {
+            await DropWidgetTableAsync(context).ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
+    public async Task EfFunctionsGreatest_NullArgument_ReturnsNullPerMySqlSemantics()
+    {
+        IntegrationTestEnvironment.SkipUnlessEnabled();
+
+        await using var context = CreateLiveContext();
+        await EnsureWidgetTableAsync(context).ConfigureAwait(true);
+
+        try
+        {
+            // StarRocks follows MySQL NULL semantics: greatest() returns NULL when any argument
+            // is NULL (PostgreSQL would ignore the NULL). Widget 1 has optional_score NULL, so
+            // its result must be NULL rather than falling back to the non-null argument.
+            var rows = await context
+                .Widgets.Select(widget => new
+                {
+                    widget.Id,
+                    Value = EF.Functions.Greatest(widget.OptionalScore, (int?)widget.Category),
+                })
+                .OrderBy(row => row.Id)
+                .ToListAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+
+            Assert.Null(rows[0].Value);
+            Assert.Equal(20, rows[1].Value);
+            Assert.Equal(30, rows[2].Value);
+        }
+        finally
+        {
+            await DropWidgetTableAsync(context).ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
+    public async Task ConditionalAggregate_MultiMeasureSingleScan_ComputesExpectedTotals()
+    {
+        IntegrationTestEnvironment.SkipUnlessEnabled();
+
+        await using var context = CreateLiveContext();
+        await EnsureWidgetTableAsync(context).ConfigureAwait(true);
+
+        try
+        {
+            // The FR-3 shape: several coalesce(sum(case when ... end), 0) measures and abs()
+            // computed in one scan. Seeded amounts: 'one' 12.34, 'two' 23.45, 'three' 34.56.
+            var totals = await context
+                .Widgets.GroupBy(widget => 1)
+                .Select(group => new
+                {
+                    OneTotal = group.Sum(widget =>
+                        widget.Name == "one" ? widget.Amount : (decimal?)null
+                    ) ?? 0m,
+                    MissingTotal = group.Sum(widget =>
+                        widget.Name == "missing" ? widget.Amount : (decimal?)null
+                    ) ?? 0m,
+                    AbsNet = Math.Abs(
+                        (
+                            group.Sum(widget =>
+                                widget.Name == "one" ? widget.Amount : (decimal?)null
+                            ) ?? 0m
+                        )
+                            - (
+                                group.Sum(widget =>
+                                    widget.Name == "two" ? widget.Amount : (decimal?)null
+                                ) ?? 0m
+                            )
+                    ),
+                })
+                .SingleAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+
+            Assert.Equal(12.34m, totals.OneTotal);
+            Assert.Equal(0m, totals.MissingTotal);
+            Assert.Equal(11.11m, totals.AbsNet);
+        }
+        finally
+        {
+            await DropWidgetTableAsync(context).ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
+    public async Task FromSqlInterpolated_ParameterizesAndMaterializesEntity()
+    {
+        IntegrationTestEnvironment.SkipUnlessEnabled();
+
+        var interceptor = new CapturingCommandInterceptor();
+        await using var context = CreateLiveContext(interceptor);
+        await EnsureWidgetTableAsync(context).ConfigureAwait(true);
+
+        try
+        {
+            int id = 2;
+            string name = "two";
+            interceptor.Clear();
+
+            DotRocksWidget widget = await context
+                .Widgets.FromSql(
+                    $"SELECT * FROM `dotrocks_ef_core_test`.`widgets` WHERE id = {id} AND name = {name}"
+                )
+                .SingleAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+
+            Assert.Equal(2, widget.Id);
+            Assert.Equal("two", widget.Name);
+
+            // The interpolated values must travel as parameters, not inline SQL text.
+            CapturedCommand command = Assert.Single(
+                interceptor.Commands,
+                captured =>
+                    captured.CommandText.Contains("widgets", StringComparison.Ordinal)
+                    && captured.CommandText.Contains("@p", StringComparison.Ordinal)
+            );
+            Assert.DoesNotContain("'two'", command.CommandText, StringComparison.Ordinal);
+            Assert.Contains("two", command.ParameterValues());
+        }
+        finally
+        {
+            await DropWidgetTableAsync(context).ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
+    public async Task SqlQueryInterpolated_ComputesScalarWithParameters()
+    {
+        IntegrationTestEnvironment.SkipUnlessEnabled();
+
+        await using var context = CreateLiveContext();
+        int left = 40;
+        int right = 2;
+
+        long value = await context
+            .Database.SqlQuery<long>($"SELECT CAST({left} + {right} AS BIGINT) AS Value")
+            .SingleAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+
+        Assert.Equal(42L, value);
     }
 
     [Fact]
@@ -2185,6 +2520,33 @@ public sealed class DotRocksEfCoreIntegrationTests
         return context.Database.ExecuteSqlRawAsync(sql, TestContext.Current.CancellationToken);
     }
 
+    private static async Task EnsureCompositeWriteWidgetTableAsync(DotRocksTestContext context)
+    {
+        await EnsureLinqDatabaseAsync(context).ConfigureAwait(true);
+        await DropCompositeWriteWidgetTableAsync(context).ConfigureAwait(true);
+        string createSql = $"""
+            CREATE TABLE {DelimitedCompositeWriteWidgetTable()} (
+                tenant_id INT NOT NULL,
+                id INT NOT NULL,
+                name VARCHAR(64) NOT NULL,
+                amount DECIMAL(10, 2) NOT NULL
+            )
+            PRIMARY KEY(tenant_id, id)
+            DISTRIBUTED BY HASH(tenant_id, id) BUCKETS 1
+            PROPERTIES ('replication_num' = '1')
+            """;
+
+        await context
+            .Database.ExecuteSqlRawAsync(createSql, TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+    }
+
+    private static Task<int> DropCompositeWriteWidgetTableAsync(DotRocksTestContext context)
+    {
+        string sql = "DROP TABLE IF EXISTS " + DelimitedCompositeWriteWidgetTable();
+        return context.Database.ExecuteSqlRawAsync(sql, TestContext.Current.CancellationToken);
+    }
+
     private static async Task EnsureHighPrecisionTableAsync(DotRocksTestContext context)
     {
         await EnsureLinqDatabaseAsync(context).ConfigureAwait(true);
@@ -2225,6 +2587,11 @@ public sealed class DotRocksEfCoreIntegrationTests
 
     private static string DelimitedWriteWidgetTable() =>
         DelimitIdentifier(LinqDatabaseName) + "." + DelimitIdentifier(WriteWidgetTableName);
+
+    private static string DelimitedCompositeWriteWidgetTable() =>
+        DelimitIdentifier(LinqDatabaseName)
+        + "."
+        + DelimitIdentifier(CompositeWriteWidgetTableName);
 
     private static string DelimitedHighPrecisionTable() =>
         DelimitIdentifier(LinqDatabaseName) + "." + DelimitIdentifier("high_precision_values");
@@ -2379,6 +2746,8 @@ public sealed class DotRocksEfCoreIntegrationTests
 
         public DbSet<EfWriteWidget> WriteWidgets => Set<EfWriteWidget>();
 
+        public DbSet<EfCompositeWriteWidget> CompositeWriteWidgets => Set<EfCompositeWriteWidget>();
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             modelBuilder.Entity<DotRocksRow>().HasNoKey();
@@ -2467,6 +2836,23 @@ public sealed class DotRocksEfCoreIntegrationTests
                 .ValueGeneratedNever();
             modelBuilder
                 .Entity<EfWriteWidget>()
+                .Property(widget => widget.Amount)
+                .HasColumnType("decimal(10, 2)");
+            modelBuilder
+                .Entity<EfCompositeWriteWidget>()
+                .ToTable(CompositeWriteWidgetTableName, LinqDatabaseName)
+                .HasKey(widget => new { widget.TenantId, widget.Id });
+            modelBuilder
+                .Entity<EfCompositeWriteWidget>()
+                .Property(widget => widget.TenantId)
+                .HasColumnName("tenant_id")
+                .ValueGeneratedNever();
+            modelBuilder
+                .Entity<EfCompositeWriteWidget>()
+                .Property(widget => widget.Id)
+                .ValueGeneratedNever();
+            modelBuilder
+                .Entity<EfCompositeWriteWidget>()
                 .Property(widget => widget.Amount)
                 .HasColumnType("decimal(10, 2)");
         }
@@ -2858,6 +3244,22 @@ public sealed class DotRocksEfCoreIntegrationTests
         public string Name { get; set; } = string.Empty;
 
         public bool Active { get; set; }
+
+        public decimal Amount { get; set; }
+    }
+
+    [SuppressMessage(
+        "Performance",
+        "CA1812:Avoid uninstantiated internal classes",
+        Justification = "EF Core uses this entity type through DbSet metadata."
+    )]
+    private sealed class EfCompositeWriteWidget
+    {
+        public int TenantId { get; set; }
+
+        public int Id { get; set; }
+
+        public string Name { get; set; } = string.Empty;
 
         public decimal Amount { get; set; }
     }
