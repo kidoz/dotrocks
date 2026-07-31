@@ -8,6 +8,8 @@ version is derived from the release tag at publish time.
 
 ## [Unreleased]
 
+## [1.3.5] - 2026-07-31
+
 ### Added
 - EF Core: the EF-standard relational `EF.Functions.Greatest`/`Least` params-array overloads
   (any argument count), `Math.Max`/`Math.Min`, and inline-collection `Max()`/`Min()` now
@@ -336,7 +338,8 @@ version is derived from the release tag at publish time.
 - Stream Load refuses to forward credentials over a downgraded (HTTPS→HTTP) redirect.
 - NuGet vulnerability auditing and CodeQL analysis in CI.
 
-[Unreleased]: https://github.com/kidoz/dotrocks/compare/v1.3.4...HEAD
+[Unreleased]: https://github.com/kidoz/dotrocks/compare/v1.3.5...HEAD
+[1.3.5]: https://github.com/kidoz/dotrocks/compare/v1.3.4...v1.3.5
 [1.3.4]: https://github.com/kidoz/dotrocks/compare/v1.3.3...v1.3.4
 [1.3.3]: https://github.com/kidoz/dotrocks/compare/v1.3.2...v1.3.3
 [1.3.2]: https://github.com/kidoz/dotrocks/compare/v1.3.1...v1.3.2
