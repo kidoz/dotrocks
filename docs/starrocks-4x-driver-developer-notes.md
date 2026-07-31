@@ -269,10 +269,10 @@ System and DDL limits:
 The EF provider stays explicit and conservative:
 
 - Query support grows by verified translation slices.
-- Writes are single-table, explicit-primary-key, scalar-only, and
-  parameterized.
-- Generated values, navigations, owned types, concurrency tokens, and composite-key
-  writes remain unsupported until designed.
+- Writes are single-table, explicit-primary-key (single-column or composite),
+  scalar-only, and parameterized.
+- Generated values, navigations, owned types, and concurrency tokens remain
+  unsupported until designed.
 - Multi-row `SaveChanges` to one table is unsafe because StarRocks transaction
   semantics are not OLTP-like.
 - Savepoints are disabled or rejected.

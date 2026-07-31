@@ -8,17 +8,19 @@ behaviors you should know to configure DotRocks safely.
 > [`SECURITY.md`](https://github.com/kidoz/dotrocks/blob/main/SECURITY.md). This article is
 > the user-facing companion.
 
-## Two transports, two security stories
+## Three transports, three security stories
 
-DotRocks uses **two** separate network paths, each with its own security controls:
+DotRocks uses separate network paths, each with its own security controls:
 
 | Transport | Port | Purpose | TLS control |
 |---|---|---|---|
 | SQL query protocol (MySQL wire) | 9030 | Queries, transactions, parameterized commands | `Ssl Mode`, `Trust Server Certificate`, `Ssl Revocation Check` |
 | Stream Load (HTTP) | 8030 | Bulk ingestion | HTTPS endpoint URL, `Allow Insecure Stream Load`, redirect vetting |
+| Arrow Flight SQL (gRPC, optional `DotRocks.FlightSql` package) | 9408 (FE) / 9419 (BE) | Columnar analytical reads | `grpc+tls`/`https` schemes, `AllowInsecureTransport` opt-in for plaintext, endpoint allowlisting (`AllowedEndpointAddresses`) before tickets/credentials are forwarded |
 
 Secure each one independently. A `Required` SQL TLS mode does **not** protect Stream Load
-unless the Stream Load endpoint is also HTTPS.
+or Flight SQL unless those endpoints are also TLS. See
+[Arrow Flight SQL](arrow-flight-sql.md) for the Flight transport's full security model.
 
 ## SQL protocol TLS
 
@@ -98,10 +100,10 @@ a connect-time gate that:
 - **Resolves the host once and connects the socket to exactly that vetted address.** This
   closes the DNS-rebinding gap: a host cannot resolve to a benign address for validation
   and an internal address for the actual connect.
-- **Refuses** loopback, link-local (including the `169.254.169.254` and IPv6
-  `fd00:ec2::254` cloud-metadata endpoints), multicast, unspecified, and IPv6
-  unique-local targets — unless the configured endpoint is itself loopback (single-node /
-  local development).
+- **Refuses** loopback, link-local (including the `169.254.169.254` cloud-metadata
+  endpoint), multicast, unspecified, and IPv6 unique-local targets (which covers the IPv6
+  `fd00:ec2::254` cloud-metadata endpoint) — unless the configured endpoint is itself
+  loopback (single-node / local development).
 - **Normalizes IPv4-mapped IPv6** literals (e.g. `::ffff:169.254.169.254`) so the IPv4
   range checks still apply.
 - **Fails closed** on DNS resolution failure: the load fails rather than connecting to an

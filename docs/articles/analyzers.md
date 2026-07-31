@@ -46,7 +46,7 @@ All diagnostics default to **Warning** severity and are enabled by default.
 | **DTR0003** | An entity maps a `binary`/`varbinary` column. | Binary mapping is unsupported until the EF read/write surface is verified end to end. |
 | **DTR0005** | Code calls `EnsureCreated` / `EnsureDeleted`. | Use migrations for conservative StarRocks DDL; these database-creator APIs are unsupported. |
 | **DTR0006** | Code calls `ExecuteUpdate` / `ExecuteDelete`. | DotRocks does not translate bulk LINQ DML. Use tracked single-row `SaveChanges` or raw SQL with parameters. |
-| **DTR0007** | A range change (`Add`/`Update`/`Remove` on multiple entities) is followed by `SaveChanges`. | StarRocks rejects a second DML against a table already written in the same transaction; write one row per `SaveChanges`. |
+| **DTR0007** | A range change (`AddRange`/`UpdateRange`/`RemoveRange`) is followed by `SaveChanges`. | StarRocks rejects a second DML against a table already written in the same transaction; write one row per `SaveChanges`. |
 
 > **Retired:** `DTR0008` (composite primary keys) no longer reports since DotRocks EF Core
 > gained composite primary key support. The id is reserved and will not be reused. The

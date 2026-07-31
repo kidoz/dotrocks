@@ -118,10 +118,12 @@ partition names must not be empty or contain `,`.
 | `IsPublishTimeout` | `bool` | Data was written but visibility publish timed out (rows become queryable slightly later). |
 
 A non-success server status never reaches the caller as a result: `LoadCsvAsync` and
-`LoadJsonAsync` throw a `DotRocksStreamLoadException` carrying the status, the HTTP
-status code, the parsed result, and the raw response body (`ResponseBody`). A returned
-result always has `IsSuccess == true`; the one outcome worth checking explicitly is
-`IsPublishTimeout` — the data was written, visibility just lags.
+`LoadJsonAsync` throw a `DotRocksStreamLoadException` carrying the status and the HTTP
+status code, plus either the parsed result (when the server returned a parseable
+non-success status) or the raw response body (`ResponseBody`, when the HTTP request
+itself failed) — whichever the failure produced. A returned result always has
+`IsSuccess == true`; the one outcome worth checking explicitly is `IsPublishTimeout` —
+the data was written, visibility just lags.
 
 ## Transactional Stream Load (two-phase)
 

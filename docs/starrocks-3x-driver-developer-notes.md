@@ -95,8 +95,10 @@ Driver requirements where TLS is available:
 ## SQL Execution
 
 Text SQL is the safest execution path on every 3.x line. DotRocks keeps
-named parameter binding as client-side literal formatting unless and until
-StarRocks binary prepared statements are characterized per version.
+named parameter binding as client-side literal formatting **by default**
+(`DotRocksParameterMode.Auto`/`TextProtocol`); the opt-in `ServerPrepared`
+binary prepared-statement mode is characterized against StarRocks 4.0.7 and
+is not claimed for 3.x versions.
 
 Prepared statements are documented from 3.2 onward, but the `PREPARE` syntax
 section still carries the SELECT-only caveat. Do not enable server-side prepared
@@ -288,8 +290,9 @@ The EF provider stays narrower on 3.x than on 4.0:
   assume 4.0 transaction behavior.
 - On 3.4/3.3, EF writes avoid explicit SQL transactions by default, or are
   rejected if the provider cannot safely execute the write pattern without them.
-- Generated values, navigations, owned types, concurrency tokens, and
-  composite-key writes remain unsupported until designed.
+- Generated values, navigations, owned types, and concurrency tokens remain
+  unsupported until designed. Composite-key writes are supported (one `WHERE`
+  condition per key column).
 - Savepoints are disabled or rejected.
 - Migrations start with database creation, table creation/drop, and
   migration history only.
@@ -326,7 +329,7 @@ is unavailable or unexpected:
 | --- | --- | --- | --- | --- | --- |
 | Text protocol query | yes | verify | verify | verify | verify |
 | MySQL-protocol TLS | yes | yes | unknown, verify or reject | unknown | unknown |
-| Prepared statements | client-side only | client-side only | client-side only | client-side only | no claim |
+| Prepared statements | client-side default; opt-in server-prepared (verified 4.0.7) | client-side only | client-side only | client-side only | no claim |
 | SQL transactions | broader 4.0 behavior | INSERT-only beta | reject unless verified | reject | reject |
 | Stream Load CSV/JSON | yes | verify | verify | verify | verify |
 | Stream Load transaction | multi-table same DB | single table | single table | verify single table | verify single table |

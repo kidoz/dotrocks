@@ -19,9 +19,9 @@ await using var connection = new DotRocksConnection(
 await connection.OpenAsync();
 ```
 
-Keyword names are **case-insensitive** and accept the aliases listed below. Whitespace
-inside a keyword name is significant (`User ID`, not `UserID`), but you may use the
-single-token alias (`Uid`) instead.
+Keyword names are **case-insensitive** and accept the aliases listed below, including the
+single-token spellings (`UserID`, `Uid`, `SslMode`, `TrustServerCertificate`, …) alongside
+the canonical spaced forms (`User ID`, `Ssl Mode`).
 
 ## Keyword reference
 
@@ -166,7 +166,8 @@ return the password:
 ```csharp
 var connection = new DotRocksConnection("...;Password=secret;...");
 Console.WriteLine(connection.ConnectionString);
-// Server=...;User ID=...;Password=... (no password value)
+// The canonical keyword set with the Password key omitted entirely, e.g.:
+// Server=...;Port=9030;User ID=...;Connection Timeout=15;Pooling=False;...
 ```
 
 The cleartext password is held internally for pool keying and authentication, but it is

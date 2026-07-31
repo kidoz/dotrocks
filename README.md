@@ -86,7 +86,7 @@ object? value = await command.ExecuteScalarAsync();
   `Auto` (text protocol) for parameterized writes.
 
 ```csharp
-await using var command = (DotRocksCommand)connection.CreateCommand();
+await using var command = connection.CreateCommand();
 command.CommandText = "SELECT event_name FROM events WHERE tenant_id = ? AND active = ?";
 command.ParameterMode = DotRocksParameterMode.ServerPrepared;
 command.Parameters.Add(new DotRocksParameter { Value = tenantId });
@@ -125,6 +125,12 @@ revocation in offline mode to avoid a blocking OCSP/CRL fetch during the handsha
 `Trust Server Certificate=true` disables validation and is intended only for controlled
 local test environments with self-signed certificates; it requires `Ssl Mode=Required` so it
 is never silently ignored on a plaintext fallback.
+
+Connection strings fail explicitly on unrecognized keywords (`Connection string keyword
+'...' is not supported.`) and on unrecognized enum values such as an unknown `Ssl Mode`,
+so a misspelled security setting cannot silently fall back to a less-secure default. See
+the [connection strings guide](https://github.com/kidoz/dotrocks/blob/main/docs/articles/connection-strings.md)
+for the full keyword reference.
 
 DotRocks gates version-specific behavior on the StarRocks version, which it reads with
 `SELECT current_version()` (the MySQL-protocol handshake only reports a compatibility version
@@ -172,12 +178,17 @@ Supported EF Core query surface:
 - `OrderBy`, `ThenBy`, `OrderByDescending`, `Skip`, `Take`, `Distinct`.
 - `Contains` over constant/parameter collections for `IN (...)`.
 - `StartsWith`, `EndsWith`, and `Contains` for strings using StarRocks `LIKE` (wildcards are
-  backslash-escaped; StarRocks does not accept an `ESCAPE` clause and is not emitted one).
+  backslash-escaped; StarRocks does not accept an `ESCAPE` clause, so none is emitted).
 - `FirstOrDefaultAsync`, `SingleAsync`, `ToListAsync`, `CountAsync`, `AnyAsync`.
 - Aggregate basics: `Min`, `Max`, `Sum`, `Average`.
 - Conditional aggregation: `Sum(x => x.Kind == "bet" ? x.Amount : (decimal?)null)` translates
   to `SUM(CASE WHEN ... END)`, `??` over an aggregate result to `COALESCE(...)`, and
   `Math.Abs` to `abs(...)`, so multi-measure analytical queries run in one scan.
+- `Math` methods: `Abs`, `Ceiling`, `Floor`, `Round` (including a digit count), `Sqrt`,
+  `Exp`, `Log`, `Sign`, and `Pow` translate to the matching StarRocks numeric functions.
+- Date/time members and methods: `Year`/`Month`/`Day`/`Hour`/`Minute`/`Second`/`DayOfYear`/
+  `.Date` translate to `year()`…`dayofyear()`/`date()`, and `AddYears`…`AddSeconds` to
+  `years_add`…`seconds_add`.
 - `EF.Functions.Greatest(...)` / `EF.Functions.Least(...)` translate to the native StarRocks
   `greatest()` / `least()` functions — both the EF-standard relational params-array overloads
   (any argument count) and the DotRocks 2–4 argument overloads. `Math.Max` / `Math.Min` and
@@ -215,18 +226,20 @@ Supported EF Core query surface:
 
 Unsupported EF Core behavior is explicit:
 
-- `ExecuteUpdate`, and `ExecuteDelete`.
+- `ExecuteUpdate` and `ExecuteDelete`.
 - `EnsureCreated` and schema deletion.
 - migration schema mutations beyond conservative database creation and table
-  creation/drop, including `DROP DATABASE`, add/drop/alter/rename column, rename table,
-  indexes, add/drop primary key, foreign keys, defaults, and computed columns.
+  creation/drop, including `DROP DATABASE`, `TRUNCATE TABLE`, add/drop/alter/rename column,
+  rename table, indexes, add/drop primary key, foreign keys, defaults, and computed columns.
 - idempotent migration scripts.
+- owned entity types (`OwnsOne`/`OwnsMany`) — rejected for every mapped entity, keyed or
+  keyless.
 - multi-row `SaveChanges` to a single table (StarRocks error 5303).
 - `SAVEPOINT` (unsupported by StarRocks; EF savepoints are disabled).
 - `Include`, navigation materialization, and navigation-based joins: relationships are
   rejected at model validation, so joins must be expressed explicitly across `DbSet`s.
-- binary/varbinary EF mapping until byte-array query translation and materialization are
-  broader than the verified ADO.NET reader path.
+- binary/varbinary and `UInt128` EF mapping until byte-array query translation and
+  materialization are broader than the verified ADO.NET reader path.
 
 These constraints are enforced at **model validation**, when the model is first built.
 DotRocks requires the whole mapped model to be write-safe: any keyed entity with a
@@ -257,6 +270,9 @@ Other compilable samples cover the rest of the surface:
   streaming CSV Stream Load without buffering the payload in memory.
 - [`DotRocks.Samples.StreamLoadTransaction`](https://github.com/kidoz/dotrocks/tree/main/samples/DotRocks.Samples.StreamLoadTransaction) —
   a two-phase Stream Load transaction (begin → load → prepare → commit) for all-or-nothing ingestion.
+- [`DotRocks.Samples.FlightSql`](https://github.com/kidoz/dotrocks/tree/main/samples/DotRocks.Samples.FlightSql) —
+  the experimental Arrow Flight SQL transport: streaming record batches from a
+  `DotRocksFlightSqlDataSource` and a parameterized scalar through the async ADO.NET surface.
 
 StarRocks transaction behavior is characterized by live tests. `COMMIT WORK` makes EF
 `SaveChangesAsync` rows visible. Some StarRocks builds accept `ROLLBACK WORK` for DML
@@ -268,8 +284,9 @@ EF Core type mapping:
 
 | StarRocks type | EF CLR type |
 | --- | --- |
-| `BOOLEAN` | `bool` |
+| `BOOLEAN` (alias `BOOL`) | `bool` |
 | `TINYINT` | `sbyte` |
+| `TINYINT UNSIGNED` | `byte` |
 | `SMALLINT` | `short` |
 | `INT`, `INTEGER`, `MEDIUMINT` | `int` |
 | `BIGINT` | `long` |
@@ -278,6 +295,7 @@ EF Core type mapping:
 | `DOUBLE` | `double` |
 | `DECIMAL(p,s)` where `p <= 29` | `decimal` |
 | `DECIMAL(p,s)` where `p >= 30` | `DotRocksDecimal` |
+| *(default for a bare `decimal` property)* | `decimal(28, 9)` store type in generated DDL |
 | `DATE` | `DateOnly` |
 | `DATETIME` | `DateTime` |
 | `TIME` | `TimeOnly` when the value is returned as a time string/span |
@@ -320,6 +338,8 @@ Package consumption:
 <PackageReference Include="DotRocks.Data" Version="1.4.0" />
 <PackageReference Include="DotRocks.EntityFrameworkCore" Version="1.4.0" />
 <PackageReference Include="DotRocks.EntityFrameworkCore.Design" Version="1.4.0" PrivateAssets="all" />
+<!-- Optional, experimental Arrow Flight SQL transport. -->
+<PackageReference Include="DotRocks.FlightSql" Version="1.4.0" />
 <PackageReference Include="DotRocks.Analyzers" Version="1.4.0" PrivateAssets="all" />
 <PackageReference Include="DotRocks.Analyzers.CodeFixes" Version="1.4.0" PrivateAssets="all" />
 ```

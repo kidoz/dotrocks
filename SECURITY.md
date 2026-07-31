@@ -29,9 +29,15 @@ steps. We aim to acknowledge reports within a few business days.
   validating a host name and letting the HTTP client re-resolve) closes the DNS-rebinding gap and
   fails closed on resolution failure, so a malicious redirect cannot forward credentials to
   internal-only services.
-- Connection-string values are validated: unrecognized `Ssl Mode` (and other enum) values fail
-  closed rather than silently falling back to plaintext, and `Maximum Pool Size` is bounded to
-  resist resource-exhaustion via an oversized pool.
+- Connection-string values are validated: unrecognized keywords are rejected outright (a
+  misspelled security keyword such as `Ssl Mdoe=Required` fails instead of silently applying a
+  less-secure default), unrecognized `Ssl Mode` (and other enum) values fail closed rather than
+  silently falling back to plaintext, and `Maximum Pool Size` is bounded to resist
+  resource-exhaustion via an oversized pool.
+- The optional Arrow Flight SQL transport (`DotRocks.FlightSql`) requires TLS unless plaintext is
+  explicitly opted into (`AllowInsecureTransport`), and forwards query tickets and credentials
+  only to endpoint addresses that are explicitly allowlisted (`AllowedEndpointAddresses`);
+  server-returned endpoint locations are never echoed into exception messages.
 - CI runs CodeQL and NuGet vulnerability auditing; dependencies are pinned with lock files.
 - Assemblies are unsigned (no strong-name/Authenticode); packages are published with build
   provenance attestation.

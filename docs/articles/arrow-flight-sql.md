@@ -149,6 +149,14 @@ listed in `AllowedEndpointAddresses` before DotRocks opens a channel and forward
 Matching uses the normalized scheme, host, and port; wildcards and host-only entries are not
 supported.
 
+> **StarRocks 3.5 note.** The 3.5 all-in-one deployment registers its BE with the FE as
+> `127.0.0.1`, so query endpoints are advertised at loopback (for example
+> `grpc://127.0.0.1:9419`). If you see *"The Flight SQL server returned an endpoint address
+> that is not trusted"*, add the advertised BE address to `AllowedEndpointAddresses` —
+> for a local or port-forwarded single-node setup that is typically
+> `grpc://127.0.0.1:9419`. StarRocks 4.0.7 reuses the FE connection for query results, so
+> no extra entry is needed there.
+
 The package has in-process protocol tests for reads, standard update `DoPut`, authorization,
 parameter binding, transactions, ADO.NET materialization, and EF Core queries. The live CI matrix
 enables FE and BE Flight endpoints and runs Flight reads, EF Core queries, and explicitly routed
