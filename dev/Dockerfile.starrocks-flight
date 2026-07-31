@@ -1,0 +1,16 @@
+ARG STARROCKS_VERSION=4.0.7
+FROM starrocks/allin1-ubuntu:${STARROCKS_VERSION}
+
+USER root
+
+# The all-in-one entrypoint copies the top-level templates into the FE and BE directories. Update
+# both locations so this remains compatible with the 3.5 and 4.0 image layouts used by CI.
+RUN set -eu; \
+    for config in /data/deploy/fe.conf /data/deploy/starrocks/fe/conf/fe.conf; do \
+        if [ -f "$config" ]; then printf '\narrow_flight_port = 9408\n' >> "$config"; fi; \
+    done; \
+    for config in /data/deploy/be.conf /data/deploy/starrocks/be/conf/be.conf; do \
+        if [ -f "$config" ]; then printf '\narrow_flight_port = 9419\n' >> "$config"; fi; \
+    done
+
+ENV JAVA_TOOL_OPTIONS="--add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED"
