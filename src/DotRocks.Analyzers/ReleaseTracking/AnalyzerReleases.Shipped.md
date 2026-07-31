@@ -30,3 +30,11 @@ DTR0009 | Security | Warning | Avoid building DotRocks CommandText with string c
 DTR0010 | Usage | Warning | Pass an available CancellationToken to async DotRocks calls.
 DTR0011 | Usage | Warning | Avoid blocking on async DotRocks operations with .Result/.Wait()/.GetAwaiter().GetResult().
 DTR0012 | Security | Warning | Avoid embedding a literal password in a DotRocks connection string.
+
+## Release 1.3.4
+
+### Removed Rules
+
+Rule ID | Category | Severity | Notes
+--------|----------|----------|------
+DTR0008 | Usage | Warning | Removed: composite primary keys are supported by DotRocks EF Core. The id is reserved and will not be reused.
