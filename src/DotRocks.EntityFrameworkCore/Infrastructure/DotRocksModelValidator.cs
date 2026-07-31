@@ -43,17 +43,14 @@ internal sealed class DotRocksModelValidator(
             );
         }
 
+        // Keyless entities are read-only query types; every write-safety rule below applies only
+        // to keyed (writable) entities. Single-column and composite primary keys are both
+        // supported — StarRocks PRIMARY KEY tables natively support multi-column keys, and the
+        // update pipeline emits one condition per key column.
         IKey? primaryKey = entityType.FindPrimaryKey();
         if (primaryKey is null)
         {
             return;
-        }
-
-        if (primaryKey.Properties.Count != 1)
-        {
-            throw new NotSupportedException(
-                $"DotRocks EF Core writable entity type '{entityType.DisplayName()}' requires a single-column primary key; composite keys are not supported."
-            );
         }
 
         if (entityType.GetNavigations().Any() || entityType.GetSkipNavigations().Any())

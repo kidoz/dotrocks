@@ -68,13 +68,14 @@ public sealed class DotRocksModelValidationTests
     }
 
     [Fact]
-    public void CompositeKey_ThrowsNotSupportedException()
+    public void CompositeKey_ValidatesAndKeepsAllKeyProperties()
     {
         using var context = CreateContext<CompositeKeyContext>();
 
-        NotSupportedException exception = Assert.Throws<NotSupportedException>(() => context.Model);
+        IEntityType entityType = Assert.Single(context.Model.GetEntityTypes());
+        IKey primaryKey = entityType.FindPrimaryKey()!;
 
-        Assert.Contains("single-column primary key", exception.Message, StringComparison.Ordinal);
+        Assert.Equal(["Id", "Category"], primaryKey.Properties.Select(property => property.Name));
     }
 
     [Fact]

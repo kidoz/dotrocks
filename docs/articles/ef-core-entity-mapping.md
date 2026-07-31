@@ -22,10 +22,9 @@ The validator that enforces this is
 [`DotRocksModelValidator`](https://github.com/kidoz/dotrocks/blob/main/src/DotRocks.EntityFrameworkCore/Infrastructure/DotRocksModelValidator.cs).
 
 ```text
-System.NotSupportedException: DotRocks EF Core writable entity type
-'MonthlyMetricSummary' requires a single-column primary key;
-composite keys are not supported.
-   at DotRocks.EntityFrameworkCore.Infrastructure.DotRocksModelValidator.ValidateEntityType(...)
+System.NotSupportedException: DotRocks EF Core requires explicit non-generated values;
+configure property 'MonthlyMetricSummary.Id' with ValueGeneratedNever().
+   at DotRocks.EntityFrameworkCore.Infrastructure.DotRocksModelValidator.ValidateProperty(...)
    ...
    at MetricsService.GetMonthlySummaryAsync(...)   // a read-only query!
 ```
@@ -38,8 +37,8 @@ Every mapped entity falls into one of these categories.
 
 | | Writable entity | Read-only / query entity |
 |---|---|---|
-| EF key | Single-column primary key | **No key** (`HasNoKey()`) |
-| Use for | Tables you `INSERT`/`UPDATE`/`DELETE` via `SaveChanges` | Aggregates, reports, multi-column-key tables, anything you only read |
+| EF key | Primary key — single-column or composite | **No key** (`HasNoKey()`) |
+| Use for | Tables you `INSERT`/`UPDATE`/`DELETE` via `SaveChanges` | Aggregates, reports, anything you only read |
 | StarRocks model | PRIMARY KEY table | DUPLICATE / AGGREGATE / UNIQUE / external catalog |
 | Validation applied | Full write-safety rule set | Skipped entirely (see below) |
 | `SaveChanges` | Supported (one row per call) | Not supported — query only |
@@ -53,15 +52,15 @@ the escape hatch for any table that does not fit the writable shape.
 ```
 Do you call SaveChanges for this entity?
 ├─ No  → map it HasNoKey().  Done. No other restriction applies.
-└─ Yes → it must be a StarRocks PRIMARY KEY table with a SINGLE-column key,
-         scalar properties only, ValueGeneratedNever() on every property,
-         no navigations, no composite/complex/binary/concurrency/generated columns.
+└─ Yes → it must be a StarRocks PRIMARY KEY table whose EF key matches the table's
+         PRIMARY KEY columns (single-column or composite), scalar properties only,
+         ValueGeneratedNever() on every property, no navigations, no
+         complex/binary/concurrency/generated columns.
 ```
 
 ## Read-only / query entities
 
-Use this mapping for reports, aggregates, and any StarRocks table whose key is not a
-single column.
+Use this mapping for reports, aggregates, and any StarRocks table you never write.
 
 ```csharp
 public sealed class MonthlyMetricSummary
@@ -107,7 +106,7 @@ validator enforces. Violating any one throws at model-build time.
 
 | Requirement | Why | Enforced by |
 |---|---|---|
-| Exactly one primary-key column | StarRocks single-column client-generated key is the only verified write key strategy | `primaryKey.Properties.Count != 1` |
+| Explicit primary key — single-column or composite | The key columns drive `UPDATE`/`DELETE` conditions (one condition per key column) and must match the StarRocks `PRIMARY KEY` columns | `FindPrimaryKey()` (keyed = writable) |
 | `ValueGeneratedNever()` on every property | DotRocks does not materialize server-generated values; keys are client-generated | `ValueGenerated != Never` |
 | Scalar properties only — no navigations | No FK/JOIN/cascade semantics are modeled | `GetNavigations()/GetSkipNavigations()` |
 | No complex/owned types | Not supported by the write pipeline | `GetComplexProperties()`, `IsOwned()` |
@@ -144,6 +143,26 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
               .HasStarRocksReplicationNum(3);
     });
 }
+```
+
+### Composite primary keys
+
+A writable entity may declare a multi-column key. Pass the same store columns, in the same
+order, to `HasStarRocksPrimaryKey`; `UPDATE` and `DELETE` emit one `WHERE` condition per key
+column, and `Find`/`FindAsync` takes the key values in the declared order.
+
+```csharp
+modelBuilder.Entity<TenantWidget>(entity =>
+{
+    entity.HasKey(w => new { w.TenantId, w.Id });        // composite key
+    entity.Property(w => w.TenantId).HasColumnName("tenant_id").ValueGeneratedNever();
+    entity.Property(w => w.Id).ValueGeneratedNever();
+    entity.ToTable("tenant_widget");
+    entity.HasStarRocksPrimaryKey("tenant_id", "Id")
+          .HasStarRocksHashDistribution(buckets: 8, "tenant_id", "Id");
+});
+
+var widget = await context.TenantWidgets.FindAsync(tenantId, id);   // key order: TenantId, Id
 ```
 
 ### Writing: one row per `SaveChanges`
@@ -210,7 +229,6 @@ Every message below is thrown by `DotRocksModelValidator` at model-build time. T
 
 | Message contains | Cause | Fix |
 |---|---|---|
-| `requires a single-column primary key; composite keys are not supported` | A keyed entity has a multi-column PK | Make it read-only with `HasNoKey()`, or reduce to a single-column PK if it must be writable |
 | `does not support owned entity type` | `OwnsOne/OwnsMany` mapping | Flatten owned data into scalar columns, or don't map it |
 | `must contain scalar properties only; navigations are not supported` | A reference/collection navigation on a keyed entity | Remove the navigation; model relationships by querying with explicit keys |
 | `must contain scalar properties only; complex properties are not supported` | `ComplexProperty(...)` | Flatten into scalar columns |
@@ -233,26 +251,26 @@ runtime throw — treat them as the early-warning version of the catalog above:
 |---|---|---|
 | `DTR0002` | Warning | EF writable key without `ValueGeneratedNever()` |
 | `DTR0003` | Warning | Unsupported `binary` / `varbinary` mapping |
-| `DTR0008` | Warning | Composite primary key (`HasKey(e => new { ... })`) — the exact mistake this guide opens with |
 
 All EF analyzers default to **Warning** so they surface early without breaking multi-provider
-builds. To turn the composite-key rule into a hard build error for a project, add to
-`.editorconfig`:
+builds. To turn a rule into a hard build error for a project, add to `.editorconfig`:
 
 ```ini
-dotnet_diagnostic.DTR0008.severity = error
+dotnet_diagnostic.DTR0002.severity = error
 ```
 
 The runtime `DotRocksModelValidator` always rejects these configurations regardless of analyzer
-severity.
+severity. (`DTR0008`, which flagged composite primary keys, was retired when composite keys
+became supported.)
 
 ## Mapping checklist
 
 When mapping or debugging an entity for DotRocks, verify in order:
 
 1. **Is it ever written via `SaveChanges`?** If not → `HasNoKey()` and stop. This resolves
-   most `NotSupportedException` model-build failures, including composite keys.
-2. If written: single-column `HasKey`, `ValueGeneratedNever()` on **every** property, no
+   most `NotSupportedException` model-build failures.
+2. If written: `HasKey` (single-column or composite) matching the StarRocks `PRIMARY KEY`
+   columns, `ValueGeneratedNever()` on **every** property, no
    navigations/complex/owned/concurrency/generated/binary members.
 3. Writable tables use `HasStarRocksPrimaryKey(...)`; read-only tables use
    `HasStarRocksDuplicateKey/UniqueKey(...)`.

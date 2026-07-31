@@ -319,72 +319,6 @@ public sealed class DotRocksUsageAnalyzerTests
         );
     }
 
-    [Fact]
-    public async Task EfEntityWithCompositeKey_ReportsDiagnostic()
-    {
-        Diagnostic[] diagnostics = await AnalyzeAsync(
-                EfStubs
-                    + """
-
-                    internal sealed class Widget
-                    {
-                        public int Id { get; set; }
-                        public int Category { get; set; }
-                    }
-
-                    internal sealed class SampleContext : Microsoft.EntityFrameworkCore.DbContext
-                    {
-                        protected override void OnModelCreating(Microsoft.EntityFrameworkCore.ModelBuilder modelBuilder)
-                        {
-                            modelBuilder.Entity<Widget>().HasKey(widget => new { widget.Id, widget.Category });
-                        }
-                    }
-                    """
-            )
-            .ConfigureAwait(true);
-
-        Diagnostic diagnostic = Assert.Single(
-            diagnostics,
-            diagnostic =>
-                diagnostic.Id == DotRocksDiagnosticDescriptors.CompositePrimaryKeyDiagnosticId
-        );
-        Assert.Contains(
-            "Widget",
-            diagnostic.GetMessage(CultureInfo.InvariantCulture),
-            StringComparison.Ordinal
-        );
-    }
-
-    [Fact]
-    public async Task EfEntityWithSingleColumnKey_DoesNotReportCompositeKeyDiagnostic()
-    {
-        Diagnostic[] diagnostics = await AnalyzeAsync(
-                EfStubs
-                    + """
-
-                    internal sealed class Widget
-                    {
-                        public int Id { get; set; }
-                    }
-
-                    internal sealed class SampleContext : Microsoft.EntityFrameworkCore.DbContext
-                    {
-                        protected override void OnModelCreating(Microsoft.EntityFrameworkCore.ModelBuilder modelBuilder)
-                        {
-                            modelBuilder.Entity<Widget>().HasKey(widget => widget.Id);
-                        }
-                    }
-                    """
-            )
-            .ConfigureAwait(true);
-
-        Assert.DoesNotContain(
-            diagnostics,
-            diagnostic =>
-                diagnostic.Id == DotRocksDiagnosticDescriptors.CompositePrimaryKeyDiagnosticId
-        );
-    }
-
     [Theory]
     [InlineData("binary")]
     [InlineData("varbinary")]
@@ -1087,8 +1021,7 @@ public sealed class DotRocksUsageAnalyzerTests
             new UnsupportedBinaryMappingAnalyzer(),
             new TransactionCompletionAnalyzer(),
             new UnsupportedEfApiAnalyzer(),
-            new MultiRowSaveChangesAnalyzer(),
-            new EfCompositePrimaryKeyAnalyzer()
+            new MultiRowSaveChangesAnalyzer()
         );
 
     private static async Task<string> ApplyFirstCodeFixAsync(
@@ -1223,6 +1156,43 @@ public sealed class DotRocksUsageAnalyzerTests
             .Assembly.GetCustomAttribute<AssemblyConfigurationAttribute>()
             ?.Configuration
         ?? "Debug";
+
+    [Fact]
+    public async Task RetiredCompositePrimaryKeyAnalyzer_IsANoOpForCompositeKeys()
+    {
+        // The DTR0008 analyzer shipped in DotRocks.Analyzers 1.0.1+, so the public type is kept
+        // as an obsolete no-op until the next major release. It must load cleanly and report
+        // nothing, even for the composite-key shape it formerly flagged.
+#pragma warning disable CS0618 // Type or member is obsolete
+        var retiredAnalyzer = new EfCompositePrimaryKeyAnalyzer();
+#pragma warning restore CS0618
+
+        Diagnostic[] diagnostics = await AnalyzerTestHarness
+            .AnalyzeAsync(
+                EfStubs
+                    + """
+
+                    internal sealed class Widget
+                    {
+                        public int Id { get; set; }
+                        public int Category { get; set; }
+                    }
+
+                    internal sealed class SampleContext : Microsoft.EntityFrameworkCore.DbContext
+                    {
+                        protected override void OnModelCreating(Microsoft.EntityFrameworkCore.ModelBuilder modelBuilder)
+                        {
+                            modelBuilder.Entity<Widget>().HasKey(widget => new { widget.Id, widget.Category });
+                        }
+                    }
+                    """,
+                retiredAnalyzer
+            )
+            .ConfigureAwait(true);
+
+        Assert.Empty(retiredAnalyzer.SupportedDiagnostics);
+        Assert.Empty(diagnostics);
+    }
 
     private const string EfStubs = AnalyzerTestHarness.EfStubs;
 

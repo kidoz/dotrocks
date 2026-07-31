@@ -43,8 +43,13 @@ public static class DotRocksDiagnosticDescriptors
     public const string MultiRowSaveChangesDiagnosticId = "DTR0007";
 
     /// <summary>
-    /// Diagnostic id for EF entities configured with an unsupported composite primary key.
+    /// Diagnostic id formerly reported for EF entities configured with a composite primary key.
+    /// Retired when DotRocks EF Core gained composite primary key support; the id is reserved,
+    /// no analyzer reports it, and this constant will be removed in the next major release.
     /// </summary>
+    [Obsolete(
+        "DTR0008 was retired when DotRocks EF Core gained composite primary key support; no analyzer reports this diagnostic and the constant will be removed in the next major release."
+    )]
     public const string CompositePrimaryKeyDiagnosticId = "DTR0008";
 
     /// <summary>
@@ -137,16 +142,6 @@ public static class DotRocksDiagnosticDescriptors
         DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
         description: "StarRocks rejects a second DML against a table already written in the same SQL transaction; DotRocks EF Core supports one row per SaveChanges for tracked writes."
-    );
-
-    internal static readonly DiagnosticDescriptor CompositePrimaryKey = new(
-        CompositePrimaryKeyDiagnosticId,
-        "Avoid composite primary keys",
-        "Entity '{0}' is configured with a composite primary key; DotRocks EF Core requires a single-column primary key",
-        "Usage",
-        DiagnosticSeverity.Warning,
-        isEnabledByDefault: true,
-        description: "DotRocks EF Core rejects composite primary keys at model validation. Configure a single-column primary key for writable entities, or HasNoKey() for read-only entities. To fail the build on this configuration, set dotnet_diagnostic.DTR0008.severity = error in .editorconfig."
     );
 
     internal static readonly DiagnosticDescriptor UnsafeCommandText = new(

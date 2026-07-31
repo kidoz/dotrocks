@@ -47,7 +47,11 @@ All diagnostics default to **Warning** severity and are enabled by default.
 | **DTR0005** | Code calls `EnsureCreated` / `EnsureDeleted`. | Use migrations for conservative StarRocks DDL; these database-creator APIs are unsupported. |
 | **DTR0006** | Code calls `ExecuteUpdate` / `ExecuteDelete`. | DotRocks does not translate bulk LINQ DML. Use tracked single-row `SaveChanges` or raw SQL with parameters. |
 | **DTR0007** | A range change (`Add`/`Update`/`Remove` on multiple entities) is followed by `SaveChanges`. | StarRocks rejects a second DML against a table already written in the same transaction; write one row per `SaveChanges`. |
-| **DTR0008** | An entity is configured with a composite primary key. | DotRocks requires a single-column PK for writable entities; use `HasNoKey()` for read-only entities. |
+
+> **Retired:** `DTR0008` (composite primary keys) no longer reports since DotRocks EF Core
+> gained composite primary key support. The id is reserved and will not be reused. The
+> `EfCompositePrimaryKeyAnalyzer` type and `CompositePrimaryKeyDiagnosticId` constant remain
+> as obsolete no-ops for binary compatibility and will be removed in the next major release.
 
 ### Usage — driver
 
@@ -64,9 +68,8 @@ to `error` in `.editorconfig`:
 
 ```ini
 [*.cs]
-# Fail the build on SQL-injection-shaped CommandText and composite keys.
+# Fail the build on SQL-injection-shaped CommandText.
 dotnet_diagnostic.DTR0009.severity = error
-dotnet_diagnostic.DTR0008.severity = error
 ```
 
 This is the recommended baseline for DTR0009 (SQL injection) and DTR0012 (literal
@@ -74,6 +77,6 @@ password). Project policy decides the rest.
 
 ## See also
 
-- [EF Core entity mapping](ef-core-entity-mapping.md) — the model-validation rules behind DTR0002/DTR0003/DTR0008
+- [EF Core entity mapping](ef-core-entity-mapping.md) — the model-validation rules behind DTR0002/DTR0003
 - [Security](security.md) — the transport-security context for DTR0001/DTR0012
 - [Connection strings](connection-strings.md) — credential redaction and the typed builder
