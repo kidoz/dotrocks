@@ -137,10 +137,31 @@ public sealed class DotRocksFlightSqlDbConnection : DbConnection
     }
 
     /// <inheritdoc />
-    public override Task CloseAsync()
+    public override async Task CloseAsync()
     {
-        Close();
-        return Task.CompletedTask;
+        if (_state == ConnectionState.Closed)
+        {
+            return;
+        }
+
+        try
+        {
+            if (_activeTransaction is not null)
+            {
+                await _activeTransaction
+                    .RollbackAsync(CancellationToken.None)
+                    .ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            if (_fallbackConnection is not null)
+            {
+                await _fallbackConnection.CloseAsync().ConfigureAwait(false);
+            }
+
+            _state = ConnectionState.Closed;
+        }
     }
 
     /// <summary>

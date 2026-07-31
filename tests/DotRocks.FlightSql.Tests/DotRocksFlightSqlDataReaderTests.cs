@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
 using Apache.Arrow;
 using Apache.Arrow.Types;
 using DotRocks.FlightSql;
@@ -92,6 +93,55 @@ public sealed class DotRocksFlightSqlDataReaderTests
         Assert.Equal("seven", structValue["label"]);
     }
 
+    [Fact]
+    public void GetValue_MaterializesSlicedStructAtLogicalIndex()
+    {
+        var structType = new StructType([
+            new Field("code", Int32Type.Default, false),
+            new Field("label", StringType.Default, false),
+        ]);
+        using var codes = new Int32Array.Builder().Append(7).Append(8).Build();
+        using var labels = new StringArray.Builder().Append("seven").Append("eight").Build();
+        using var detail = new StructArray(structType, 2, [codes, labels], ArrowBuffer.Empty);
+        using IArrowArray slice = detail.Slice(1, 1);
+
+        var value = Assert.IsType<Dictionary<string, object?>>(
+            ArrowValueConverter.GetValue(slice, 0)
+        );
+
+        Assert.Equal(8, value["code"]);
+        Assert.Equal("eight", value["label"]);
+    }
+
+    [Fact]
+    public async Task ReadAsync_LaterCancellationTokenCancelsActiveStream()
+    {
+        var schema = new Schema([new Field("value", Int32Type.Default, false)], null);
+        using var values = new Int32Array.Builder().Append(1).Build();
+        using var batch = new RecordBatch(schema, [values], 1);
+        var streamBlocked = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        var result = new DotRocksFlightSqlResult(
+            schema,
+            -1,
+            -1,
+            true,
+            token => BlockingAfterBatch(batch, streamBlocked, token)
+        );
+        await using var reader = new DotRocksFlightSqlDataReader(result);
+
+        Assert.True(await reader.ReadAsync(CancellationToken.None).ConfigureAwait(true));
+        using var cancellation = new CancellationTokenSource();
+        Task<bool> pendingRead = reader.ReadAsync(cancellation.Token);
+        await streamBlocked.Task.ConfigureAwait(true);
+        await cancellation.CancelAsync().ConfigureAwait(true);
+
+        await Assert
+            .ThrowsAnyAsync<OperationCanceledException>(() => pendingRead)
+            .ConfigureAwait(true);
+    }
+
     private static async IAsyncEnumerable<RecordBatch> SingleBatch(RecordBatch batch)
     {
         await Task.CompletedTask.ConfigureAwait(false);
@@ -102,5 +152,16 @@ public sealed class DotRocksFlightSqlDataReaderTests
     {
         await Task.CompletedTask.ConfigureAwait(false);
         yield break;
+    }
+
+    private static async IAsyncEnumerable<RecordBatch> BlockingAfterBatch(
+        RecordBatch batch,
+        TaskCompletionSource streamBlocked,
+        [EnumeratorCancellation] CancellationToken cancellationToken
+    )
+    {
+        yield return batch;
+        streamBlocked.SetResult();
+        await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken).ConfigureAwait(false);
     }
 }

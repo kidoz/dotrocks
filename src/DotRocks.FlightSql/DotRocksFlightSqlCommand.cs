@@ -13,8 +13,8 @@ namespace DotRocks.FlightSql;
 public sealed class DotRocksFlightSqlCommand : DbCommand
 {
     private readonly FlightSqlParameterCollection _parameters = new();
-    private readonly List<DbCommand> _fallbackCommands = [];
     private readonly object _executionSync = new();
+    private DbCommand? _activeFallbackCommand;
     private DotRocksFlightSqlDbConnection? _connection;
     private DotRocksFlightSqlDbTransaction? _transaction;
     private CancellationTokenSource? _activeCancellation;
@@ -143,10 +143,16 @@ public sealed class DotRocksFlightSqlCommand : DbCommand
     /// <inheritdoc />
     public override void Cancel()
     {
+        CancellationTokenSource? cancellation;
+        DbCommand? fallbackCommand;
         lock (_executionSync)
         {
-            _activeCancellation?.Cancel();
+            cancellation = _activeCancellation;
+            fallbackCommand = _activeFallbackCommand;
         }
+
+        cancellation?.Cancel();
+        fallbackCommand?.Cancel();
     }
 
     /// <inheritdoc />
@@ -198,9 +204,17 @@ public sealed class DotRocksFlightSqlCommand : DbCommand
                 .GetFallbackConnectionAsync(operation.Token)
                 .ConfigureAwait(false);
             DbCommand fallbackCommand = CreateFallbackCommand(fallback, commandText);
-            return await fallbackCommand
-                .ExecuteNonQueryAsync(operation.Token)
-                .ConfigureAwait(false);
+            try
+            {
+                return await fallbackCommand
+                    .ExecuteNonQueryAsync(operation.Token)
+                    .ConfigureAwait(false);
+            }
+            finally
+            {
+                ClearFallbackCommand(fallbackCommand);
+                await fallbackCommand.DisposeAsync().ConfigureAwait(false);
+            }
         }
 
         long affectedRows = _transaction is null
@@ -251,7 +265,7 @@ public sealed class DotRocksFlightSqlCommand : DbCommand
     {
         DotRocksFlightSqlDbConnection connection = EnsureExecutable();
         string commandText = BindCommandText();
-        using ExecutionScope operation = BeginExecution(cancellationToken);
+        ExecutionScope operation = BeginExecution(cancellationToken);
         try
         {
             DotRocksFlightSqlResult result = _transaction is null
@@ -273,7 +287,9 @@ public sealed class DotRocksFlightSqlCommand : DbCommand
                     .ConfigureAwait(false);
             return new DotRocksFlightSqlDataReader(
                 result,
-                behavior.HasFlag(CommandBehavior.CloseConnection) ? connection : null
+                behavior.HasFlag(CommandBehavior.CloseConnection) ? connection : null,
+                operation,
+                operation.Token
             );
         }
         catch (Exception ex)
@@ -282,13 +298,43 @@ public sealed class DotRocksFlightSqlCommand : DbCommand
                 && IsSafeReadFallbackFailure(ex)
             )
         {
-            DotRocksConnection fallback = await connection
-                .GetFallbackConnectionAsync(operation.Token)
-                .ConfigureAwait(false);
-            DbCommand fallbackCommand = CreateFallbackCommand(fallback, commandText);
-            return await fallbackCommand
-                .ExecuteReaderAsync(behavior, operation.Token)
-                .ConfigureAwait(false);
+            try
+            {
+                DotRocksConnection fallback = await connection
+                    .GetFallbackConnectionAsync(operation.Token)
+                    .ConfigureAwait(false);
+                DbCommand fallbackCommand = CreateFallbackCommand(fallback, commandText);
+                try
+                {
+                    CommandBehavior fallbackBehavior = behavior & ~CommandBehavior.CloseConnection;
+                    DbDataReader reader = await fallbackCommand
+                        .ExecuteReaderAsync(fallbackBehavior, operation.Token)
+                        .ConfigureAwait(false);
+                    return new OwnedFallbackDataReader(
+                        reader,
+                        fallbackCommand,
+                        operation,
+                        behavior.HasFlag(CommandBehavior.CloseConnection) ? connection : null,
+                        ClearFallbackCommand
+                    );
+                }
+                catch
+                {
+                    ClearFallbackCommand(fallbackCommand);
+                    await fallbackCommand.DisposeAsync().ConfigureAwait(false);
+                    throw;
+                }
+            }
+            catch
+            {
+                operation.Dispose();
+                throw;
+            }
+        }
+        catch
+        {
+            operation.Dispose();
+            throw;
         }
     }
 
@@ -300,22 +346,17 @@ public sealed class DotRocksFlightSqlCommand : DbCommand
     {
         if (disposing)
         {
+            DbCommand? fallbackCommand;
             lock (_executionSync)
             {
                 _activeCancellation?.Cancel();
                 _activeCancellation?.Dispose();
                 _activeCancellation = null;
+                fallbackCommand = _activeFallbackCommand;
+                _activeFallbackCommand = null;
             }
 
-            lock (_fallbackCommands)
-            {
-                foreach (DbCommand command in _fallbackCommands)
-                {
-                    command.Dispose();
-                }
-
-                _fallbackCommands.Clear();
-            }
+            fallbackCommand?.Dispose();
         }
 
         base.Dispose(disposing);
@@ -356,12 +397,31 @@ public sealed class DotRocksFlightSqlCommand : DbCommand
         DbCommand command = connection.CreateCommand();
         command.CommandText = commandText;
         command.CommandTimeout = CommandTimeout;
-        lock (_fallbackCommands)
+        lock (_executionSync)
         {
-            _fallbackCommands.Add(command);
+            if (_activeFallbackCommand is not null)
+            {
+                command.Dispose();
+                throw new InvalidOperationException(
+                    "The Flight SQL command already owns an active fallback command."
+                );
+            }
+
+            _activeFallbackCommand = command;
         }
 
         return command;
+    }
+
+    private void ClearFallbackCommand(DbCommand command)
+    {
+        lock (_executionSync)
+        {
+            if (ReferenceEquals(_activeFallbackCommand, command))
+            {
+                _activeFallbackCommand = null;
+            }
+        }
     }
 
     private ExecutionScope BeginExecution(CancellationToken cancellationToken)
@@ -381,8 +441,12 @@ public sealed class DotRocksFlightSqlCommand : DbCommand
         CancellationTokenSource source = CancellationTokenSource.CreateLinkedTokenSource(
             cancellationToken
         );
-        TimeSpan? commandTimeout = null;
-        if (CommandTimeout > 0)
+        TimeSpan? commandTimeout;
+        if (CommandTimeout == 0)
+        {
+            commandTimeout = Timeout.InfiniteTimeSpan;
+        }
+        else
         {
             commandTimeout = TimeSpan.FromSeconds(CommandTimeout);
             source.CancelAfter(commandTimeout.Value);

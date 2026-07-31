@@ -24,7 +24,7 @@
     <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
   </ItemGroup>
 
-  <ItemGroup Label="Internal test access">
+  <ItemGroup Label="Internal collaborator access">
     <InternalsVisibleTo Include="DotRocks.FlightSql" />
     <InternalsVisibleTo Include="DotRocks.Protocol.Tests" />
     <InternalsVisibleTo Include="DotRocks.Data.IntegrationTests" />

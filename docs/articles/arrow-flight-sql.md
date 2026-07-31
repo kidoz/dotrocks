@@ -90,6 +90,11 @@ The ADO.NET surface intentionally supports asynchronous execution only. `Execute
 completion throw `NotSupportedException`; use their async counterparts. `Open()` only changes the
 logical connection state and performs no network I/O.
 
+`CommandTimeout`, the token passed to `ExecuteReaderAsync`, and `Cancel()` remain active through
+result streaming until the reader is exhausted or disposed. A token passed to any later
+`ReadAsync` call can cancel the remaining stream. `CloseAsync` rolls back an active Flight
+transaction asynchronously before closing the logical connection.
+
 Named `@parameter` values are validated and escaped with the same binder used by `DotRocks.Data`.
 They are sent as SQL literals because the current transport does not expose server-prepared bind
 batches. Output parameters and positional `?` placeholders are not supported.

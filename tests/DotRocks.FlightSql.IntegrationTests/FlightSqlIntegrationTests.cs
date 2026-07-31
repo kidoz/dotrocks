@@ -53,10 +53,13 @@ public sealed class FlightSqlIntegrationTests
             await flight.OpenAsync(cancellationToken).ConfigureAwait(true);
             await using DotRocksFlightSqlCommand insert = flight.CreateCommand();
             insert.CommandText = $"INSERT INTO `{database}`.`widgets` VALUES (@id, @name)";
-            insert.Parameters.Add(new DotRocksParameter { ParameterName = "id", Value = 1 });
-            insert.Parameters.Add(
-                new DotRocksParameter { ParameterName = "name", Value = "flight" }
-            );
+            var idParameter = new DotRocksParameter { ParameterName = "id", Value = 1 };
+            var nameParameter = new DotRocksParameter { ParameterName = "name", Value = "flight" };
+            insert.Parameters.Add(idParameter);
+            insert.Parameters.Add(nameParameter);
+            await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(true);
+            idParameter.Value = 3;
+            nameParameter.Value = "fallback-reuse";
             await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(true);
 
             await using DotRocksFlightSqlCommand query = flight.CreateCommand();
@@ -67,6 +70,9 @@ public sealed class FlightSqlIntegrationTests
             Assert.True(await reader.ReadAsync(cancellationToken).ConfigureAwait(true));
             Assert.Equal(1, reader.GetInt32(0));
             Assert.Equal("flight", reader.GetString(1));
+            Assert.True(await reader.ReadAsync(cancellationToken).ConfigureAwait(true));
+            Assert.Equal(3, reader.GetInt32(0));
+            Assert.Equal("fallback-reuse", reader.GetString(1));
             await reader.DisposeAsync().ConfigureAwait(true);
 
             var optionsBuilder = new DbContextOptionsBuilder<FlightContext>();
@@ -80,7 +86,7 @@ public sealed class FlightSqlIntegrationTests
             context.Widgets.Add(new Widget { Id = 2, Name = "ef-flight" });
             Assert.Equal(1, await context.SaveChangesAsync(cancellationToken).ConfigureAwait(true));
             Assert.Equal(
-                2,
+                3,
                 await context.Widgets.CountAsync(cancellationToken).ConfigureAwait(true)
             );
         }

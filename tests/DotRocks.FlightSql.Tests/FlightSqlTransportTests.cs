@@ -1,3 +1,4 @@
+using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using Apache.Arrow;
@@ -108,6 +109,57 @@ public sealed class FlightSqlTransportTests
             Assert.Equal(1, reader.GetInt32(0));
             Assert.Equal("value", reader.GetName(0));
             Assert.Equal("SELECT 7 AS value", GetQueryCapture(host).LastQuery);
+        }
+        finally
+        {
+            await host.StopAsync(cancellationToken).ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
+    public async Task DbCommand_CancelStopsActiveResultStreamAndAllowsReuseAfterDispose()
+    {
+        using IHost host = CreateHost();
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        await host.StartAsync(cancellationToken).ConfigureAwait(true);
+
+        try
+        {
+            var options = new DotRocksFlightSqlOptions(GetServerAddress(host), "root", "secret")
+            {
+                AllowInsecureTransport = true,
+            };
+            await using var connection = new DotRocksFlightSqlDbConnection(options);
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(true);
+            await using DotRocksFlightSqlCommand command = connection.CreateCommand();
+            command.CommandText = "SELECT blocking";
+            DbDataReader reader = await command
+                .ExecuteReaderAsync(cancellationToken)
+                .ConfigureAwait(true);
+            Task<bool> pendingRead = reader.ReadAsync(CancellationToken.None);
+            await GetQueryCapture(host)
+                .DoGetStarted.Task.WaitAsync(cancellationToken)
+                .ConfigureAwait(true);
+
+            command.Cancel();
+
+            Exception? exception = await Record
+                .ExceptionAsync(async () => await pendingRead.ConfigureAwait(true))
+                .ConfigureAwait(true);
+            Assert.True(
+                exception
+                    is OperationCanceledException
+                        or RpcException { StatusCode: StatusCode.Cancelled },
+                $"Expected cancellation but received {exception?.GetType().Name ?? "no exception"}."
+            );
+            await reader.DisposeAsync().ConfigureAwait(true);
+
+            command.CommandText = "SELECT value FROM test";
+            await using DbDataReader secondReader = await command
+                .ExecuteReaderAsync(cancellationToken)
+                .ConfigureAwait(true);
+            Assert.True(await secondReader.ReadAsync(cancellationToken).ConfigureAwait(true));
+            Assert.Equal(1, secondReader.GetInt32(0));
         }
         finally
         {
@@ -242,6 +294,37 @@ public sealed class FlightSqlTransportTests
         }
     }
 
+    [Fact]
+    public async Task ConnectionCloseAsync_RollsBackActiveTransactionAsynchronously()
+    {
+        using IHost host = CreateHost();
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        await host.StartAsync(cancellationToken).ConfigureAwait(true);
+
+        try
+        {
+            var options = new DotRocksFlightSqlOptions(GetServerAddress(host), "root", "secret")
+            {
+                AllowInsecureTransport = true,
+            };
+            await using var connection = new DotRocksFlightSqlDbConnection(options);
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(true);
+            await using DbTransaction transaction = await connection
+                .BeginTransactionAsync(cancellationToken)
+                .ConfigureAwait(true);
+
+            await connection.CloseAsync().ConfigureAwait(true);
+
+            Assert.Equal(System.Data.ConnectionState.Closed, connection.State);
+            Assert.Equal("EndTransaction", GetQueryCapture(host).LastAction);
+            Assert.Equal(2, GetQueryCapture(host).LastEndTransactionAction);
+        }
+        finally
+        {
+            await host.StopAsync(cancellationToken).ConfigureAwait(true);
+        }
+    }
+
     private static IHost CreateHost() =>
         Host.CreateDefaultBuilder()
             .ConfigureWebHostDefaults(webBuilder =>
@@ -311,7 +394,11 @@ public sealed class FlightSqlTransportTests
                 : string.Empty;
             _capture.LastQuery = query;
             bool widgets = query.Contains("widgets", StringComparison.OrdinalIgnoreCase);
-            string ticket = widgets ? "widgets" : "result";
+            bool blocking = query.Contains("blocking", StringComparison.OrdinalIgnoreCase);
+            string ticket =
+                widgets ? "widgets"
+                : blocking ? "blocking"
+                : "result";
             Schema schema = widgets ? s_widgetSchema : s_schema;
             var endpoint = new FlightEndpoint(new FlightTicket(ticket), []);
             return Task.FromResult(new FlightInfo(schema, request, [endpoint], 2, -1));
@@ -325,6 +412,14 @@ public sealed class FlightSqlTransportTests
         {
             RequireAuthorization(context);
             string ticketValue = ticket.Ticket.ToStringUtf8();
+            if (ticketValue == "blocking")
+            {
+                _capture.DoGetStarted.SetResult();
+                await Task.Delay(Timeout.InfiniteTimeSpan, context.CancellationToken)
+                    .ConfigureAwait(false);
+                return;
+            }
+
             if (ticketValue == "widgets")
             {
                 using var ids = new Int32Array.Builder().Append(1).Append(2).Build();
@@ -413,6 +508,9 @@ public sealed class FlightSqlTransportTests
 
     private sealed class QueryCapture
     {
+        public TaskCompletionSource DoGetStarted { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
         public string LastQuery { get; set; } = string.Empty;
 
         public string LastUpdate { get; set; } = string.Empty;

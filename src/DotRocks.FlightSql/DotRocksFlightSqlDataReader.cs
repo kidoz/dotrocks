@@ -20,6 +20,8 @@ public sealed class DotRocksFlightSqlDataReader : DbDataReader
     private readonly DotRocksFlightSqlResult _result;
     private readonly Schema _schema;
     private readonly DbConnection? _connectionToClose;
+    private readonly CancellationTokenSource _streamCancellation;
+    private IDisposable? _executionScope;
     private IAsyncEnumerator<RecordBatch>? _batches;
     private RecordBatch? _currentBatch;
     private int _rowIndex = -1;
@@ -27,11 +29,17 @@ public sealed class DotRocksFlightSqlDataReader : DbDataReader
 
     internal DotRocksFlightSqlDataReader(
         DotRocksFlightSqlResult result,
-        DbConnection? connectionToClose = null
+        DbConnection? connectionToClose = null,
+        IDisposable? executionScope = null,
+        CancellationToken commandCancellationToken = default
     )
     {
         _result = result;
         _connectionToClose = connectionToClose;
+        _executionScope = executionScope;
+        _streamCancellation = commandCancellationToken.CanBeCanceled
+            ? CancellationTokenSource.CreateLinkedTokenSource(commandCancellationToken)
+            : new CancellationTokenSource();
         _schema =
             result.Schema
             ?? throw new InvalidOperationException(
@@ -70,8 +78,8 @@ public sealed class DotRocksFlightSqlDataReader : DbDataReader
         ObjectDisposedException.ThrowIf(_closed, this);
         cancellationToken.ThrowIfCancellationRequested();
         _batches ??= _result
-            .ReadRecordBatchesAsync(cancellationToken)
-            .GetAsyncEnumerator(cancellationToken);
+            .ReadRecordBatchesAsync(_streamCancellation.Token)
+            .GetAsyncEnumerator(_streamCancellation.Token);
 
         if (_currentBatch is not null && _rowIndex + 1 < _currentBatch.Length)
         {
@@ -82,19 +90,32 @@ public sealed class DotRocksFlightSqlDataReader : DbDataReader
         _currentBatch?.Dispose();
         _currentBatch = null;
         _rowIndex = -1;
-        while (await _batches.MoveNextAsync().ConfigureAwait(false))
+        using CancellationTokenRegistration registration = cancellationToken.Register(
+            static state => ((CancellationTokenSource)state!).Cancel(),
+            _streamCancellation
+        );
+        try
         {
-            if (_batches.Current.Length == 0)
+            while (await _batches.MoveNextAsync().ConfigureAwait(false))
             {
-                _batches.Current.Dispose();
-                continue;
-            }
+                if (_batches.Current.Length == 0)
+                {
+                    _batches.Current.Dispose();
+                    continue;
+                }
 
-            _currentBatch = _batches.Current;
-            _rowIndex = 0;
-            return true;
+                _currentBatch = _batches.Current;
+                _rowIndex = 0;
+                return true;
+            }
+        }
+        catch
+        {
+            CompleteExecution();
+            throw;
         }
 
+        CompleteExecution();
         return false;
     }
 
@@ -296,6 +317,8 @@ public sealed class DotRocksFlightSqlDataReader : DbDataReader
         }
         finally
         {
+            _streamCancellation.Dispose();
+            CompleteExecution();
             if (_connectionToClose is not null)
             {
                 await _connectionToClose.CloseAsync().ConfigureAwait(false);
@@ -363,4 +386,6 @@ public sealed class DotRocksFlightSqlDataReader : DbDataReader
             );
         }
     }
+
+    private void CompleteExecution() => Interlocked.Exchange(ref _executionScope, null)?.Dispose();
 }

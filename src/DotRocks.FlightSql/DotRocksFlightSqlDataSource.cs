@@ -174,7 +174,7 @@ public sealed class DotRocksFlightSqlDataSource : IDisposable
                 descriptor,
                 s_emptySchema,
                 connection.CreateHeaders(),
-                DateTime.UtcNow.Add(effectiveTimeout),
+                CreateDeadline(effectiveTimeout),
                 timeout.Token
             )
             .ConfigureAwait(false);
@@ -236,7 +236,7 @@ public sealed class DotRocksFlightSqlDataSource : IDisposable
     {
         ThrowIfDisposed();
         using CancellationTokenSource timeout = CreateTimeout(commandTimeout, cancellationToken);
-        DateTime deadline = DateTime.UtcNow.Add(commandTimeout);
+        DateTime? deadline = CreateDeadline(commandTimeout);
 
         foreach (FlightEndpoint endpoint in endpoints)
         {
@@ -287,9 +287,16 @@ public sealed class DotRocksFlightSqlDataSource : IDisposable
         CancellationTokenSource source = CancellationTokenSource.CreateLinkedTokenSource(
             cancellationToken
         );
-        source.CancelAfter(commandTimeout);
+        if (commandTimeout != Timeout.InfiniteTimeSpan)
+        {
+            source.CancelAfter(commandTimeout);
+        }
+
         return source;
     }
+
+    private static DateTime? CreateDeadline(TimeSpan commandTimeout) =>
+        commandTimeout == Timeout.InfiniteTimeSpan ? null : DateTime.UtcNow.Add(commandTimeout);
 
     private async Task CompleteTransactionAsync(
         Transaction transaction,
