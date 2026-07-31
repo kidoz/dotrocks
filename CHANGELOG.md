@@ -8,6 +8,8 @@ version is derived from the release tag at publish time.
 
 ## [Unreleased]
 
+## [1.3.4] - 2026-07-31
+
 ### Added
 - EF Core: `EF.Functions.Greatest(...)` and `EF.Functions.Least(...)` (2–4 arguments)
   translate to the native StarRocks `greatest()`/`least()` functions. StarRocks follows
@@ -325,7 +327,8 @@ version is derived from the release tag at publish time.
 - Stream Load refuses to forward credentials over a downgraded (HTTPS→HTTP) redirect.
 - NuGet vulnerability auditing and CodeQL analysis in CI.
 
-[Unreleased]: https://github.com/kidoz/dotrocks/compare/v1.3.3...HEAD
+[Unreleased]: https://github.com/kidoz/dotrocks/compare/v1.3.4...HEAD
+[1.3.4]: https://github.com/kidoz/dotrocks/compare/v1.3.3...v1.3.4
 [1.3.3]: https://github.com/kidoz/dotrocks/compare/v1.3.2...v1.3.3
 [1.3.2]: https://github.com/kidoz/dotrocks/compare/v1.3.1...v1.3.2
 [1.3.1]: https://github.com/kidoz/dotrocks/compare/v1.3.0...v1.3.1
