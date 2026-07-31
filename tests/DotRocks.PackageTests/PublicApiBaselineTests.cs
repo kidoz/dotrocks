@@ -10,6 +10,7 @@ public sealed class PublicApiBaselineTests
     private static readonly ApiAssembly[] ApiAssemblies =
     [
         new("DotRocks.Data", "net10.0"),
+        new("DotRocks.FlightSql", "net10.0"),
         new("DotRocks.EntityFrameworkCore", "net10.0"),
         new("DotRocks.EntityFrameworkCore.Design", "net10.0"),
         new("DotRocks.Analyzers", "netstandard2.0"),

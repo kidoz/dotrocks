@@ -12,6 +12,7 @@ public sealed class PackageContentTests
     private static readonly string[] RuntimePackageIds =
     [
         "DotRocks.Data",
+        "DotRocks.FlightSql",
         "DotRocks.EntityFrameworkCore",
         "DotRocks.EntityFrameworkCore.Design",
     ];
@@ -447,6 +448,7 @@ public sealed class PackageContentTests
         string[] projectPaths =
         [
             Path.Combine(root, "src", "DotRocks.Data", "DotRocks.Data.csproj"),
+            Path.Combine(root, "src", "DotRocks.FlightSql", "DotRocks.FlightSql.csproj"),
             Path.Combine(
                 root,
                 "src",
@@ -621,6 +623,7 @@ public sealed class PackageContentTests
     private const string ConsumerProgram = """
         using DotRocks.Data;
         using DotRocks.Data.Loading;
+        using DotRocks.FlightSql;
         using Microsoft.EntityFrameworkCore;
 
         var builder = new DotRocksConnectionStringBuilder(
@@ -639,6 +642,17 @@ public sealed class PackageContentTests
         _ = new DotRocksStreamLoadClient(
             "Server=127.0.0.1;User ID=root;Password=secret;Stream Load Endpoint=http://127.0.0.1:8030"
         );
+
+        var flightOptions = new DotRocksFlightSqlOptions(
+            new Uri("grpc+tls://127.0.0.1:9408"),
+            "root",
+            "secret"
+        );
+        if (flightOptions.ToString().Contains("secret", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("Flight SQL options leaked a password.");
+        }
+        using var flightDataSource = new DotRocksFlightSqlDataSource(flightOptions);
 
         internal sealed class ConsumerContext : DbContext
         {

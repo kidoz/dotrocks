@@ -6,6 +6,10 @@ dependencies.
 
 | Package | Purpose |
 | --- | --- |
+| `Apache.Arrow` | Runtime columnar arrays and record batches for the Flight SQL transport. |
+| `Apache.Arrow.Flight` | Runtime Arrow Flight RPC client for result streaming. |
+| `Apache.Arrow.Flight.AspNetCore` | Test-only in-process Arrow Flight server hosting. |
+| `Apache.Arrow.Flight.Sql` | Runtime Flight SQL command and metadata handling. |
 | `BenchmarkDotNet` | Benchmark-only performance measurement harness. |
 | `Dapper` | Test-only Dapper compatibility coverage. |
 | `Microsoft.CodeAnalysis.Analyzers` | Analyzer project build-time Roslyn analyzer rules. |
@@ -19,6 +23,8 @@ dependencies.
 | `Microsoft.EntityFrameworkCore.Design` | EF Core design-time migrations services. |
 | `Microsoft.EntityFrameworkCore.Relational` | EF Core relational provider services. |
 | `Microsoft.NET.Test.Sdk` | Test execution infrastructure. |
+| `Grpc.Core.Api` | Runtime gRPC call metadata used by the Flight SQL transport. |
+| `Grpc.Net.Client` | Runtime HTTP/2 channel implementation used by the Flight SQL transport. |
 | `coverlet.collector` | Test coverage collection support. |
 | `xunit.runner.visualstudio` | xUnit test runner integration. |
 | `xunit.v3` | Unit and integration test framework. |

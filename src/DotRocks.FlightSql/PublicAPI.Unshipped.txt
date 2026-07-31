@@ -1,0 +1,117 @@
+#nullable enable
+DotRocks.FlightSql.DotRocksFlightSqlCommand
+DotRocks.FlightSql.DotRocksFlightSqlCommand.DotRocksFlightSqlCommand() -> void
+DotRocks.FlightSql.DotRocksFlightSqlCommand.DotRocksFlightSqlCommand(string! commandText, DotRocks.FlightSql.DotRocksFlightSqlDbConnection! connection) -> void
+DotRocks.FlightSql.DotRocksFlightSqlDataReader
+DotRocks.FlightSql.DotRocksFlightSqlDataSource
+DotRocks.FlightSql.DotRocksFlightSqlDataSource.BeginTransactionAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<DotRocks.FlightSql.DotRocksFlightSqlTransaction!>!
+DotRocks.FlightSql.DotRocksFlightSqlDataSource.Dispose() -> void
+DotRocks.FlightSql.DotRocksFlightSqlDataSource.DotRocksFlightSqlDataSource(DotRocks.FlightSql.DotRocksFlightSqlOptions! options) -> void
+DotRocks.FlightSql.DotRocksFlightSqlDataSource.ExecuteQueryAsync(string! sql, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<DotRocks.FlightSql.DotRocksFlightSqlResult!>!
+DotRocks.FlightSql.DotRocksFlightSqlDataSource.ExecuteUpdateAsync(string! sql, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<long>!
+DotRocks.FlightSql.DotRocksFlightSqlDbConnection
+DotRocks.FlightSql.DotRocksFlightSqlDbConnection.CreateCommand() -> DotRocks.FlightSql.DotRocksFlightSqlCommand!
+DotRocks.FlightSql.DotRocksFlightSqlDbConnection.DotRocksFlightSqlDbConnection(DotRocks.FlightSql.DotRocksFlightSqlOptions! options, string? fallbackConnectionString = null, DotRocks.FlightSql.DotRocksFlightSqlFallbackMode fallbackMode = DotRocks.FlightSql.DotRocksFlightSqlFallbackMode.None) -> void
+DotRocks.FlightSql.DotRocksFlightSqlDbConnection.FallbackMode.get -> DotRocks.FlightSql.DotRocksFlightSqlFallbackMode
+DotRocks.FlightSql.DotRocksFlightSqlDbTransaction
+DotRocks.FlightSql.DotRocksFlightSqlFallbackMode
+DotRocks.FlightSql.DotRocksFlightSqlFallbackMode.None = 0 -> DotRocks.FlightSql.DotRocksFlightSqlFallbackMode
+DotRocks.FlightSql.DotRocksFlightSqlFallbackMode.ReadQueries = 1 -> DotRocks.FlightSql.DotRocksFlightSqlFallbackMode
+DotRocks.FlightSql.DotRocksFlightSqlFallbackMode.WriteCommands = 2 -> DotRocks.FlightSql.DotRocksFlightSqlFallbackMode
+DotRocks.FlightSql.DotRocksFlightSqlOptions
+DotRocks.FlightSql.DotRocksFlightSqlOptions.AllowInsecureTransport.get -> bool
+DotRocks.FlightSql.DotRocksFlightSqlOptions.AllowInsecureTransport.init -> void
+DotRocks.FlightSql.DotRocksFlightSqlOptions.AllowedEndpointHosts.get -> System.Collections.Generic.IReadOnlyCollection<string!>!
+DotRocks.FlightSql.DotRocksFlightSqlOptions.AllowedEndpointHosts.init -> void
+DotRocks.FlightSql.DotRocksFlightSqlOptions.CommandTimeout.get -> System.TimeSpan
+DotRocks.FlightSql.DotRocksFlightSqlOptions.CommandTimeout.init -> void
+DotRocks.FlightSql.DotRocksFlightSqlOptions.DotRocksFlightSqlOptions(System.Uri! endpoint, string! userName, string! password) -> void
+DotRocks.FlightSql.DotRocksFlightSqlOptions.Endpoint.get -> System.Uri!
+DotRocks.FlightSql.DotRocksFlightSqlOptions.UserName.get -> string!
+DotRocks.FlightSql.DotRocksFlightSqlResult
+DotRocks.FlightSql.DotRocksFlightSqlResult.IsOrdered.get -> bool
+DotRocks.FlightSql.DotRocksFlightSqlResult.ReadRecordBatchesAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Apache.Arrow.RecordBatch!>!
+DotRocks.FlightSql.DotRocksFlightSqlResult.Schema.get -> Apache.Arrow.Schema?
+DotRocks.FlightSql.DotRocksFlightSqlResult.TotalBytes.get -> long?
+DotRocks.FlightSql.DotRocksFlightSqlResult.TotalRecords.get -> long?
+DotRocks.FlightSql.DotRocksFlightSqlTransaction
+DotRocks.FlightSql.DotRocksFlightSqlTransaction.CommitAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+DotRocks.FlightSql.DotRocksFlightSqlTransaction.DisposeAsync() -> System.Threading.Tasks.ValueTask
+DotRocks.FlightSql.DotRocksFlightSqlTransaction.ExecuteQueryAsync(string! sql, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<DotRocks.FlightSql.DotRocksFlightSqlResult!>!
+DotRocks.FlightSql.DotRocksFlightSqlTransaction.ExecuteUpdateAsync(string! sql, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<long>!
+DotRocks.FlightSql.DotRocksFlightSqlTransaction.RollbackAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+override DotRocks.FlightSql.DotRocksFlightSqlCommand.Cancel() -> void
+override DotRocks.FlightSql.DotRocksFlightSqlCommand.CommandText.get -> string!
+override DotRocks.FlightSql.DotRocksFlightSqlCommand.CommandText.set -> void
+override DotRocks.FlightSql.DotRocksFlightSqlCommand.CommandTimeout.get -> int
+override DotRocks.FlightSql.DotRocksFlightSqlCommand.CommandTimeout.set -> void
+override DotRocks.FlightSql.DotRocksFlightSqlCommand.CommandType.get -> System.Data.CommandType
+override DotRocks.FlightSql.DotRocksFlightSqlCommand.CommandType.set -> void
+override DotRocks.FlightSql.DotRocksFlightSqlCommand.DesignTimeVisible.get -> bool
+override DotRocks.FlightSql.DotRocksFlightSqlCommand.DesignTimeVisible.set -> void
+override DotRocks.FlightSql.DotRocksFlightSqlCommand.ExecuteNonQuery() -> int
+override DotRocks.FlightSql.DotRocksFlightSqlCommand.ExecuteNonQueryAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<int>!
+override DotRocks.FlightSql.DotRocksFlightSqlCommand.ExecuteScalar() -> object?
+override DotRocks.FlightSql.DotRocksFlightSqlCommand.ExecuteScalarAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<object?>!
+override DotRocks.FlightSql.DotRocksFlightSqlCommand.Prepare() -> void
+override DotRocks.FlightSql.DotRocksFlightSqlCommand.PrepareAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+override DotRocks.FlightSql.DotRocksFlightSqlCommand.UpdatedRowSource.get -> System.Data.UpdateRowSource
+override DotRocks.FlightSql.DotRocksFlightSqlCommand.UpdatedRowSource.set -> void
+override DotRocks.FlightSql.DotRocksFlightSqlDataReader.Depth.get -> int
+override DotRocks.FlightSql.DotRocksFlightSqlDataReader.DisposeAsync() -> System.Threading.Tasks.ValueTask
+override DotRocks.FlightSql.DotRocksFlightSqlDataReader.FieldCount.get -> int
+override DotRocks.FlightSql.DotRocksFlightSqlDataReader.GetBoolean(int ordinal) -> bool
+override DotRocks.FlightSql.DotRocksFlightSqlDataReader.GetByte(int ordinal) -> byte
+override DotRocks.FlightSql.DotRocksFlightSqlDataReader.GetBytes(int ordinal, long dataOffset, byte[]? buffer, int bufferOffset, int length) -> long
+override DotRocks.FlightSql.DotRocksFlightSqlDataReader.GetChar(int ordinal) -> char
+override DotRocks.FlightSql.DotRocksFlightSqlDataReader.GetChars(int ordinal, long dataOffset, char[]? buffer, int bufferOffset, int length) -> long
+override DotRocks.FlightSql.DotRocksFlightSqlDataReader.GetDataTypeName(int ordinal) -> string!
+override DotRocks.FlightSql.DotRocksFlightSqlDataReader.GetDateTime(int ordinal) -> System.DateTime
+override DotRocks.FlightSql.DotRocksFlightSqlDataReader.GetDecimal(int ordinal) -> decimal
+override DotRocks.FlightSql.DotRocksFlightSqlDataReader.GetDouble(int ordinal) -> double
+override DotRocks.FlightSql.DotRocksFlightSqlDataReader.GetEnumerator() -> System.Collections.IEnumerator!
+override DotRocks.FlightSql.DotRocksFlightSqlDataReader.GetFieldType(int ordinal) -> System.Type!
+override DotRocks.FlightSql.DotRocksFlightSqlDataReader.GetFieldValue<T>(int ordinal) -> T
+override DotRocks.FlightSql.DotRocksFlightSqlDataReader.GetFieldValueAsync<T>(int ordinal, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<T>!
+override DotRocks.FlightSql.DotRocksFlightSqlDataReader.GetFloat(int ordinal) -> float
+override DotRocks.FlightSql.DotRocksFlightSqlDataReader.GetGuid(int ordinal) -> System.Guid
+override DotRocks.FlightSql.DotRocksFlightSqlDataReader.GetInt16(int ordinal) -> short
+override DotRocks.FlightSql.DotRocksFlightSqlDataReader.GetInt32(int ordinal) -> int
+override DotRocks.FlightSql.DotRocksFlightSqlDataReader.GetInt64(int ordinal) -> long
+override DotRocks.FlightSql.DotRocksFlightSqlDataReader.GetName(int ordinal) -> string!
+override DotRocks.FlightSql.DotRocksFlightSqlDataReader.GetOrdinal(string! name) -> int
+override DotRocks.FlightSql.DotRocksFlightSqlDataReader.GetSchemaTable() -> System.Data.DataTable?
+override DotRocks.FlightSql.DotRocksFlightSqlDataReader.GetString(int ordinal) -> string!
+override DotRocks.FlightSql.DotRocksFlightSqlDataReader.GetValue(int ordinal) -> object!
+override DotRocks.FlightSql.DotRocksFlightSqlDataReader.GetValues(object![]! values) -> int
+override DotRocks.FlightSql.DotRocksFlightSqlDataReader.HasRows.get -> bool
+override DotRocks.FlightSql.DotRocksFlightSqlDataReader.IsClosed.get -> bool
+override DotRocks.FlightSql.DotRocksFlightSqlDataReader.IsDBNull(int ordinal) -> bool
+override DotRocks.FlightSql.DotRocksFlightSqlDataReader.IsDBNullAsync(int ordinal, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<bool>!
+override DotRocks.FlightSql.DotRocksFlightSqlDataReader.NextResult() -> bool
+override DotRocks.FlightSql.DotRocksFlightSqlDataReader.NextResultAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<bool>!
+override DotRocks.FlightSql.DotRocksFlightSqlDataReader.Read() -> bool
+override DotRocks.FlightSql.DotRocksFlightSqlDataReader.ReadAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<bool>!
+override DotRocks.FlightSql.DotRocksFlightSqlDataReader.RecordsAffected.get -> int
+override DotRocks.FlightSql.DotRocksFlightSqlDataReader.this[int ordinal].get -> object!
+override DotRocks.FlightSql.DotRocksFlightSqlDataReader.this[string! name].get -> object!
+override DotRocks.FlightSql.DotRocksFlightSqlDbConnection.ChangeDatabase(string! databaseName) -> void
+override DotRocks.FlightSql.DotRocksFlightSqlDbConnection.Close() -> void
+override DotRocks.FlightSql.DotRocksFlightSqlDbConnection.CloseAsync() -> System.Threading.Tasks.Task!
+override DotRocks.FlightSql.DotRocksFlightSqlDbConnection.ConnectionString.get -> string!
+override DotRocks.FlightSql.DotRocksFlightSqlDbConnection.ConnectionString.set -> void
+override DotRocks.FlightSql.DotRocksFlightSqlDbConnection.ConnectionTimeout.get -> int
+override DotRocks.FlightSql.DotRocksFlightSqlDbConnection.Database.get -> string!
+override DotRocks.FlightSql.DotRocksFlightSqlDbConnection.DataSource.get -> string!
+override DotRocks.FlightSql.DotRocksFlightSqlDbConnection.DisposeAsync() -> System.Threading.Tasks.ValueTask
+override DotRocks.FlightSql.DotRocksFlightSqlDbConnection.Open() -> void
+override DotRocks.FlightSql.DotRocksFlightSqlDbConnection.OpenAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+override DotRocks.FlightSql.DotRocksFlightSqlDbConnection.ServerVersion.get -> string!
+override DotRocks.FlightSql.DotRocksFlightSqlDbConnection.State.get -> System.Data.ConnectionState
+override DotRocks.FlightSql.DotRocksFlightSqlDbTransaction.Commit() -> void
+override DotRocks.FlightSql.DotRocksFlightSqlDbTransaction.CommitAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+override DotRocks.FlightSql.DotRocksFlightSqlDbTransaction.DisposeAsync() -> System.Threading.Tasks.ValueTask
+override DotRocks.FlightSql.DotRocksFlightSqlDbTransaction.IsolationLevel.get -> System.Data.IsolationLevel
+override DotRocks.FlightSql.DotRocksFlightSqlDbTransaction.Rollback() -> void
+override DotRocks.FlightSql.DotRocksFlightSqlDbTransaction.RollbackAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+override DotRocks.FlightSql.DotRocksFlightSqlOptions.ToString() -> string!

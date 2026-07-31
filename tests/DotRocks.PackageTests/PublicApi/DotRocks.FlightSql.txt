@@ -1,0 +1,131 @@
+# DotRocks.FlightSql
+
+public sealed class DotRocks.FlightSql.DotRocksFlightSqlCommand System.Data.Common.DbCommand
+  public DotRocks.FlightSql.DotRocksFlightSqlCommand()
+  public DotRocks.FlightSql.DotRocksFlightSqlCommand(System.String commandText, DotRocks.FlightSql.DotRocksFlightSqlDbConnection connection)
+  public property System.String CommandText { get; set; }
+  public property System.Int32 CommandTimeout { get; set; }
+  public property System.Data.CommandType CommandType { get; set; }
+  protected property System.Data.Common.DbConnection DbConnection { get; set; }
+  protected property System.Data.Common.DbParameterCollection DbParameterCollection { get; }
+  protected property System.Data.Common.DbTransaction DbTransaction { get; set; }
+  public property System.Boolean DesignTimeVisible { get; set; }
+  public property System.Data.UpdateRowSource UpdatedRowSource { get; set; }
+  protected virtual method System.Data.Common.DbDataReader ExecuteDbDataReader(System.Data.CommandBehavior behavior)
+  protected virtual method System.Data.Common.DbParameter CreateDbParameter()
+  protected virtual method System.Threading.Tasks.Task<System.Data.Common.DbDataReader> ExecuteDbDataReaderAsync(System.Data.CommandBehavior behavior, System.Threading.CancellationToken cancellationToken)
+  protected virtual method System.Void Dispose(System.Boolean disposing)
+  public virtual method System.Int32 ExecuteNonQuery()
+  public virtual method System.Object ExecuteScalar()
+  public virtual method System.Threading.Tasks.Task PrepareAsync(System.Threading.CancellationToken cancellationToken)
+  public virtual method System.Threading.Tasks.Task<System.Int32> ExecuteNonQueryAsync(System.Threading.CancellationToken cancellationToken)
+  public virtual method System.Threading.Tasks.Task<System.Object> ExecuteScalarAsync(System.Threading.CancellationToken cancellationToken)
+  public virtual method System.Void Cancel()
+  public virtual method System.Void Prepare()
+
+public sealed class DotRocks.FlightSql.DotRocksFlightSqlDataReader System.Data.Common.DbDataReader
+  public property System.Int32 Depth { get; }
+  public property System.Int32 FieldCount { get; }
+  public property System.Boolean HasRows { get; }
+  public property System.Boolean IsClosed { get; }
+  public property System.Object Item { get; }
+  public property System.Object Item { get; }
+  public property System.Int32 RecordsAffected { get; }
+  protected virtual method System.Void Dispose(System.Boolean disposing)
+  public virtual method System.Boolean GetBoolean(System.Int32 ordinal)
+  public virtual method System.Boolean IsDBNull(System.Int32 ordinal)
+  public virtual method System.Boolean NextResult()
+  public virtual method System.Boolean Read()
+  public virtual method System.Byte GetByte(System.Int32 ordinal)
+  public virtual method System.Char GetChar(System.Int32 ordinal)
+  public virtual method System.Collections.IEnumerator GetEnumerator()
+  public virtual method System.Data.DataTable GetSchemaTable()
+  public virtual method System.DateTime GetDateTime(System.Int32 ordinal)
+  public virtual method System.Decimal GetDecimal(System.Int32 ordinal)
+  public virtual method System.Double GetDouble(System.Int32 ordinal)
+  public virtual method System.Guid GetGuid(System.Int32 ordinal)
+  public virtual method System.Int16 GetInt16(System.Int32 ordinal)
+  public virtual method System.Int32 GetInt32(System.Int32 ordinal)
+  public virtual method System.Int32 GetOrdinal(System.String name)
+  public virtual method System.Int32 GetValues(System.Object[] values)
+  public virtual method System.Int64 GetBytes(System.Int32 ordinal, System.Int64 dataOffset, System.Byte[] buffer, System.Int32 bufferOffset, System.Int32 length)
+  public virtual method System.Int64 GetChars(System.Int32 ordinal, System.Int64 dataOffset, System.Char[] buffer, System.Int32 bufferOffset, System.Int32 length)
+  public virtual method System.Int64 GetInt64(System.Int32 ordinal)
+  public virtual method System.Object GetValue(System.Int32 ordinal)
+  public virtual method System.Single GetFloat(System.Int32 ordinal)
+  public virtual method System.String GetDataTypeName(System.Int32 ordinal)
+  public virtual method System.String GetName(System.Int32 ordinal)
+  public virtual method System.String GetString(System.Int32 ordinal)
+  public virtual method System.Threading.Tasks.Task<System.Boolean> IsDBNullAsync(System.Int32 ordinal, System.Threading.CancellationToken cancellationToken)
+  public virtual method System.Threading.Tasks.Task<System.Boolean> NextResultAsync(System.Threading.CancellationToken cancellationToken)
+  public virtual method System.Threading.Tasks.Task<System.Boolean> ReadAsync(System.Threading.CancellationToken cancellationToken)
+  public virtual method System.Threading.Tasks.ValueTask DisposeAsync()
+  public virtual method System.Type GetFieldType(System.Int32 ordinal)
+  public virtual method T GetFieldValue<T>(System.Int32 ordinal)
+  public virtual method Task<T> GetFieldValueAsync<T>(System.Int32 ordinal, System.Threading.CancellationToken cancellationToken)
+
+public sealed class DotRocks.FlightSql.DotRocksFlightSqlDataSource System.IDisposable
+  public DotRocks.FlightSql.DotRocksFlightSqlDataSource(DotRocks.FlightSql.DotRocksFlightSqlOptions options)
+  public method System.Threading.Tasks.Task<DotRocks.FlightSql.DotRocksFlightSqlResult> ExecuteQueryAsync(System.String sql, System.Threading.CancellationToken cancellationToken)
+  public method System.Threading.Tasks.Task<DotRocks.FlightSql.DotRocksFlightSqlTransaction> BeginTransactionAsync(System.Threading.CancellationToken cancellationToken)
+  public method System.Threading.Tasks.Task<System.Int64> ExecuteUpdateAsync(System.String sql, System.Threading.CancellationToken cancellationToken)
+  public virtual method System.Void Dispose()
+
+public sealed class DotRocks.FlightSql.DotRocksFlightSqlDbConnection System.Data.Common.DbConnection
+  public DotRocks.FlightSql.DotRocksFlightSqlDbConnection(DotRocks.FlightSql.DotRocksFlightSqlOptions options, System.String fallbackConnectionString, DotRocks.FlightSql.DotRocksFlightSqlFallbackMode fallbackMode)
+  public property System.String ConnectionString { get; set; }
+  public property System.Int32 ConnectionTimeout { get; }
+  public property System.String DataSource { get; }
+  public property System.String Database { get; }
+  public property DotRocks.FlightSql.DotRocksFlightSqlFallbackMode FallbackMode { get; }
+  public property System.String ServerVersion { get; }
+  public property System.Data.ConnectionState State { get; }
+  protected virtual method System.Data.Common.DbCommand CreateDbCommand()
+  protected virtual method System.Data.Common.DbTransaction BeginDbTransaction(System.Data.IsolationLevel isolationLevel)
+  protected virtual method System.Threading.Tasks.ValueTask<System.Data.Common.DbTransaction> BeginDbTransactionAsync(System.Data.IsolationLevel isolationLevel, System.Threading.CancellationToken cancellationToken)
+  protected virtual method System.Void Dispose(System.Boolean disposing)
+  public method DotRocks.FlightSql.DotRocksFlightSqlCommand CreateCommand()
+  public virtual method System.Threading.Tasks.Task CloseAsync()
+  public virtual method System.Threading.Tasks.Task OpenAsync(System.Threading.CancellationToken cancellationToken)
+  public virtual method System.Threading.Tasks.ValueTask DisposeAsync()
+  public virtual method System.Void ChangeDatabase(System.String databaseName)
+  public virtual method System.Void Close()
+  public virtual method System.Void Open()
+
+public sealed class DotRocks.FlightSql.DotRocksFlightSqlDbTransaction System.Data.Common.DbTransaction
+  protected property System.Data.Common.DbConnection DbConnection { get; }
+  public property System.Data.IsolationLevel IsolationLevel { get; }
+  protected virtual method System.Void Dispose(System.Boolean disposing)
+  public virtual method System.Threading.Tasks.Task CommitAsync(System.Threading.CancellationToken cancellationToken)
+  public virtual method System.Threading.Tasks.Task RollbackAsync(System.Threading.CancellationToken cancellationToken)
+  public virtual method System.Threading.Tasks.ValueTask DisposeAsync()
+  public virtual method System.Void Commit()
+  public virtual method System.Void Rollback()
+
+public enum DotRocks.FlightSql.DotRocksFlightSqlFallbackMode
+  public static field DotRocks.FlightSql.DotRocksFlightSqlFallbackMode None
+  public static field DotRocks.FlightSql.DotRocksFlightSqlFallbackMode ReadQueries
+  public static field DotRocks.FlightSql.DotRocksFlightSqlFallbackMode WriteCommands
+
+public sealed class DotRocks.FlightSql.DotRocksFlightSqlOptions
+  public DotRocks.FlightSql.DotRocksFlightSqlOptions(System.Uri endpoint, System.String userName, System.String password)
+  public property System.Boolean AllowInsecureTransport { get; set; }
+  public property System.Collections.Generic.IReadOnlyCollection<System.String> AllowedEndpointHosts { get; set; }
+  public property System.TimeSpan CommandTimeout { get; set; }
+  public property System.Uri Endpoint { get; }
+  public property System.String UserName { get; }
+  public virtual method System.String ToString()
+
+public sealed class DotRocks.FlightSql.DotRocksFlightSqlResult
+  public property System.Boolean IsOrdered { get; }
+  public property Apache.Arrow.Schema Schema { get; }
+  public property System.Int64? TotalBytes { get; }
+  public property System.Int64? TotalRecords { get; }
+  public method System.Collections.Generic.IAsyncEnumerable<Apache.Arrow.RecordBatch> ReadRecordBatchesAsync(System.Threading.CancellationToken cancellationToken)
+
+public sealed class DotRocks.FlightSql.DotRocksFlightSqlTransaction System.IAsyncDisposable
+  public method System.Threading.Tasks.Task CommitAsync(System.Threading.CancellationToken cancellationToken)
+  public method System.Threading.Tasks.Task RollbackAsync(System.Threading.CancellationToken cancellationToken)
+  public method System.Threading.Tasks.Task<DotRocks.FlightSql.DotRocksFlightSqlResult> ExecuteQueryAsync(System.String sql, System.Threading.CancellationToken cancellationToken)
+  public method System.Threading.Tasks.Task<System.Int64> ExecuteUpdateAsync(System.String sql, System.Threading.CancellationToken cancellationToken)
+  public virtual method System.Threading.Tasks.ValueTask DisposeAsync()

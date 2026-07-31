@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>DotRocks.FlightSql</PackageId>
+    <Title>DotRocks.FlightSql</Title>
+    <Description>An experimental Arrow Flight SQL transport for StarRocks with direct record batches, async ADO.NET, updates, EF Core integration, and explicit MySQL fallback.</Description>
+    <PackageTags>starrocks;arrow;flight-sql;columnar;dotrocks;data</PackageTags>
+    <EnablePackageValidation>true</EnablePackageValidation>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None
+      Include="$(MSBuildThisFileDirectory)../../README.md"
+      Pack="true"
+      PackagePath="\"
+      Visible="false"
+    />
+  </ItemGroup>
+
+  <ItemGroup Label="Runtime dependencies">
+    <PackageReference Include="Apache.Arrow" />
+    <PackageReference Include="Apache.Arrow.Flight" />
+    <PackageReference Include="Apache.Arrow.Flight.Sql" />
+    <PackageReference Include="Grpc.Core.Api" />
+    <PackageReference Include="Grpc.Net.Client" />
+  </ItemGroup>
+
+  <ItemGroup Label="DotRocks protocol fallback">
+    <ProjectReference Include="../DotRocks.Data/DotRocks.Data.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Label="Public API tracking">
+    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup Label="Internal test access">
+    <InternalsVisibleTo Include="DotRocks.FlightSql.Tests" />
+  </ItemGroup>
+</Project>

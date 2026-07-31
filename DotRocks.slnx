@@ -3,6 +3,7 @@
     <Project Path="src/DotRocks.Analyzers/DotRocks.Analyzers.csproj" />
     <Project Path="src/DotRocks.Analyzers.CodeFixes/DotRocks.Analyzers.CodeFixes.csproj" />
     <Project Path="src/DotRocks.Data/DotRocks.Data.csproj" />
+    <Project Path="src/DotRocks.FlightSql/DotRocks.FlightSql.csproj" />
     <Project Path="src/DotRocks.EntityFrameworkCore/DotRocks.EntityFrameworkCore.csproj" />
     <Project Path="src/DotRocks.EntityFrameworkCore.Design/DotRocks.EntityFrameworkCore.Design.csproj" />
   </Folder>
@@ -12,6 +13,7 @@
     <Project Path="samples/DotRocks.Samples.Dapper/DotRocks.Samples.Dapper.csproj" />
     <Project Path="samples/DotRocks.Samples.DependencyInjection/DotRocks.Samples.DependencyInjection.csproj" />
     <Project Path="samples/DotRocks.Samples.EntityFrameworkCore/DotRocks.Samples.EntityFrameworkCore.csproj" />
+    <Project Path="samples/DotRocks.Samples.FlightSql/DotRocks.Samples.FlightSql.csproj" />
     <Project Path="samples/DotRocks.Samples.SecureConnection/DotRocks.Samples.SecureConnection.csproj" />
     <Project Path="samples/DotRocks.Samples.StreamLoad/DotRocks.Samples.StreamLoad.csproj" />
     <Project Path="samples/DotRocks.Samples.StreamLoadTransaction/DotRocks.Samples.StreamLoadTransaction.csproj" />
@@ -28,6 +30,8 @@
     <Project Path="tests/DotRocks.Data.IntegrationTests/DotRocks.Data.IntegrationTests.csproj" />
     <Project Path="tests/DotRocks.Data.DapperTests/DotRocks.Data.DapperTests.csproj" />
     <Project Path="tests/DotRocks.EntityFrameworkCore.Tests/DotRocks.EntityFrameworkCore.Tests.csproj" />
+    <Project Path="tests/DotRocks.FlightSql.Tests/DotRocks.FlightSql.Tests.csproj" />
+    <Project Path="tests/DotRocks.FlightSql.IntegrationTests/DotRocks.FlightSql.IntegrationTests.csproj" />
     <Project Path="tests/DotRocks.EntityFrameworkCore.IntegrationTests/DotRocks.EntityFrameworkCore.IntegrationTests.csproj" />
     <Project Path="tests/DotRocks.CompatibilityHarness/DotRocks.CompatibilityHarness.csproj" />
   </Folder>
