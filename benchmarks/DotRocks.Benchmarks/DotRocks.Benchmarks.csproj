@@ -23,5 +23,6 @@
     <ProjectReference Include="../../src/DotRocks.Data/DotRocks.Data.csproj" />
     <ProjectReference Include="../../src/DotRocks.Analyzers/DotRocks.Analyzers.csproj" />
     <ProjectReference Include="../../src/DotRocks.EntityFrameworkCore/DotRocks.EntityFrameworkCore.csproj" />
+    <ProjectReference Include="../../src/DotRocks.FlightSql/DotRocks.FlightSql.csproj" />
   </ItemGroup>
 </Project>
