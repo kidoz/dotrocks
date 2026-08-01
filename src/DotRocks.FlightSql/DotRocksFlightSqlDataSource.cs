@@ -23,7 +23,7 @@ public sealed class DotRocksFlightSqlDataSource : IDisposable, IAsyncDisposable
 {
     private const string BeginTransactionAction = "BeginTransaction";
     private const string EndTransactionAction = "EndTransaction";
-    private static readonly Schema s_emptySchema = new([], null);
+    private static readonly Schema EmptySchema = new([], null);
     private readonly Dictionary<string, FlightSqlConnection> _connections = new(
         StringComparer.OrdinalIgnoreCase
     );
@@ -210,7 +210,7 @@ public sealed class DotRocksFlightSqlDataSource : IDisposable, IAsyncDisposable
         using var call = await connection
             .Client.StartPut(
                 descriptor,
-                s_emptySchema,
+                EmptySchema,
                 headers,
                 CreateDeadline(effectiveTimeout),
                 timeout.Token

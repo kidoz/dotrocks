@@ -24,7 +24,7 @@ internal sealed class FlightSqlConnection : IAsyncDisposable
 {
     private const string AuthorizationHeader = "authorization";
     private const string CloseSessionAction = "CloseSession";
-    private static readonly TimeSpan s_closeSessionTimeout = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan CloseSessionTimeout = TimeSpan.FromSeconds(5);
 
     private readonly GrpcChannel _channel;
     private readonly SemaphoreSlim _authenticationGate = new(1, 1);
@@ -167,14 +167,14 @@ internal sealed class FlightSqlConnection : IAsyncDisposable
 
         try
         {
-            using var timeout = new CancellationTokenSource(s_closeSessionTimeout);
+            using var timeout = new CancellationTokenSource(CloseSessionTimeout);
 
             // The Flight SQL CloseSession action carries no request payload for StarRocks.
             var action = new FlightAction(CloseSessionAction, ByteString.Empty);
             using AsyncServerStreamingCall<FlightResult> call = Client.DoAction(
                 action,
                 new Metadata { { AuthorizationHeader, authorization } },
-                CreateDeadline(s_closeSessionTimeout),
+                CreateDeadline(CloseSessionTimeout),
                 timeout.Token
             );
             await foreach (

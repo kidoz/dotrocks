@@ -600,11 +600,11 @@ public sealed class FlightSqlTransportTests
     {
         private const string ExpectedBasicAuthorization = "Basic cm9vdDpzZWNyZXQ=";
         private const string SessionAuthorization = "Bearer test-session";
-        private static readonly Schema s_schema = new(
+        private static readonly Schema ResultSchema = new(
             [new Field("value", Int32Type.Default, false)],
             null
         );
-        private static readonly Schema s_widgetSchema = new(
+        private static readonly Schema WidgetSchema = new(
             [
                 new Field("Id", Int32Type.Default, false),
                 new Field("Name", StringType.Default, false),
@@ -664,7 +664,7 @@ public sealed class FlightSqlTransportTests
                 : blocking ? "blocking"
                 : empty ? "empty"
                 : "result";
-            Schema schema = widgets ? s_widgetSchema : s_schema;
+            Schema schema = widgets ? WidgetSchema : ResultSchema;
             var endpoint = new FlightEndpoint(new FlightTicket(ticket), []);
 
             // StarRocks does not declare a record count, so -1 stands in for "unknown".
@@ -691,7 +691,7 @@ public sealed class FlightSqlTransportTests
             {
                 // An empty StarRocks result still carries the schema, as a zero-row batch.
                 using var noValues = new Int32Array.Builder().Build();
-                using var emptyBatch = new RecordBatch(s_schema, [noValues], 0);
+                using var emptyBatch = new RecordBatch(ResultSchema, [noValues], 0);
                 await responseStream.WriteAsync(emptyBatch).ConfigureAwait(false);
                 return;
             }
@@ -700,7 +700,7 @@ public sealed class FlightSqlTransportTests
             {
                 using var ids = new Int32Array.Builder().Append(1).Append(2).Build();
                 using var names = new StringArray.Builder().Append("alpha").Append("beta").Build();
-                using var widgetBatch = new RecordBatch(s_widgetSchema, [ids, names], 2);
+                using var widgetBatch = new RecordBatch(WidgetSchema, [ids, names], 2);
                 await responseStream.WriteAsync(widgetBatch).ConfigureAwait(false);
                 return;
             }
@@ -711,7 +711,7 @@ public sealed class FlightSqlTransportTests
             }
 
             using var values = new Int32Array.Builder().Append(1).Append(2).Build();
-            using var batch = new RecordBatch(s_schema, [values], 2);
+            using var batch = new RecordBatch(ResultSchema, [values], 2);
             await responseStream.WriteAsync(batch).ConfigureAwait(false);
         }
 
