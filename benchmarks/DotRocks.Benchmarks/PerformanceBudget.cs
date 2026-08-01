@@ -169,15 +169,16 @@ internal static class PerformanceBudgetCatalog
                     MaxAllocatedBytes: 16_384
                 ),
                 // The read path's per-row allocation guard: 256 rows x 3 columns measured at
-                // ~43.8 us and ~122,400 B (about 478 B per row) through the typed reader
-                // accessors. The allocation ceiling is deliberately tight — allocation is
-                // machine-independent, so it catches a regression in per-row buffering or boxing
-                // (140,000 B is roughly a 547 B per-row ceiling) — while the mean allows for
-                // slower CI hardware.
+                // ~108,800 B (about 425 B per row) through the typed reader accessors, down from
+                // ~122,400 B before the row payload buffer was pooled. The ceiling is deliberately
+                // tight — allocation is machine-independent, so it catches a regression in per-row
+                // buffering or boxing (120,000 B is roughly a 469 B per-row ceiling) and would
+                // catch losing the pooled payload path. The mean allows for slower hardware and is
+                // not enforced in CI.
                 ["MaterializeRows"] = new(
                     "MaterializeRows",
                     MaxMeanNanoseconds: 200_000,
-                    MaxAllocatedBytes: 140_000
+                    MaxAllocatedBytes: 120_000
                 ),
                 ["AnalyzeRepresentativeCompilation"] = new(
                     "AnalyzeRepresentativeCompilation",

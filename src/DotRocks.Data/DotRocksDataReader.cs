@@ -49,6 +49,7 @@ public sealed class DotRocksDataReader
     private bool _isConsumed;
     private bool _connectionCompletionReported;
     private bool _hasPrefetchedRow;
+    private Dictionary<string, int>? _ordinalsByName;
     private ActiveOperationScope? _operationScope;
     private CancellationTokenRegistration _operationAbortRegistration;
 
@@ -133,12 +134,18 @@ public sealed class DotRocksDataReader
         RecordsAffectedCore > int.MaxValue ? int.MaxValue : (int)RecordsAffectedCore;
 
     /// <inheritdoc />
-    public override bool GetBoolean(int ordinal) =>
-        Convert.ToBoolean(GetNonNullValue(ordinal), CultureInfo.InvariantCulture);
+    public override bool GetBoolean(int ordinal)
+    {
+        object value = GetNonNullValue(ordinal);
+        return value is bool typed ? typed : Convert.ToBoolean(value, CultureInfo.InvariantCulture);
+    }
 
     /// <inheritdoc />
-    public override byte GetByte(int ordinal) =>
-        Convert.ToByte(GetNonNullValue(ordinal), CultureInfo.InvariantCulture);
+    public override byte GetByte(int ordinal)
+    {
+        object value = GetNonNullValue(ordinal);
+        return value is byte typed ? typed : Convert.ToByte(value, CultureInfo.InvariantCulture);
+    }
 
     /// <inheritdoc />
     public override long GetBytes(
@@ -272,8 +279,13 @@ public sealed class DotRocksDataReader
     }
 
     /// <inheritdoc />
-    public override double GetDouble(int ordinal) =>
-        Convert.ToDouble(GetNonNullValue(ordinal), CultureInfo.InvariantCulture);
+    public override double GetDouble(int ordinal)
+    {
+        object value = GetNonNullValue(ordinal);
+        return value is double typed
+            ? typed
+            : Convert.ToDouble(value, CultureInfo.InvariantCulture);
+    }
 
     /// <inheritdoc />
     public override Type GetFieldType(int ordinal)
@@ -294,8 +306,11 @@ public sealed class DotRocksDataReader
     }
 
     /// <inheritdoc />
-    public override float GetFloat(int ordinal) =>
-        Convert.ToSingle(GetNonNullValue(ordinal), CultureInfo.InvariantCulture);
+    public override float GetFloat(int ordinal)
+    {
+        object value = GetNonNullValue(ordinal);
+        return value is float typed ? typed : Convert.ToSingle(value, CultureInfo.InvariantCulture);
+    }
 
     /// <inheritdoc />
     public override Guid GetGuid(int ordinal)
@@ -314,16 +329,25 @@ public sealed class DotRocksDataReader
     }
 
     /// <inheritdoc />
-    public override short GetInt16(int ordinal) =>
-        Convert.ToInt16(GetNonNullValue(ordinal), CultureInfo.InvariantCulture);
+    public override short GetInt16(int ordinal)
+    {
+        object value = GetNonNullValue(ordinal);
+        return value is short typed ? typed : Convert.ToInt16(value, CultureInfo.InvariantCulture);
+    }
 
     /// <inheritdoc />
-    public override int GetInt32(int ordinal) =>
-        Convert.ToInt32(GetNonNullValue(ordinal), CultureInfo.InvariantCulture);
+    public override int GetInt32(int ordinal)
+    {
+        object value = GetNonNullValue(ordinal);
+        return value is int typed ? typed : Convert.ToInt32(value, CultureInfo.InvariantCulture);
+    }
 
     /// <inheritdoc />
-    public override long GetInt64(int ordinal) =>
-        Convert.ToInt64(GetNonNullValue(ordinal), CultureInfo.InvariantCulture);
+    public override long GetInt64(int ordinal)
+    {
+        object value = GetNonNullValue(ordinal);
+        return value is long typed ? typed : Convert.ToInt64(value, CultureInfo.InvariantCulture);
+    }
 
     /// <inheritdoc />
     public override string GetName(int ordinal)
@@ -341,15 +365,27 @@ public sealed class DotRocksDataReader
     public override int GetOrdinal(string name)
     {
         ArgumentNullException.ThrowIfNull(name);
-        for (int i = 0; i < _columns.Count; i++)
+
+        // Reading by name inside a row loop is common, and a linear scan makes it cost O(columns)
+        // per access. Build the lookup once per result set instead; the first duplicate name wins,
+        // matching the scan order this replaces.
+        if (_ordinalsByName is null)
         {
-            if (StringComparer.OrdinalIgnoreCase.Equals(_columns[i].Name, name))
+            var ordinals = new Dictionary<string, int>(
+                _columns.Count,
+                StringComparer.OrdinalIgnoreCase
+            );
+            for (int i = 0; i < _columns.Count; i++)
             {
-                return i;
+                ordinals.TryAdd(_columns[i].Name, i);
             }
+
+            _ordinalsByName = ordinals;
         }
 
-        throw new IndexOutOfRangeException($"Column '{name}' was not found.");
+        return _ordinalsByName.TryGetValue(name, out int ordinal)
+            ? ordinal
+            : throw new IndexOutOfRangeException($"Column '{name}' was not found.");
     }
 
     /// <inheritdoc />

@@ -8,6 +8,19 @@ version is derived from the release tag at publish time.
 
 ## [Unreleased]
 
+### Changed
+- The result-row loop reads each row into a buffer rented from `ArrayPool` and returns it once
+  the row is decoded, instead of allocating a fresh array per row. Measured on the budgeted
+  benchmark, per-row allocation drops from about 478 to 425 bytes for a narrow three-column row,
+  and the saving grows with row width. This is safe because every decoded value copies out of
+  the payload; a regression test poisons a recycled buffer to prove no materialized value aliases
+  it. A row spanning continuation packets (a value larger than one 16 MB packet) still uses an
+  exact-size array, since its length is not known until reassembly completes.
+- `GetOrdinal` uses a lookup built once per result set rather than scanning the column list on
+  every call, so reading columns by name inside a row loop is no longer O(columns) per access.
+  The typed accessors (`GetInt32`, `GetInt64`, `GetDouble`, and friends) now test the boxed value
+  directly before falling back to `Convert`.
+
 ### Added
 - `DotRocksDataReader` implements `GetStream` and `GetTextReader`, so code written against the
   standard ADO.NET large-value accessors works without falling back to the base implementations.

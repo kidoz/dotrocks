@@ -7,7 +7,7 @@ namespace DotRocks.Data.Protocol.Results;
 /// loop and differ only in this row encoding.
 /// </summary>
 internal delegate object?[] ResultRowDecoder(
-    byte[] rowPayload,
+    ReadOnlySpan<byte> rowPayload,
     IReadOnlyList<ColumnDefinition> columns
 );
 
@@ -77,8 +77,10 @@ internal sealed class ResultRowReader
             return null;
         }
 
-        byte[] rowPayload = await _reader.ReadPayloadAsync(cancellationToken).ConfigureAwait(false);
-        return DecodeRowPayload(rowPayload);
+        using PooledPayload rowPayload = await _reader
+            .ReadPayloadPooledAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return DecodeRowPayload(rowPayload.Span);
     }
 
     public object?[]? ReadRow()
@@ -88,7 +90,8 @@ internal sealed class ResultRowReader
             return null;
         }
 
-        return DecodeRowPayload(_reader.ReadPayload());
+        using PooledPayload rowPayload = _reader.ReadPayloadPooled();
+        return DecodeRowPayload(rowPayload.Span);
     }
 
     /// <summary>
@@ -100,10 +103,10 @@ internal sealed class ResultRowReader
     {
         while (!_isConsumed)
         {
-            byte[] rowPayload = await _reader
-                .ReadPayloadAsync(cancellationToken)
+            using PooledPayload rowPayload = await _reader
+                .ReadPayloadPooledAsync(cancellationToken)
                 .ConfigureAwait(false);
-            ProcessDrainedPayload(rowPayload);
+            ProcessDrainedPayload(rowPayload.Span);
         }
     }
 
@@ -111,11 +114,12 @@ internal sealed class ResultRowReader
     {
         while (!_isConsumed)
         {
-            ProcessDrainedPayload(_reader.ReadPayload());
+            using PooledPayload rowPayload = _reader.ReadPayloadPooled();
+            ProcessDrainedPayload(rowPayload.Span);
         }
     }
 
-    private object?[]? DecodeRowPayload(byte[] rowPayload)
+    private object?[]? DecodeRowPayload(ReadOnlySpan<byte> rowPayload)
     {
         if (ResultPacket.IsError(rowPayload))
         {
@@ -135,7 +139,7 @@ internal sealed class ResultRowReader
         return _decodeRow(rowPayload, Columns);
     }
 
-    private void ProcessDrainedPayload(byte[] rowPayload)
+    private void ProcessDrainedPayload(ReadOnlySpan<byte> rowPayload)
     {
         if (ResultPacket.IsError(rowPayload))
         {
