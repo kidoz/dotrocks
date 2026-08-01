@@ -8,27 +8,14 @@ version is derived from the release tag at publish time.
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-08-01
+
 ### Added
 - A "Reading large results" guide documents how result sets stream, what bounds memory and time
   while reading, how to choose between the MySQL protocol and Arrow Flight SQL, and the
   capabilities DotRocks deliberately does not expose because StarRocks does not provide them —
   there is no fetch size or server-side cursor (StarRocks does not implement `COM_STMT_FETCH`)
   and no parallel Flight endpoint fan-out (StarRocks returns a single endpoint per query).
-
-### Changed
-- The result-row loop reads each row into a buffer rented from `ArrayPool` and returns it once
-  the row is decoded, instead of allocating a fresh array per row. Measured on the budgeted
-  benchmark, per-row allocation drops from about 478 to 425 bytes for a narrow three-column row,
-  and the saving grows with row width. This is safe because every decoded value copies out of
-  the payload; a regression test poisons a recycled buffer to prove no materialized value aliases
-  it. A row spanning continuation packets (a value larger than one 16 MB packet) still uses an
-  exact-size array, since its length is not known until reassembly completes.
-- `GetOrdinal` uses a lookup built once per result set rather than scanning the column list on
-  every call, so reading columns by name inside a row loop is no longer O(columns) per access.
-  The typed accessors (`GetInt32`, `GetInt64`, `GetDouble`, and friends) now test the boxed value
-  directly before falling back to `Convert`.
-
-### Added
 - `DotRocksDataReader` implements `GetStream` and `GetTextReader`, so code written against the
   standard ADO.NET large-value accessors works without falling back to the base implementations.
   Both read from the already-materialized field value (a NULL yields an empty stream/reader);
@@ -42,6 +29,29 @@ version is derived from the release tag at publish time.
   the build instead of going unnoticed. The live large-result test now also bounds allocation
   per row across the whole 100k-row drain and asserts the reader retains nothing afterwards,
   rather than only checking that opening the reader does not buffer.
+- `DotRocksFlightSqlDataSource.CreateConnection` hands out ADO.NET connections that share the
+  data source's channels and authenticated sessions, so short-lived connections no longer each
+  build a private channel and session. The data source also implements `IAsyncDisposable`, which
+  is the preferred way to dispose it because releasing server sessions is a network operation.
+- `DotRocksFlightSqlTransaction.IsCompleted` reports whether the server confirmed completion.
+
+### Changed
+- The result-row loop reads each row into a buffer rented from `ArrayPool` and returns it once
+  the row is decoded, instead of allocating a fresh array per row. Measured on the budgeted
+  benchmark, per-row allocation drops from about 478 to 425 bytes for a narrow three-column row,
+  and the saving grows with row width. This is safe because every decoded value copies out of
+  the payload; a regression test poisons a recycled buffer to prove no materialized value aliases
+  it. A row spanning continuation packets (a value larger than one 16 MB packet) still uses an
+  exact-size array, since its length is not known until reassembly completes.
+- `GetOrdinal` uses a lookup built once per result set rather than scanning the column list on
+  every call, so reading columns by name inside a row loop is no longer O(columns) per access.
+  The typed accessors (`GetInt32`, `GetInt64`, `GetDouble`, and friends) now test the boxed value
+  directly before falling back to `Convert`.
+- The Flight SQL benchmarks establish their connections once in setup rather than per iteration,
+  and the direct record-batch benchmark now projects and consumes the same columns as the row
+  benchmarks, so the comparison measures row materialization rather than a smaller projection
+  plus per-iteration connection setup. `just integration-test` no longer runs the Flight SQL
+  suite twice.
 
 ### Fixed
 - A result value larger than the reader's maximum logical packet size now reports that limit
@@ -80,20 +90,6 @@ version is derived from the release tag at publish time.
 - A Flight endpoint that advertises several locations no longer fails when the first one is
   untrusted or unreachable: the trusted alternatives are tried in the order the server supplied
   them.
-
-### Added
-- `DotRocksFlightSqlDataSource.CreateConnection` hands out ADO.NET connections that share the
-  data source's channels and authenticated sessions, so short-lived connections no longer each
-  build a private channel and session. The data source also implements `IAsyncDisposable`, which
-  is the preferred way to dispose it because releasing server sessions is a network operation.
-- `DotRocksFlightSqlTransaction.IsCompleted` reports whether the server confirmed completion.
-
-### Changed
-- The Flight SQL benchmarks establish their connections once in setup rather than per iteration,
-  and the direct record-batch benchmark now projects and consumes the same columns as the row
-  benchmarks, so the comparison measures row materialization rather than a smaller projection
-  plus per-iteration connection setup. `just integration-test` no longer runs the Flight SQL
-  suite twice.
 
 ## [1.4.1] - 2026-08-01
 
@@ -456,7 +452,8 @@ version is derived from the release tag at publish time.
 - Stream Load refuses to forward credentials over a downgraded (HTTPS→HTTP) redirect.
 - NuGet vulnerability auditing and CodeQL analysis in CI.
 
-[Unreleased]: https://github.com/kidoz/dotrocks/compare/v1.4.1...HEAD
+[Unreleased]: https://github.com/kidoz/dotrocks/compare/v1.4.2...HEAD
+[1.4.2]: https://github.com/kidoz/dotrocks/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/kidoz/dotrocks/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/kidoz/dotrocks/compare/v1.3.5...v1.4.0
 [1.3.5]: https://github.com/kidoz/dotrocks/compare/v1.3.4...v1.3.5
