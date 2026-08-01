@@ -8,6 +8,8 @@ version is derived from the release tag at publish time.
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-08-01
+
 ### Fixed
 - `CommandTimeout` and `DbCommand.Cancel()` now apply while a `DbDataReader` iterates rows.
   The command's cancellation scope previously ended when the reader was handed back, so a
@@ -367,7 +369,8 @@ version is derived from the release tag at publish time.
 - Stream Load refuses to forward credentials over a downgraded (HTTPS→HTTP) redirect.
 - NuGet vulnerability auditing and CodeQL analysis in CI.
 
-[Unreleased]: https://github.com/kidoz/dotrocks/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/kidoz/dotrocks/compare/v1.4.1...HEAD
+[1.4.1]: https://github.com/kidoz/dotrocks/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/kidoz/dotrocks/compare/v1.3.5...v1.4.0
 [1.3.5]: https://github.com/kidoz/dotrocks/compare/v1.3.4...v1.3.5
 [1.3.4]: https://github.com/kidoz/dotrocks/compare/v1.3.3...v1.3.4
