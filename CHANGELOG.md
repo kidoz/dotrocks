@@ -8,6 +8,13 @@ version is derived from the release tag at publish time.
 
 ## [Unreleased]
 
+### Added
+- A "Reading large results" guide documents how result sets stream, what bounds memory and time
+  while reading, how to choose between the MySQL protocol and Arrow Flight SQL, and the
+  capabilities DotRocks deliberately does not expose because StarRocks does not provide them —
+  there is no fetch size or server-side cursor (StarRocks does not implement `COM_STMT_FETCH`)
+  and no parallel Flight endpoint fan-out (StarRocks returns a single endpoint per query).
+
 ### Changed
 - The result-row loop reads each row into a buffer rented from `ArrayPool` and returns it once
   the row is decoded, instead of allocating a fresh array per row. Measured on the budgeted

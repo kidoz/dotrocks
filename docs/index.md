@@ -22,6 +22,7 @@ README and changelog for unreleased behavior.
 
 - [Getting started](articles/getting-started.md)
 - [Connection strings](articles/connection-strings.md)
+- [Reading large results](articles/large-result-reads.md)
 - [Arrow Flight SQL](articles/arrow-flight-sql.md)
 - [Security](articles/security.md)
 - [Stream Load](articles/stream-load.md)

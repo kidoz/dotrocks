@@ -46,6 +46,7 @@ driver, and it is not a general-purpose MySQL driver.
 
 - [Getting started](https://github.com/kidoz/dotrocks/blob/main/docs/articles/getting-started.md)
 - [Connection strings](https://github.com/kidoz/dotrocks/blob/main/docs/articles/connection-strings.md)
+- [Reading large results](https://github.com/kidoz/dotrocks/blob/main/docs/articles/large-result-reads.md)
 - [Arrow Flight SQL](https://github.com/kidoz/dotrocks/blob/main/docs/articles/arrow-flight-sql.md)
 - [Security](https://github.com/kidoz/dotrocks/blob/main/docs/articles/security.md)
 - [Stream Load](https://github.com/kidoz/dotrocks/blob/main/docs/articles/stream-load.md)
