@@ -285,12 +285,14 @@ public sealed class DotRocksFlightSqlCommand : DbCommand
                         operation.Token
                     )
                     .ConfigureAwait(false);
-            return new DotRocksFlightSqlDataReader(
-                result,
-                behavior.HasFlag(CommandBehavior.CloseConnection) ? connection : null,
-                operation,
-                operation.Token
-            );
+            return await DotRocksFlightSqlDataReader
+                .CreateAsync(
+                    result,
+                    behavior.HasFlag(CommandBehavior.CloseConnection) ? connection : null,
+                    operation,
+                    operation.Token
+                )
+                .ConfigureAwait(false);
         }
         catch (Exception ex)
             when (_transaction is null

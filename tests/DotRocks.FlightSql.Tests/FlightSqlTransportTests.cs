@@ -117,7 +117,7 @@ public sealed class FlightSqlTransportTests
     }
 
     [Fact]
-    public async Task DbCommand_CancelStopsActiveResultStreamAndAllowsReuseAfterDispose()
+    public async Task DbCommand_CancelReportsOperationCanceledAndAllowsReuse()
     {
         using IHost host = CreateHost();
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
@@ -133,26 +133,18 @@ public sealed class FlightSqlTransportTests
             await connection.OpenAsync(cancellationToken).ConfigureAwait(true);
             await using DotRocksFlightSqlCommand command = connection.CreateCommand();
             command.CommandText = "SELECT blocking";
-            DbDataReader reader = await command
-                .ExecuteReaderAsync(cancellationToken)
-                .ConfigureAwait(true);
-            Task<bool> pendingRead = reader.ReadAsync(CancellationToken.None);
+            Task<DbDataReader> pendingExecute = command.ExecuteReaderAsync(CancellationToken.None);
             await GetQueryCapture(host)
                 .DoGetStarted.Task.WaitAsync(cancellationToken)
                 .ConfigureAwait(true);
 
             command.Cancel();
 
-            Exception? exception = await Record
-                .ExceptionAsync(async () => await pendingRead.ConfigureAwait(true))
+            // ADO.NET consumers must be able to detect cancellation without inspecting gRPC status
+            // codes, so the channel is configured to translate it.
+            await Assert
+                .ThrowsAnyAsync<OperationCanceledException>(() => pendingExecute)
                 .ConfigureAwait(true);
-            Assert.True(
-                exception
-                    is OperationCanceledException
-                        or RpcException { StatusCode: StatusCode.Cancelled },
-                $"Expected cancellation but received {exception?.GetType().Name ?? "no exception"}."
-            );
-            await reader.DisposeAsync().ConfigureAwait(true);
 
             command.CommandText = "SELECT value FROM test";
             await using DbDataReader secondReader = await command
@@ -245,6 +237,72 @@ public sealed class FlightSqlTransportTests
             Assert.Equal(0, capture.Handshakes);
             Assert.Equal(2, capture.BasicAuthorizedCalls);
             Assert.Equal(0, capture.SessionAuthorizedCalls);
+        }
+        finally
+        {
+            await host.StopAsync(cancellationToken).ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
+    public async Task DbDataReader_ReportsNoRowsWhenTheServerDeclaresNoRecordCount()
+    {
+        using IHost host = CreateHost();
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        await host.StartAsync(cancellationToken).ConfigureAwait(true);
+
+        try
+        {
+            var options = new DotRocksFlightSqlOptions(GetServerAddress(host), "root", "secret")
+            {
+                AllowInsecureTransport = true,
+            };
+            await using var connection = new DotRocksFlightSqlDbConnection(options);
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(true);
+            await using DotRocksFlightSqlCommand command = connection.CreateCommand();
+            command.CommandText = "SELECT value FROM empty";
+
+            await using DbDataReader reader = await command
+                .ExecuteReaderAsync(cancellationToken)
+                .ConfigureAwait(true);
+
+            Assert.False(reader.HasRows);
+            Assert.False(await reader.ReadAsync(cancellationToken).ConfigureAwait(true));
+        }
+        finally
+        {
+            await host.StopAsync(cancellationToken).ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
+    public async Task DbDataReader_ReportsRowsBeforeTheFirstRead()
+    {
+        using IHost host = CreateHost();
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        await host.StartAsync(cancellationToken).ConfigureAwait(true);
+
+        try
+        {
+            var options = new DotRocksFlightSqlOptions(GetServerAddress(host), "root", "secret")
+            {
+                AllowInsecureTransport = true,
+            };
+            await using var connection = new DotRocksFlightSqlDbConnection(options);
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(true);
+            await using DotRocksFlightSqlCommand command = connection.CreateCommand();
+            command.CommandText = "SELECT value FROM test";
+
+            await using DbDataReader reader = await command
+                .ExecuteReaderAsync(cancellationToken)
+                .ConfigureAwait(true);
+
+            Assert.True(reader.HasRows);
+            Assert.True(await reader.ReadAsync(cancellationToken).ConfigureAwait(true));
+            Assert.Equal(1, reader.GetInt32(0));
+            Assert.True(await reader.ReadAsync(cancellationToken).ConfigureAwait(true));
+            Assert.Equal(2, reader.GetInt32(0));
+            Assert.False(await reader.ReadAsync(cancellationToken).ConfigureAwait(true));
         }
         finally
         {
@@ -600,13 +658,17 @@ public sealed class FlightSqlTransportTests
             _capture.LastQuery = query;
             bool widgets = query.Contains("widgets", StringComparison.OrdinalIgnoreCase);
             bool blocking = query.Contains("blocking", StringComparison.OrdinalIgnoreCase);
+            bool empty = query.Contains("empty", StringComparison.OrdinalIgnoreCase);
             string ticket =
                 widgets ? "widgets"
                 : blocking ? "blocking"
+                : empty ? "empty"
                 : "result";
             Schema schema = widgets ? s_widgetSchema : s_schema;
             var endpoint = new FlightEndpoint(new FlightTicket(ticket), []);
-            return Task.FromResult(new FlightInfo(schema, request, [endpoint], 2, -1));
+
+            // StarRocks does not declare a record count, so -1 stands in for "unknown".
+            return Task.FromResult(new FlightInfo(schema, request, [endpoint], empty ? -1 : 2, -1));
         }
 
         public override async Task DoGet(
@@ -622,6 +684,15 @@ public sealed class FlightSqlTransportTests
                 _capture.DoGetStarted.SetResult();
                 await Task.Delay(Timeout.InfiniteTimeSpan, context.CancellationToken)
                     .ConfigureAwait(false);
+                return;
+            }
+
+            if (ticketValue == "empty")
+            {
+                // An empty StarRocks result still carries the schema, as a zero-row batch.
+                using var noValues = new Int32Array.Builder().Build();
+                using var emptyBatch = new RecordBatch(s_schema, [noValues], 0);
+                await responseStream.WriteAsync(emptyBatch).ConfigureAwait(false);
                 return;
             }
 

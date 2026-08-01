@@ -64,6 +64,15 @@ version is derived from the release tag at publish time.
   precision than `System.Decimal` can hold (`DECIMAL(38, s)` is routine in StarRocks) are typed
   as `DotRocksDecimal`, and `GetDecimal`/`GetFieldValue<decimal>` convert such values when they
   are representable instead of failing with an `InvalidCastException` from `Convert.ChangeType`.
+- `DbDataReader.HasRows` reports the real result. StarRocks does not declare a record count, and
+  the reader previously answered `true` for every such result, including empty ones; a command
+  now fetches the first batch before returning the reader.
+- `GetOrdinal` and ordinal-based accessors report unknown columns with `IndexOutOfRangeException`
+  as ADO.NET specifies, instead of `ArgumentOutOfRangeException`.
+- Reading a large Flight SQL value in chunks through `GetBytes`/`GetChars` no longer
+  re-materializes the whole value for every chunk; the materialized value is cached for the
+  current row and column, so allocation is proportional to the value rather than to value size
+  times chunk count.
 
 ### Added
 - `DotRocksFlightSqlDataSource.CreateConnection` hands out ADO.NET connections that share the

@@ -115,6 +115,9 @@ logical connection state and performs no network I/O: the session is authenticat
 execution, so a configured MySQL-protocol fallback can still take over when the Flight endpoint is
 unreachable.
 
+`ExecuteReaderAsync` fetches the first record batch before returning, so `HasRows` reflects the
+real result even though StarRocks does not declare a record count.
+
 `CommandTimeout`, the token passed to `ExecuteReaderAsync`, and `Cancel()` remain active through
 result streaming until the reader is exhausted or disposed. A token passed to any later
 `ReadAsync` call can cancel the remaining stream. `CloseAsync` rolls back an active Flight

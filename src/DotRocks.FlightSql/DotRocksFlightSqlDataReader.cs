@@ -20,11 +20,14 @@ public sealed class DotRocksFlightSqlDataReader : DbDataReader
 {
     private readonly DotRocksFlightSqlResult _result;
     private readonly Schema _schema;
-    private readonly DbConnection? _connectionToClose;
     private readonly CancellationTokenSource _streamCancellation;
+    private DbConnection? _connectionToClose;
     private IDisposable? _executionScope;
     private IAsyncEnumerator<RecordBatch>? _batches;
     private RecordBatch? _currentBatch;
+    private ValueChunkCache<byte>? _byteChunks;
+    private ValueChunkCache<char>? _charChunks;
+    private bool? _hasRows;
     private int _rowIndex = -1;
     private bool _closed;
 
@@ -52,7 +55,11 @@ public sealed class DotRocksFlightSqlDataReader : DbDataReader
     public override int FieldCount => _schema.FieldsList.Count;
 
     /// <inheritdoc />
-    public override bool HasRows => _result.TotalRecords is null or > 0;
+    /// <remarks>
+    /// A reader created by a command has already fetched its first batch, so this reports the
+    /// actual result even when the server does not declare a record count.
+    /// </remarks>
+    public override bool HasRows => _hasRows ?? _result.TotalRecords is null or > 0;
 
     /// <inheritdoc />
     public override bool IsClosed => _closed;
@@ -82,9 +89,11 @@ public sealed class DotRocksFlightSqlDataReader : DbDataReader
             .ReadRecordBatchesAsync(_streamCancellation.Token)
             .GetAsyncEnumerator(_streamCancellation.Token);
 
+        ClearChunkCaches();
         if (_currentBatch is not null && _rowIndex + 1 < _currentBatch.Length)
         {
             _rowIndex++;
+            _hasRows = true;
             return true;
         }
 
@@ -107,6 +116,7 @@ public sealed class DotRocksFlightSqlDataReader : DbDataReader
 
                 _currentBatch = _batches.Current;
                 _rowIndex = 0;
+                _hasRows = true;
                 return true;
             }
         }
@@ -116,6 +126,7 @@ public sealed class DotRocksFlightSqlDataReader : DbDataReader
             throw;
         }
 
+        _hasRows ??= false;
         CompleteExecution();
         return false;
     }
@@ -161,6 +172,12 @@ public sealed class DotRocksFlightSqlDataReader : DbDataReader
     }
 
     /// <inheritdoc />
+    /// <exception cref="IndexOutOfRangeException">The column name is not in the result.</exception>
+    [SuppressMessage(
+        "Usage",
+        "CA2201:Do not raise reserved exception types",
+        Justification = "DbDataReader.GetOrdinal conventionally reports a missing column with IndexOutOfRangeException."
+    )]
     public override int GetOrdinal(string name)
     {
         ArgumentException.ThrowIfNullOrEmpty(name);
@@ -172,7 +189,7 @@ public sealed class DotRocksFlightSqlDataReader : DbDataReader
             }
         }
 
-        throw new ArgumentOutOfRangeException(nameof(name), $"Column '{name}' was not found.");
+        throw new IndexOutOfRangeException($"Column '{name}' was not found.");
     }
 
     /// <inheritdoc />
@@ -283,6 +300,10 @@ public sealed class DotRocksFlightSqlDataReader : DbDataReader
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// The materialized value is cached for the current row and column, so reading a large value in
+    /// chunks does not re-materialize it for every chunk.
+    /// </remarks>
     public override long GetBytes(
         int ordinal,
         long dataOffset,
@@ -291,11 +312,22 @@ public sealed class DotRocksFlightSqlDataReader : DbDataReader
         int length
     )
     {
-        byte[] value = GetFieldValue<byte[]>(ordinal);
+        EnsureCurrentRow();
+        _byteChunks ??= new ValueChunkCache<byte>();
+        if (!_byteChunks.TryGet(_currentBatch!, ordinal, _rowIndex, out byte[]? value))
+        {
+            value = GetFieldValue<byte[]>(ordinal);
+            _byteChunks.Store(_currentBatch!, ordinal, _rowIndex, value);
+        }
+
         return CopyValue(value, dataOffset, buffer, bufferOffset, length);
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// The materialized value is cached for the current row and column, so reading a large value in
+    /// chunks does not re-materialize it for every chunk.
+    /// </remarks>
     public override long GetChars(
         int ordinal,
         long dataOffset,
@@ -304,7 +336,14 @@ public sealed class DotRocksFlightSqlDataReader : DbDataReader
         int length
     )
     {
-        char[] value = GetString(ordinal).ToCharArray();
+        EnsureCurrentRow();
+        _charChunks ??= new ValueChunkCache<char>();
+        if (!_charChunks.TryGet(_currentBatch!, ordinal, _rowIndex, out char[]? value))
+        {
+            value = GetString(ordinal).ToCharArray();
+            _charChunks.Store(_currentBatch!, ordinal, _rowIndex, value);
+        }
+
         return CopyValue(value, dataOffset, buffer, bufferOffset, length);
     }
 
@@ -325,6 +364,7 @@ public sealed class DotRocksFlightSqlDataReader : DbDataReader
         _closed = true;
         try
         {
+            ClearChunkCaches();
             _currentBatch?.Dispose();
             _currentBatch = null;
             if (_batches is not null)
@@ -357,6 +397,40 @@ public sealed class DotRocksFlightSqlDataReader : DbDataReader
         base.Dispose(disposing);
     }
 
+    /// <summary>
+    /// Creates a reader whose first batch has already been fetched, so <see cref="HasRows" />
+    /// reports the real result before the first <see cref="ReadAsync" />.
+    /// </summary>
+    /// <remarks>
+    /// The command scope and the connection are handed over only after the first batch arrives, so
+    /// a failed fetch leaves both for the caller to release or retry on another transport.
+    /// </remarks>
+    internal static async Task<DotRocksFlightSqlDataReader> CreateAsync(
+        DotRocksFlightSqlResult result,
+        DbConnection? connectionToClose,
+        IDisposable? executionScope,
+        CancellationToken commandCancellationToken
+    )
+    {
+        var reader = new DotRocksFlightSqlDataReader(
+            result,
+            commandCancellationToken: commandCancellationToken
+        );
+        try
+        {
+            await reader.PrimeAsync().ConfigureAwait(false);
+        }
+        catch
+        {
+            await reader.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
+
+        reader._connectionToClose = connectionToClose;
+        reader._executionScope = executionScope;
+        return reader;
+    }
+
     private static long CopyValue<T>(
         T[] value,
         long dataOffset,
@@ -382,15 +456,42 @@ public sealed class DotRocksFlightSqlDataReader : DbDataReader
         return count;
     }
 
+    private async Task PrimeAsync()
+    {
+        _batches ??= _result
+            .ReadRecordBatchesAsync(_streamCancellation.Token)
+            .GetAsyncEnumerator(_streamCancellation.Token);
+
+        while (await _batches.MoveNextAsync().ConfigureAwait(false))
+        {
+            if (_batches.Current.Length == 0)
+            {
+                _batches.Current.Dispose();
+                continue;
+            }
+
+            _currentBatch = _batches.Current;
+            _rowIndex = -1;
+            _hasRows = true;
+            return;
+        }
+
+        _hasRows = false;
+    }
+
+    [SuppressMessage(
+        "Usage",
+        "CA2201:Do not raise reserved exception types",
+        Justification = "DbDataReader ordinal access conventionally reports out-of-range ordinals with IndexOutOfRangeException."
+    )]
     private Field GetField(int ordinal)
     {
-        ArgumentOutOfRangeException.ThrowIfNegative(ordinal);
-        return ordinal < FieldCount
-            ? _schema.GetFieldByIndex(ordinal)
-            : throw new ArgumentOutOfRangeException(
-                nameof(ordinal),
-                $"Column ordinal {ordinal} is out of range."
-            );
+        if (ordinal < 0 || ordinal >= FieldCount)
+        {
+            throw new IndexOutOfRangeException($"Column ordinal {ordinal} is out of range.");
+        }
+
+        return _schema.GetFieldByIndex(ordinal);
     }
 
     private void EnsureCurrentRow()
@@ -404,5 +505,60 @@ public sealed class DotRocksFlightSqlDataReader : DbDataReader
         }
     }
 
+    private void ClearChunkCaches()
+    {
+        _byteChunks?.Clear();
+        _charChunks?.Clear();
+    }
+
     private void CompleteExecution() => Interlocked.Exchange(ref _executionScope, null)?.Dispose();
+
+    /// <summary>
+    /// Holds the value materialized for one row and column so that chunked reads reuse it.
+    /// </summary>
+    private sealed class ValueChunkCache<T>
+    {
+        private RecordBatch? _batch;
+        private T[]? _value;
+        private int _ordinal = -1;
+        private int _rowIndex = -1;
+
+        public bool TryGet(
+            RecordBatch batch,
+            int ordinal,
+            int rowIndex,
+            [NotNullWhen(true)] out T[]? value
+        )
+        {
+            if (
+                _value is not null
+                && ReferenceEquals(_batch, batch)
+                && _ordinal == ordinal
+                && _rowIndex == rowIndex
+            )
+            {
+                value = _value;
+                return true;
+            }
+
+            value = null;
+            return false;
+        }
+
+        public void Store(RecordBatch batch, int ordinal, int rowIndex, T[] value)
+        {
+            _batch = batch;
+            _ordinal = ordinal;
+            _rowIndex = rowIndex;
+            _value = value;
+        }
+
+        public void Clear()
+        {
+            _batch = null;
+            _value = null;
+            _ordinal = -1;
+            _rowIndex = -1;
+        }
+    }
 }

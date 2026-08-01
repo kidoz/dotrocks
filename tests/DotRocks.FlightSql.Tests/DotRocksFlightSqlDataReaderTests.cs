@@ -205,6 +205,80 @@ public sealed class DotRocksFlightSqlDataReaderTests
         );
     }
 
+    [Fact]
+    public async Task GetOrdinal_ReportsMissingColumnsWithTheAdoNetException()
+    {
+        var schema = new Schema([new Field("value", Int32Type.Default, false)], null);
+        using var values = new Int32Array.Builder().Append(1).Build();
+        using var batch = new RecordBatch(schema, [values], 1);
+        var result = new DotRocksFlightSqlResult(schema, 1, -1, true, _ => SingleBatch(batch));
+        await using var reader = new DotRocksFlightSqlDataReader(result);
+
+        Assert.Equal(0, reader.GetOrdinal("VALUE"));
+        Assert.Throws<IndexOutOfRangeException>(() => reader.GetOrdinal("missing"));
+        Assert.Throws<IndexOutOfRangeException>(() => reader.GetName(1));
+        Assert.Throws<IndexOutOfRangeException>(() => reader.GetName(-1));
+    }
+
+    [Fact]
+    public async Task GetBytes_ReadsInChunksWithoutRematerializingTheValue()
+    {
+        byte[] payload = [.. Enumerable.Range(0, 4096).Select(value => (byte)value)];
+        var schema = new Schema([new Field("payload", BinaryType.Default, false)], null);
+        using var payloads = new BinaryArray.Builder().Append(payload).Build();
+        using var batch = new RecordBatch(schema, [payloads], 1);
+        var result = new DotRocksFlightSqlResult(schema, 1, -1, true, _ => SingleBatch(batch));
+        await using var reader = new DotRocksFlightSqlDataReader(result);
+
+        Assert.True(
+            await reader.ReadAsync(TestContext.Current.CancellationToken).ConfigureAwait(true)
+        );
+
+        var buffer = new byte[64];
+        var read = new List<byte>(payload.Length);
+        long baseline = GC.GetAllocatedBytesForCurrentThread();
+        for (long offset = 0; offset < payload.Length; offset += buffer.Length)
+        {
+            long count = reader.GetBytes(0, offset, buffer, 0, buffer.Length);
+            read.AddRange(buffer.AsSpan(0, (int)count));
+        }
+
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - baseline;
+        Assert.Equal(payload, read);
+
+        // Re-materializing per chunk would allocate at least payload.Length per chunk; one shared
+        // materialization keeps the whole loop close to a single copy of the value.
+        Assert.True(
+            allocated < payload.Length * 4,
+            $"Chunked reads allocated {allocated} bytes for a {payload.Length}-byte value."
+        );
+    }
+
+    [Fact]
+    public async Task GetChars_ReadsInChunksAcrossRows()
+    {
+        string first = new('a', 512);
+        string second = new('b', 512);
+        var schema = new Schema([new Field("text", StringType.Default, false)], null);
+        using var values = new StringArray.Builder().Append(first).Append(second).Build();
+        using var batch = new RecordBatch(schema, [values], 2);
+        var result = new DotRocksFlightSqlResult(schema, 2, -1, true, _ => SingleBatch(batch));
+        await using var reader = new DotRocksFlightSqlDataReader(result);
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var buffer = new char[128];
+
+        Assert.True(await reader.ReadAsync(cancellationToken).ConfigureAwait(true));
+        Assert.Equal(first.Length, reader.GetChars(0, 0, null, 0, 0));
+        Assert.Equal(128, reader.GetChars(0, 0, buffer, 0, buffer.Length));
+        Assert.Equal(new string('a', 128), new string(buffer));
+        Assert.Equal(128, reader.GetChars(0, 384, buffer, 0, buffer.Length));
+        Assert.Equal(new string('a', 128), new string(buffer));
+
+        Assert.True(await reader.ReadAsync(cancellationToken).ConfigureAwait(true));
+        Assert.Equal(128, reader.GetChars(0, 0, buffer, 0, buffer.Length));
+        Assert.Equal(new string('b', 128), new string(buffer));
+    }
+
     private static async IAsyncEnumerable<RecordBatch> SingleBatch(RecordBatch batch)
     {
         await Task.CompletedTask.ConfigureAwait(false);
