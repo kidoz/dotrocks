@@ -168,6 +168,91 @@ public sealed class FlightSqlTransportTests
     }
 
     [Fact]
+    public async Task DataSource_AuthenticatesOnceAndReusesTheServerSession()
+    {
+        using IHost host = CreateHost();
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        await host.StartAsync(cancellationToken).ConfigureAwait(true);
+
+        try
+        {
+            var options = new DotRocksFlightSqlOptions(GetServerAddress(host), "root", "secret")
+            {
+                AllowInsecureTransport = true,
+            };
+            var dataSource = new DotRocksFlightSqlDataSource(options);
+            await using (dataSource.ConfigureAwait(true))
+            {
+                for (int attempt = 0; attempt < 3; attempt++)
+                {
+                    await using DotRocksFlightSqlDbConnection connection =
+                        dataSource.CreateConnection();
+                    await connection.OpenAsync(cancellationToken).ConfigureAwait(true);
+                    await using DotRocksFlightSqlCommand command = connection.CreateCommand();
+                    command.CommandText = "SELECT value FROM test";
+                    await using DbDataReader reader = await command
+                        .ExecuteReaderAsync(cancellationToken)
+                        .ConfigureAwait(true);
+                    Assert.True(await reader.ReadAsync(cancellationToken).ConfigureAwait(true));
+                }
+            }
+
+            QueryCapture capture = GetQueryCapture(host);
+            Assert.Equal(1, capture.Handshakes);
+
+            // Every discovery and DoGet call must reuse the session instead of re-authenticating,
+            // which is what made StarRocks leak one frontend connection per RPC.
+            Assert.Equal(0, capture.BasicAuthorizedCalls);
+
+            // Three discovery calls, three DoGet calls, and the CloseSession action on disposal.
+            Assert.Equal(7, capture.SessionAuthorizedCalls);
+            Assert.Equal(1, capture.ClosedSessions);
+        }
+        finally
+        {
+            await host.StopAsync(cancellationToken).ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
+    public async Task DataSource_FallsBackToPerCallCredentialsWithoutHandshakeSupport()
+    {
+        using IHost host = CreateHost<BasicOnlyFlightServer>();
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        await host.StartAsync(cancellationToken).ConfigureAwait(true);
+
+        try
+        {
+            var options = new DotRocksFlightSqlOptions(GetServerAddress(host), "root", "secret")
+            {
+                AllowInsecureTransport = true,
+            };
+            using var dataSource = new DotRocksFlightSqlDataSource(options);
+
+            DotRocksFlightSqlResult result = await dataSource
+                .ExecuteQueryAsync("SELECT value FROM test", cancellationToken)
+                .ConfigureAwait(true);
+            await foreach (
+                RecordBatch batch in result
+                    .ReadRecordBatchesAsync(cancellationToken)
+                    .ConfigureAwait(true)
+            )
+            {
+                batch.Dispose();
+            }
+
+            QueryCapture capture = GetQueryCapture(host);
+            Assert.Equal(0, capture.Handshakes);
+            Assert.Equal(2, capture.BasicAuthorizedCalls);
+            Assert.Equal(0, capture.SessionAuthorizedCalls);
+        }
+        finally
+        {
+            await host.StopAsync(cancellationToken).ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
     public async Task EntityFrameworkCore_ExecutesAsyncQueryThroughFlightConnection()
     {
         using IHost host = CreateHost();
@@ -325,7 +410,10 @@ public sealed class FlightSqlTransportTests
         }
     }
 
-    private static IHost CreateHost() =>
+    private static IHost CreateHost() => CreateHost<AuthorizedFlightServer>();
+
+    private static IHost CreateHost<TServer>()
+        where TServer : FlightServer =>
         Host.CreateDefaultBuilder()
             .ConfigureWebHostDefaults(webBuilder =>
             {
@@ -340,7 +428,7 @@ public sealed class FlightSqlTransportTests
                 webBuilder.ConfigureServices(services =>
                 {
                     services.AddSingleton<QueryCapture>();
-                    services.AddGrpc().AddFlightServer<AuthorizedFlightServer>();
+                    services.AddGrpc().AddFlightServer<TServer>();
                 });
                 webBuilder.Configure(application =>
                 {
@@ -362,9 +450,10 @@ public sealed class FlightSqlTransportTests
     private static QueryCapture GetQueryCapture(IHost host) =>
         host.Services.GetRequiredService<QueryCapture>();
 
-    private sealed class AuthorizedFlightServer : FlightServer
+    private class AuthorizedFlightServer : FlightServer
     {
-        private const string ExpectedAuthorization = "Basic cm9vdDpzZWNyZXQ=";
+        private const string ExpectedBasicAuthorization = "Basic cm9vdDpzZWNyZXQ=";
+        private const string SessionAuthorization = "Bearer test-session";
         private static readonly Schema s_schema = new(
             [new Field("value", Int32Type.Default, false)],
             null
@@ -381,6 +470,34 @@ public sealed class FlightSqlTransportTests
         public AuthorizedFlightServer(QueryCapture capture)
         {
             _capture = capture;
+        }
+
+        /// <summary>
+        /// Mirrors StarRocks: the credentials are exchanged once for a session bearer token.
+        /// </summary>
+        public override async Task Handshake(
+            IAsyncStreamReader<FlightHandshakeRequest> requestStream,
+            IAsyncStreamWriter<FlightHandshakeResponse> responseStream,
+            ServerCallContext context
+        )
+        {
+            string? authorization = ReadAuthorization(context);
+            if (authorization != ExpectedBasicAuthorization)
+            {
+                throw new RpcException(new Status(StatusCode.Unauthenticated, "Unauthorized."));
+            }
+
+            Interlocked.Increment(ref _capture.Handshakes);
+            while (await requestStream.MoveNext(context.CancellationToken).ConfigureAwait(false))
+            {
+                // The handshake payload is unused; only the returned token matters.
+            }
+
+            await context
+                .WriteResponseHeadersAsync(
+                    new Metadata { { "authorization", SessionAuthorization } }
+                )
+                .ConfigureAwait(false);
         }
 
         public override Task<FlightInfo> GetFlightInfo(
@@ -492,22 +609,62 @@ public sealed class FlightSqlTransportTests
                     .Unpack<ActionEndTransactionRequest>();
                 _capture.LastEndTransactionAction = (int)end.Action;
             }
-        }
-
-        private static void RequireAuthorization(ServerCallContext context)
-        {
-            string? authorization = context
-                .RequestHeaders.FirstOrDefault(header => header.Key == "authorization")
-                ?.Value;
-            if (authorization != ExpectedAuthorization)
+            else if (request.Type == "CloseSession")
             {
-                throw new RpcException(new Status(StatusCode.Unauthenticated, "Unauthorized."));
+                Interlocked.Increment(ref _capture.ClosedSessions);
+                await responseStream
+                    .WriteAsync(new FlightResult(ByteString.Empty))
+                    .ConfigureAwait(false);
             }
         }
+
+        protected static string? ReadAuthorization(ServerCallContext context) =>
+            context.RequestHeaders.FirstOrDefault(header => header.Key == "authorization")?.Value;
+
+        /// <summary>
+        /// Accepts the session token, and counts every call that still carries raw credentials.
+        /// </summary>
+        private void RequireAuthorization(ServerCallContext context)
+        {
+            string? authorization = ReadAuthorization(context);
+            if (authorization == SessionAuthorization)
+            {
+                Interlocked.Increment(ref _capture.SessionAuthorizedCalls);
+                return;
+            }
+
+            if (authorization == ExpectedBasicAuthorization)
+            {
+                Interlocked.Increment(ref _capture.BasicAuthorizedCalls);
+                return;
+            }
+
+            throw new RpcException(new Status(StatusCode.Unauthenticated, "Unauthorized."));
+        }
+    }
+
+    /// <summary>
+    /// Models a Flight server that does not implement the handshake at all.
+    /// </summary>
+    private sealed class BasicOnlyFlightServer : AuthorizedFlightServer
+    {
+        public BasicOnlyFlightServer(QueryCapture capture)
+            : base(capture) { }
+
+        public override Task Handshake(
+            IAsyncStreamReader<FlightHandshakeRequest> requestStream,
+            IAsyncStreamWriter<FlightHandshakeResponse> responseStream,
+            ServerCallContext context
+        ) => throw new RpcException(new Status(StatusCode.Unimplemented, "No handshake."));
     }
 
     private sealed class QueryCapture
     {
+        public int Handshakes;
+        public int SessionAuthorizedCalls;
+        public int BasicAuthorizedCalls;
+        public int ClosedSessions;
+
         public TaskCompletionSource DoGetStarted { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
 

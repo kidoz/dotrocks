@@ -56,6 +56,29 @@ The data source reuses gRPC channels per validated endpoint. A result is single-
 Flight endpoints sequentially, preserving endpoint order without buffering the complete result.
 Dispose each record batch after consuming it.
 
+## Sessions and disposal
+
+StarRocks creates a frontend session for every authenticated call. DotRocks therefore exchanges the
+credentials once, during the Flight handshake, for a session bearer token that all later calls on
+that channel reuse, and releases the session with the Flight SQL `CloseSession` action on disposal.
+Servers that do not implement the handshake fall back to per-call Basic authentication.
+
+Two consequences matter in application code:
+
+- Share a `DotRocksFlightSqlDataSource`. One data source holds one session per endpoint;
+  `CreateConnection()` hands out ADO.NET connections that reuse it, whereas constructing
+  `DotRocksFlightSqlDbConnection` from options gives each connection a private channel and session.
+- Prefer `await using` (`IAsyncDisposable`) over `using`. Releasing the server session is a network
+  call; the synchronous `Dispose` blocks on it with a five-second bound, and a session that is
+  never released stays on the server until it expires.
+
+```csharp
+await using var dataSource = new DotRocksFlightSqlDataSource(options);
+
+await using DotRocksFlightSqlDbConnection connection = dataSource.CreateConnection();
+await connection.OpenAsync(cancellationToken);
+```
+
 `ExecuteUpdateAsync` sends the standard Flight SQL `CommandStatementUpdate` through `DoPut` and
 returns the `DoPutUpdateResult` row count. Low-level Flight transactions are available through
 `BeginTransactionAsync`; servers may reject them when their Flight endpoint does not advertise or
@@ -88,7 +111,9 @@ while (await reader.ReadAsync(cancellationToken))
 The ADO.NET surface intentionally supports asynchronous execution only. `ExecuteReader`,
 `ExecuteScalar`, `ExecuteNonQuery`, synchronous transaction creation, and synchronous transaction
 completion throw `NotSupportedException`; use their async counterparts. `Open()` only changes the
-logical connection state and performs no network I/O.
+logical connection state and performs no network I/O: the session is authenticated on first
+execution, so a configured MySQL-protocol fallback can still take over when the Flight endpoint is
+unreachable.
 
 `CommandTimeout`, the token passed to `ExecuteReaderAsync`, and `Cancel()` remain active through
 result streaming until the reader is exhausted or disposed. A token passed to any later

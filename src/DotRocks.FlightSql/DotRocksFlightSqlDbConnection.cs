@@ -11,6 +11,7 @@ namespace DotRocks.FlightSql;
 public sealed class DotRocksFlightSqlDbConnection : DbConnection
 {
     private readonly DotRocksFlightSqlDataSource _flightDataSource;
+    private readonly bool _ownsFlightDataSource;
     private readonly DotRocksFlightSqlOptions _options;
     private readonly DotRocksConnection? _fallbackConnection;
     private readonly SemaphoreSlim _fallbackOpenGate = new(1, 1);
@@ -27,13 +28,42 @@ public sealed class DotRocksFlightSqlDbConnection : DbConnection
     /// fallback modes.
     /// </param>
     /// <param name="fallbackMode">The operations that may use the MySQL-protocol fallback.</param>
+    /// <remarks>
+    /// This connection owns a private data source, and therefore a private channel and server
+    /// session. Pass a shared <see cref="DotRocksFlightSqlDataSource" /> instead when several
+    /// short-lived connections should reuse one authenticated session.
+    /// </remarks>
     public DotRocksFlightSqlDbConnection(
         DotRocksFlightSqlOptions options,
         string? fallbackConnectionString = null,
         DotRocksFlightSqlFallbackMode fallbackMode = DotRocksFlightSqlFallbackMode.None
     )
+        : this(
+            CreateOwnedDataSource(options),
+            ownsFlightDataSource: true,
+            fallbackConnectionString,
+            fallbackMode
+        ) { }
+
+    /// <summary>
+    /// Initializes an ADO.NET connection that shares an existing Flight SQL data source, which
+    /// keeps ownership of its channels and server sessions.
+    /// </summary>
+    internal DotRocksFlightSqlDbConnection(
+        DotRocksFlightSqlDataSource dataSource,
+        string? fallbackConnectionString,
+        DotRocksFlightSqlFallbackMode fallbackMode
+    )
+        : this(dataSource, ownsFlightDataSource: false, fallbackConnectionString, fallbackMode) { }
+
+    private DotRocksFlightSqlDbConnection(
+        DotRocksFlightSqlDataSource dataSource,
+        bool ownsFlightDataSource,
+        string? fallbackConnectionString,
+        DotRocksFlightSqlFallbackMode fallbackMode
+    )
     {
-        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(dataSource);
         ValidateFallbackMode(fallbackMode);
         if (fallbackMode != DotRocksFlightSqlFallbackMode.None)
         {
@@ -48,9 +78,10 @@ public sealed class DotRocksFlightSqlDbConnection : DbConnection
             );
         }
 
-        _options = options;
+        _options = dataSource.Options;
         FallbackMode = fallbackMode;
-        _flightDataSource = new DotRocksFlightSqlDataSource(options);
+        _flightDataSource = dataSource;
+        _ownsFlightDataSource = ownsFlightDataSource;
     }
 
     /// <summary>
@@ -91,6 +122,11 @@ public sealed class DotRocksFlightSqlDbConnection : DbConnection
         );
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Opening records connection state without contacting the server. The Flight session is
+    /// authenticated on first execution so that an explicitly enabled MySQL-protocol fallback can
+    /// still take over when the Flight endpoint is unreachable.
+    /// </remarks>
     public override void Open()
     {
         ThrowIfDisposed();
@@ -296,7 +332,11 @@ public sealed class DotRocksFlightSqlDbConnection : DbConnection
             finally
             {
                 _fallbackConnection?.Dispose();
-                _flightDataSource.Dispose();
+                if (_ownsFlightDataSource)
+                {
+                    _flightDataSource.Dispose();
+                }
+
                 _fallbackOpenGate.Dispose();
             }
         }
@@ -326,13 +366,25 @@ public sealed class DotRocksFlightSqlDbConnection : DbConnection
         }
         finally
         {
-            _flightDataSource.Dispose();
+            if (_ownsFlightDataSource)
+            {
+                await _flightDataSource.DisposeAsync().ConfigureAwait(false);
+            }
+
             _fallbackOpenGate.Dispose();
             _state = ConnectionState.Closed;
         }
 
         await base.DisposeAsync().ConfigureAwait(false);
         GC.SuppressFinalize(this);
+    }
+
+    private static DotRocksFlightSqlDataSource CreateOwnedDataSource(
+        DotRocksFlightSqlOptions options
+    )
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        return new DotRocksFlightSqlDataSource(options);
     }
 
     private static void ValidateFallbackMode(DotRocksFlightSqlFallbackMode fallbackMode)

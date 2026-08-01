@@ -11,7 +11,8 @@ var options = new DotRocksFlightSqlOptions(new Uri(endpoint), userName, password
     // a trusted private network; credentials and results are otherwise visible on the wire.
     AllowInsecureTransport = endpoint.StartsWith("grpc://", StringComparison.OrdinalIgnoreCase),
 };
-using var dataSource = new DotRocksFlightSqlDataSource(options);
+// Dispose asynchronously: the data source releases its StarRocks session on the wire.
+await using var dataSource = new DotRocksFlightSqlDataSource(options);
 
 DotRocksFlightSqlResult result = await dataSource.ExecuteQueryAsync("SELECT 1 AS value");
 Console.WriteLine(result.Schema);
@@ -24,7 +25,8 @@ await foreach (var batch in result.ReadRecordBatchesAsync())
     }
 }
 
-await using var connection = new DotRocksFlightSqlDbConnection(options);
+// Sharing the data source reuses its channel and authenticated session.
+await using DotRocksFlightSqlDbConnection connection = dataSource.CreateConnection();
 await connection.OpenAsync();
 await using DotRocksFlightSqlCommand command = connection.CreateCommand();
 command.CommandText = "SELECT @value AS value";

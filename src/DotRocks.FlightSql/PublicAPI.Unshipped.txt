@@ -5,7 +5,10 @@ DotRocks.FlightSql.DotRocksFlightSqlCommand.DotRocksFlightSqlCommand(string! com
 DotRocks.FlightSql.DotRocksFlightSqlDataReader
 DotRocks.FlightSql.DotRocksFlightSqlDataSource
 DotRocks.FlightSql.DotRocksFlightSqlDataSource.BeginTransactionAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<DotRocks.FlightSql.DotRocksFlightSqlTransaction!>!
+DotRocks.FlightSql.DotRocksFlightSqlDataSource.CreateConnection() -> DotRocks.FlightSql.DotRocksFlightSqlDbConnection!
+DotRocks.FlightSql.DotRocksFlightSqlDataSource.CreateConnection(string? fallbackConnectionString, DotRocks.FlightSql.DotRocksFlightSqlFallbackMode fallbackMode) -> DotRocks.FlightSql.DotRocksFlightSqlDbConnection!
 DotRocks.FlightSql.DotRocksFlightSqlDataSource.Dispose() -> void
+DotRocks.FlightSql.DotRocksFlightSqlDataSource.DisposeAsync() -> System.Threading.Tasks.ValueTask
 DotRocks.FlightSql.DotRocksFlightSqlDataSource.DotRocksFlightSqlDataSource(DotRocks.FlightSql.DotRocksFlightSqlOptions! options) -> void
 DotRocks.FlightSql.DotRocksFlightSqlDataSource.ExecuteQueryAsync(string! sql, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<DotRocks.FlightSql.DotRocksFlightSqlResult!>!
 DotRocks.FlightSql.DotRocksFlightSqlDataSource.ExecuteUpdateAsync(string! sql, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<long>!

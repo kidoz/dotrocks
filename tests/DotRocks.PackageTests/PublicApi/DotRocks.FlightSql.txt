@@ -64,11 +64,14 @@ public sealed class DotRocks.FlightSql.DotRocksFlightSqlDataReader System.Data.C
   public virtual method T GetFieldValue<T>(System.Int32 ordinal)
   public virtual method Task<T> GetFieldValueAsync<T>(System.Int32 ordinal, System.Threading.CancellationToken cancellationToken)
 
-public sealed class DotRocks.FlightSql.DotRocksFlightSqlDataSource System.IDisposable
+public sealed class DotRocks.FlightSql.DotRocksFlightSqlDataSource System.IAsyncDisposable, System.IDisposable
   public DotRocks.FlightSql.DotRocksFlightSqlDataSource(DotRocks.FlightSql.DotRocksFlightSqlOptions options)
+  public method DotRocks.FlightSql.DotRocksFlightSqlDbConnection CreateConnection()
+  public method DotRocks.FlightSql.DotRocksFlightSqlDbConnection CreateConnection(System.String fallbackConnectionString, DotRocks.FlightSql.DotRocksFlightSqlFallbackMode fallbackMode)
   public method System.Threading.Tasks.Task<DotRocks.FlightSql.DotRocksFlightSqlResult> ExecuteQueryAsync(System.String sql, System.Threading.CancellationToken cancellationToken)
   public method System.Threading.Tasks.Task<DotRocks.FlightSql.DotRocksFlightSqlTransaction> BeginTransactionAsync(System.Threading.CancellationToken cancellationToken)
   public method System.Threading.Tasks.Task<System.Int64> ExecuteUpdateAsync(System.String sql, System.Threading.CancellationToken cancellationToken)
+  public virtual method System.Threading.Tasks.ValueTask DisposeAsync()
   public virtual method System.Void Dispose()
 
 public sealed class DotRocks.FlightSql.DotRocksFlightSqlDbConnection System.Data.Common.DbConnection
@@ -129,3 +132,4 @@ public sealed class DotRocks.FlightSql.DotRocksFlightSqlTransaction System.IAsyn
   public method System.Threading.Tasks.Task<DotRocks.FlightSql.DotRocksFlightSqlResult> ExecuteQueryAsync(System.String sql, System.Threading.CancellationToken cancellationToken)
   public method System.Threading.Tasks.Task<System.Int64> ExecuteUpdateAsync(System.String sql, System.Threading.CancellationToken cancellationToken)
   public virtual method System.Threading.Tasks.ValueTask DisposeAsync()
+

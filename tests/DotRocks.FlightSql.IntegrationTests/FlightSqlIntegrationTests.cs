@@ -101,6 +101,64 @@ public sealed class FlightSqlIntegrationTests
         }
     }
 
+    [Fact]
+    public async Task FlightQueries_DoNotLeakStarRocksSessions()
+    {
+        FlightSqlIntegrationEnvironment.SkipUnlessEnabled();
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        await using var mysql = new DotRocksConnection(
+            FlightSqlIntegrationEnvironment.MySqlConnectionString
+        );
+        await mysql.OpenAsync(cancellationToken).ConfigureAwait(true);
+        int before = await CountSessionsAsync(mysql, cancellationToken).ConfigureAwait(true);
+
+        var dataSource = new DotRocksFlightSqlDataSource(
+            FlightSqlIntegrationEnvironment.FlightOptions
+        );
+        await using (dataSource.ConfigureAwait(true))
+        {
+            for (int attempt = 0; attempt < 5; attempt++)
+            {
+                await using DotRocksFlightSqlDbConnection flight = dataSource.CreateConnection();
+                await flight.OpenAsync(cancellationToken).ConfigureAwait(true);
+                await using DotRocksFlightSqlCommand command = flight.CreateCommand();
+                command.CommandText = "SELECT 1";
+                await using DbDataReader reader = await command
+                    .ExecuteReaderAsync(cancellationToken)
+                    .ConfigureAwait(true);
+                Assert.True(await reader.ReadAsync(cancellationToken).ConfigureAwait(true));
+            }
+        }
+
+        int after = await CountSessionsAsync(mysql, cancellationToken).ConfigureAwait(true);
+
+        // Before session authentication, every discovery and DoGet call left one sleeping frontend
+        // connection behind, which exhausted the per-user connection limit during benchmarks.
+        Assert.True(
+            after <= before,
+            $"Flight queries left {after - before} extra StarRocks sessions behind."
+        );
+    }
+
+    private static async Task<int> CountSessionsAsync(
+        DotRocksConnection connection,
+        CancellationToken cancellationToken
+    )
+    {
+        await using DbCommand command = connection.CreateCommand();
+        command.CommandText = "SHOW PROCESSLIST";
+        await using DbDataReader reader = await command
+            .ExecuteReaderAsync(cancellationToken)
+            .ConfigureAwait(false);
+        int count = 0;
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            count++;
+        }
+
+        return count;
+    }
+
     [SuppressMessage(
         "Security",
         "CA2100:Review SQL queries for security vulnerabilities",

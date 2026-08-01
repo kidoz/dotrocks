@@ -12,7 +12,13 @@ namespace DotRocks.FlightSql;
 /// <summary>
 /// Provides an experimental Arrow Flight SQL transport for StarRocks queries and updates.
 /// </summary>
-public sealed class DotRocksFlightSqlDataSource : IDisposable
+/// <remarks>
+/// One data source owns one authenticated session per Flight endpoint, so sharing an instance
+/// across connections and commands reuses those sessions instead of creating new ones. Dispose it
+/// asynchronously where possible: <see cref="DisposeAsync" /> releases the server sessions, while
+/// <see cref="Dispose" /> blocks on the same work.
+/// </remarks>
+public sealed class DotRocksFlightSqlDataSource : IDisposable, IAsyncDisposable
 {
     private const string BeginTransactionAction = "BeginTransaction";
     private const string EndTransactionAction = "EndTransaction";
@@ -38,7 +44,10 @@ public sealed class DotRocksFlightSqlDataSource : IDisposable
         _userName = options.UserName;
         _password = options.Password;
         _commandTimeout = options.CommandTimeout;
+        Options = options;
     }
+
+    internal DotRocksFlightSqlOptions Options { get; }
 
     /// <summary>
     /// Starts a SQL query and obtains the schema and endpoint tickets for its streamed result.
@@ -73,6 +82,29 @@ public sealed class DotRocksFlightSqlDataSource : IDisposable
         ExecuteUpdateAsync(sql, Transaction.NoTransaction, commandTimeout: null, cancellationToken);
 
     /// <summary>
+    /// Creates an ADO.NET connection that shares this data source, and therefore its channels and
+    /// authenticated sessions.
+    /// </summary>
+    /// <returns>A connection that does not dispose this data source.</returns>
+    public DotRocksFlightSqlDbConnection CreateConnection() =>
+        new(this, fallbackConnectionString: null, DotRocksFlightSqlFallbackMode.None);
+
+    /// <summary>
+    /// Creates an ADO.NET connection that shares this data source and may use the MySQL-protocol
+    /// fallback.
+    /// </summary>
+    /// <param name="fallbackConnectionString">
+    /// A DotRocks MySQL-protocol connection string used only by the explicitly enabled fallback
+    /// modes.
+    /// </param>
+    /// <param name="fallbackMode">The operations that may use the MySQL-protocol fallback.</param>
+    /// <returns>A connection that does not dispose this data source.</returns>
+    public DotRocksFlightSqlDbConnection CreateConnection(
+        string? fallbackConnectionString,
+        DotRocksFlightSqlFallbackMode fallbackMode
+    ) => new(this, fallbackConnectionString, fallbackMode);
+
+    /// <summary>
     /// Begins a Flight SQL transaction.
     /// </summary>
     /// <param name="cancellationToken">A token that cancels transaction creation.</param>
@@ -84,11 +116,12 @@ public sealed class DotRocksFlightSqlDataSource : IDisposable
         ThrowIfDisposed();
         FlightSqlConnection connection = GetConnection(_endpointPolicy.PrimaryAddress);
         using CancellationTokenSource timeout = CreateTimeout(_commandTimeout, cancellationToken);
+        Metadata headers = await connection.CreateHeadersAsync(timeout.Token).ConfigureAwait(false);
         var request = new ActionBeginTransactionRequest();
         var action = new FlightAction(BeginTransactionAction, Any.Pack(request).ToByteArray());
         using AsyncServerStreamingCall<FlightResult> call = connection.Client.DoAction(
             action,
-            connection.CreateHeaders(),
+            headers,
             DateTime.UtcNow.Add(_commandTimeout),
             timeout.Token
         );
@@ -129,7 +162,10 @@ public sealed class DotRocksFlightSqlDataSource : IDisposable
         FlightSqlConnection connection = GetConnection(_endpointPolicy.PrimaryAddress);
         TimeSpan effectiveTimeout = commandTimeout ?? _commandTimeout;
         using CancellationTokenSource timeout = CreateTimeout(effectiveTimeout, cancellationToken);
-        var callOptions = new FlightCallOptions { Headers = connection.CreateHeaders() };
+        var callOptions = new FlightCallOptions
+        {
+            Headers = await connection.CreateHeadersAsync(timeout.Token).ConfigureAwait(false),
+        };
         FlightInfo info = await connection
             .SqlClient.ExecuteAsync(
                 sql,
@@ -169,11 +205,12 @@ public sealed class DotRocksFlightSqlDataSource : IDisposable
         FlightDescriptor descriptor = FlightDescriptor.CreateCommandDescriptor(
             Any.Pack(update).ToByteArray()
         );
+        Metadata headers = await connection.CreateHeadersAsync(timeout.Token).ConfigureAwait(false);
         using var call = await connection
             .Client.StartPut(
                 descriptor,
                 s_emptySchema,
-                connection.CreateHeaders(),
+                headers,
                 CreateDeadline(effectiveTimeout),
                 timeout.Token
             )
@@ -209,8 +246,12 @@ public sealed class DotRocksFlightSqlDataSource : IDisposable
     ) => CompleteTransactionAsync(transaction, commit: false, cancellationToken);
 
     /// <inheritdoc />
-    public void Dispose()
+    public void Dispose() => DisposeAsync().AsTask().GetAwaiter().GetResult();
+
+    /// <inheritdoc />
+    public async ValueTask DisposeAsync()
     {
+        FlightSqlConnection[] connections;
         lock (_sync)
         {
             if (_disposed != 0)
@@ -219,13 +260,16 @@ public sealed class DotRocksFlightSqlDataSource : IDisposable
             }
 
             _disposed = 1;
-            foreach (FlightSqlConnection connection in _connections.Values)
-            {
-                connection.Dispose();
-            }
-
+            connections = [.. _connections.Values];
             _connections.Clear();
         }
+
+        foreach (FlightSqlConnection connection in connections)
+        {
+            await connection.DisposeAsync().ConfigureAwait(false);
+        }
+
+        GC.SuppressFinalize(this);
     }
 
     private async IAsyncEnumerable<RecordBatch> ReadBatchesAsync(
@@ -242,9 +286,12 @@ public sealed class DotRocksFlightSqlDataSource : IDisposable
         {
             Uri address = ResolveEndpointAddress(endpoint);
             FlightSqlConnection connection = GetConnection(address);
+            Metadata headers = await connection
+                .CreateHeadersAsync(timeout.Token)
+                .ConfigureAwait(false);
             using var call = connection.Client.GetStream(
                 endpoint.Ticket,
-                connection.CreateHeaders(),
+                headers,
                 deadline,
                 timeout.Token
             );
@@ -273,7 +320,7 @@ public sealed class DotRocksFlightSqlDataSource : IDisposable
                 return connection;
             }
 
-            connection = new FlightSqlConnection(address, _userName, _password);
+            connection = new FlightSqlConnection(address, _userName, _password, _commandTimeout);
             _connections.Add(address.AbsoluteUri, connection);
             return connection;
         }
@@ -307,6 +354,7 @@ public sealed class DotRocksFlightSqlDataSource : IDisposable
         ThrowIfDisposed();
         FlightSqlConnection connection = GetConnection(_endpointPolicy.PrimaryAddress);
         using CancellationTokenSource timeout = CreateTimeout(_commandTimeout, cancellationToken);
+        Metadata headers = await connection.CreateHeadersAsync(timeout.Token).ConfigureAwait(false);
         var request = new ActionEndTransactionRequest
         {
             TransactionId = transaction.TransactionId,
@@ -315,7 +363,7 @@ public sealed class DotRocksFlightSqlDataSource : IDisposable
         var action = new FlightAction(EndTransactionAction, Any.Pack(request).ToByteArray());
         using AsyncServerStreamingCall<FlightResult> call = connection.Client.DoAction(
             action,
-            connection.CreateHeaders(),
+            headers,
             DateTime.UtcNow.Add(_commandTimeout),
             timeout.Token
         );

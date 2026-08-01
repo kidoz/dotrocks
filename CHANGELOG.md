@@ -47,6 +47,20 @@ version is derived from the release tag at publish time.
 - A result value larger than the reader's maximum logical packet size now reports that limit
   instead of "StarRocks returned malformed protocol bytes", which sent callers looking for a
   protocol bug when the real cause was an oversized field.
+- Arrow Flight SQL no longer leaks a StarRocks session per RPC. The transport sent Basic
+  credentials on every call, and StarRocks creates a frontend session for each authenticated
+  call, so a single query left two sleeping sessions behind and a benchmark run reached the
+  1024-connection user limit (`ResourceExhausted`). The credentials are now exchanged once
+  during the Flight handshake for the session bearer token that every later call reuses, and
+  disposal releases the session with the Flight SQL `CloseSession` action. Measured against
+  StarRocks 4.0.7: five queries created eleven sessions before the fix and none after it.
+  Servers that do not implement the handshake keep the previous per-call behavior.
+
+### Added
+- `DotRocksFlightSqlDataSource.CreateConnection` hands out ADO.NET connections that share the
+  data source's channels and authenticated sessions, so short-lived connections no longer each
+  build a private channel and session. The data source also implements `IAsyncDisposable`, which
+  is the preferred way to dispose it because releasing server sessions is a network operation.
 
 ## [1.4.1] - 2026-08-01
 
