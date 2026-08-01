@@ -54,7 +54,8 @@ await foreach (Apache.Arrow.RecordBatch batch in result.ReadRecordBatchesAsync()
 
 The data source reuses gRPC channels per validated endpoint. A result is single-use and processes
 Flight endpoints sequentially, preserving endpoint order without buffering the complete result.
-Dispose each record batch after consuming it.
+When an endpoint advertises several locations, the trusted alternatives are tried in the order the
+server supplied them. Dispose each record batch after consuming it.
 
 ## Sessions and disposal
 

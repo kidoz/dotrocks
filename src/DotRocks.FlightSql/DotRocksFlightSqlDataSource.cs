@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using Apache.Arrow;
 using Apache.Arrow.Flight;
+using Apache.Arrow.Flight.Client;
 using Apache.Arrow.Flight.Sql;
 using Arrow.Flight.Protocol.Sql;
 using Google.Protobuf;
@@ -284,30 +285,92 @@ public sealed class DotRocksFlightSqlDataSource : IDisposable, IAsyncDisposable
 
         foreach (FlightEndpoint endpoint in endpoints)
         {
-            Uri address = ResolveEndpointAddress(endpoint);
-            FlightSqlConnection connection = GetConnection(address);
-            Metadata headers = await connection
-                .CreateHeadersAsync(timeout.Token)
+            EndpointStream stream = await OpenEndpointStreamAsync(endpoint, deadline, timeout.Token)
                 .ConfigureAwait(false);
-            using var call = connection.Client.GetStream(
-                endpoint.Ticket,
-                headers,
-                deadline,
-                timeout.Token
-            );
-
-            while (await call.ResponseStream.MoveNext(timeout.Token).ConfigureAwait(false))
+            using FlightRecordBatchStreamingCall call = stream.Call;
+            bool hasBatch = stream.HasBatch;
+            while (hasBatch)
             {
                 yield return call.ResponseStream.Current;
+                hasBatch = await call.ResponseStream.MoveNext(timeout.Token).ConfigureAwait(false);
             }
         }
     }
 
-    private Uri ResolveEndpointAddress(FlightEndpoint endpoint)
+    /// <summary>
+    /// Opens the ticket stream on the first trusted endpoint location that answers.
+    /// </summary>
+    private async Task<EndpointStream> OpenEndpointStreamAsync(
+        FlightEndpoint endpoint,
+        DateTime? deadline,
+        CancellationToken cancellationToken
+    )
+    {
+        List<Uri> addresses = ResolveEndpointAddresses(endpoint);
+        for (int index = 0; ; index++)
+        {
+            bool isLastAddress = index == addresses.Count - 1;
+            FlightRecordBatchStreamingCall? call = null;
+            try
+            {
+                FlightSqlConnection connection = GetConnection(addresses[index]);
+                Metadata headers = await connection
+                    .CreateHeadersAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                call = connection.Client.GetStream(
+                    endpoint.Ticket,
+                    headers,
+                    deadline,
+                    cancellationToken
+                );
+                bool hasBatch = await call
+                    .ResponseStream.MoveNext(cancellationToken)
+                    .ConfigureAwait(false);
+                return new EndpointStream(call, hasBatch);
+            }
+            catch (RpcException exception)
+                when (!isLastAddress && exception.StatusCode == StatusCode.Unavailable)
+            {
+                // A backend that does not answer must not hide the remaining trusted locations.
+                call?.Dispose();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Returns the trusted addresses advertised for an endpoint, in server-supplied order.
+    /// </summary>
+    private List<Uri> ResolveEndpointAddresses(FlightEndpoint endpoint)
     {
         ArgumentNullException.ThrowIfNull(endpoint);
-        string? location = endpoint.Locations.Select(candidate => candidate.Uri).FirstOrDefault();
-        return _endpointPolicy.Resolve(location);
+        var addresses = new List<Uri>();
+        Exception? rejection = null;
+        foreach (FlightLocation location in endpoint.Locations)
+        {
+            Uri address;
+            try
+            {
+                address = _endpointPolicy.Resolve(location.Uri);
+            }
+            catch (InvalidOperationException exception)
+            {
+                // A single untrusted location must not disqualify the trusted alternatives.
+                rejection = exception;
+                continue;
+            }
+
+            if (!addresses.Contains(address))
+            {
+                addresses.Add(address);
+            }
+        }
+
+        if (addresses.Count != 0)
+        {
+            return addresses;
+        }
+
+        return rejection is null ? [_endpointPolicy.PrimaryAddress] : throw rejection;
     }
 
     private FlightSqlConnection GetConnection(Uri address)
@@ -373,4 +436,9 @@ public sealed class DotRocksFlightSqlDataSource : IDisposable, IAsyncDisposable
     }
 
     private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_disposed != 0, this);
+
+    private readonly record struct EndpointStream(
+        FlightRecordBatchStreamingCall Call,
+        bool HasBatch
+    );
 }

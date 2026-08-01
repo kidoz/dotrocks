@@ -77,6 +77,9 @@ version is derived from the release tag at publish time.
   re-materializes the whole value for every chunk; the materialized value is cached for the
   current row and column, so allocation is proportional to the value rather than to value size
   times chunk count.
+- A Flight endpoint that advertises several locations no longer fails when the first one is
+  untrusted or unreachable: the trusted alternatives are tried in the order the server supplied
+  them.
 
 ### Added
 - `DotRocksFlightSqlDataSource.CreateConnection` hands out ADO.NET connections that share the
