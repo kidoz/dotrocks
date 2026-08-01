@@ -4,6 +4,7 @@ using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using Apache.Arrow;
+using DotRocks.Data;
 
 namespace DotRocks.FlightSql;
 
@@ -194,6 +195,10 @@ public sealed class DotRocksFlightSqlDataReader : DbDataReader
         };
 
     /// <inheritdoc />
+    /// <exception cref="DotRocksPrecisionLossException">
+    /// The StarRocks value has more precision than <see cref="decimal" /> can represent. Read it as
+    /// <see cref="DotRocksDecimal" /> instead.
+    /// </exception>
     public override decimal GetDecimal(int ordinal) => GetFieldValue<decimal>(ordinal);
 
     /// <inheritdoc />
@@ -253,6 +258,18 @@ public sealed class DotRocksFlightSqlDataReader : DbDataReader
         if (typeof(T) == typeof(Guid) && value is byte[] bytes)
         {
             return (T)(object)new Guid(bytes);
+        }
+
+        // StarRocks decimals wider than System.Decimal materialize as DotRocksDecimal, which is not
+        // convertible through IConvertible.
+        if (typeof(T) == typeof(decimal) && value is DotRocksDecimal wide)
+        {
+            return (T)(object)wide.ToDecimal();
+        }
+
+        if (typeof(T) == typeof(DotRocksDecimal) && value is decimal narrow)
+        {
+            return (T)(object)(DotRocksDecimal)narrow;
         }
 
         return (T)Convert.ChangeType(value, typeof(T), CultureInfo.InvariantCulture);

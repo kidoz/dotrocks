@@ -123,6 +123,11 @@ transaction asynchronously before closing the logical connection.
 A Flight transaction is marked completed only once the server confirms it, so a `CommitAsync` or
 `RollbackAsync` that fails leaves the transaction active and lets the caller retry or roll back.
 
+StarRocks decimal columns declared with more precision than `System.Decimal` can represent (up to
+`DECIMAL(38, s)`) are reported and materialized as `DotRocks.Data.DotRocksDecimal`. `GetDecimal`
+still converts such a value when it fits, and throws `DotRocksPrecisionLossException` when it does
+not.
+
 Named `@parameter` values are validated and escaped with the same binder used by `DotRocks.Data`.
 They are sent as SQL literals because the current transport does not expose server-prepared bind
 batches. Output parameters and positional `?` placeholders are not supported.

@@ -8,6 +8,8 @@ namespace DotRocks.FlightSql;
 
 internal static class ArrowValueConverter
 {
+    private const int MaxSystemDecimalPrecision = 28;
+
     public static object GetValue(IArrowArray array, int index)
     {
         if (array.IsNull(index))
@@ -36,10 +38,10 @@ internal static class ArrowValueConverter
             BinaryArray value => value.GetBytes(index).ToArray(),
             LargeBinaryArray value => value.GetBytes(index).ToArray(),
             BinaryViewArray value => value.GetBytes(index).ToArray(),
-            Decimal32Array value => ParseDecimal(value.GetString(index)),
-            Decimal64Array value => ParseDecimal(value.GetString(index)),
-            Decimal128Array value => ParseDecimal(value.GetString(index)),
-            Decimal256Array value => ParseDecimal(value.GetString(index)!),
+            Decimal32Array value => ParseDecimal(value.GetString(index), value.Data.DataType),
+            Decimal64Array value => ParseDecimal(value.GetString(index), value.Data.DataType),
+            Decimal128Array value => ParseDecimal(value.GetString(index), value.Data.DataType),
+            Decimal256Array value => ParseDecimal(value.GetString(index)!, value.Data.DataType),
             FixedSizeBinaryArray value => value.GetBytes(index).ToArray(),
             Date32Array value => value.GetDateOnly(index)!.Value,
             Date64Array value => value.GetDateTime(index)!.Value,
@@ -105,14 +107,42 @@ internal static class ArrowValueConverter
                 ArrowTypeId.Decimal32
                 or ArrowTypeId.Decimal64
                 or ArrowTypeId.Decimal128
-                or ArrowTypeId.Decimal256 => typeof(decimal),
+                or ArrowTypeId.Decimal256 => FitsInSystemDecimal(dataType)
+                    ? typeof(decimal)
+                    : typeof(DotRocksDecimal),
                 _ => typeof(object),
             };
 
-    private static object ParseDecimal(string text) =>
-        decimal.TryParse(text, NumberStyles.Number, CultureInfo.InvariantCulture, out decimal value)
-            ? value
+    /// <summary>
+    /// Converts an Arrow decimal using the declared precision, so the materialized type always
+    /// matches the type reported by <see cref="GetFieldType" />.
+    /// </summary>
+    private static object ParseDecimal(string text, IArrowType dataType) =>
+        FitsInSystemDecimal(dataType)
+            // The cast is required: DotRocksDecimal defines an implicit conversion from decimal,
+            // so an unqualified conditional would widen the narrow branch to DotRocksDecimal.
+            ? (object)decimal.Parse(text, NumberStyles.Number, CultureInfo.InvariantCulture)
             : DotRocksDecimal.Parse(text);
+
+    /// <summary>
+    /// Reports whether every value of a decimal type is representable as <see cref="decimal" />.
+    /// </summary>
+    /// <remarks>
+    /// The largest <see cref="decimal" /> is a 29-digit value, so only 28 digits of declared
+    /// precision are guaranteed to fit.
+    /// </remarks>
+    private static bool FitsInSystemDecimal(IArrowType dataType) =>
+        GetDecimalPrecision(dataType) <= MaxSystemDecimalPrecision;
+
+    private static int GetDecimalPrecision(IArrowType dataType) =>
+        dataType switch
+        {
+            Decimal32Type value => value.Precision,
+            Decimal64Type value => value.Precision,
+            Decimal128Type value => value.Precision,
+            Decimal256Type value => value.Precision,
+            _ => 0,
+        };
 
     private static object?[] GetList(IArrowArray values, int offset, int length)
     {

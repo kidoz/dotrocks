@@ -60,6 +60,10 @@ version is derived from the release tag at publish time.
   an open server transaction that the client can neither retry nor roll back. A failed rollback
   during disposal now also releases the connection, which previously stayed bound to a
   transaction that could no longer be completed.
+- Flight SQL decimals report the type they actually materialize. Columns declared with more
+  precision than `System.Decimal` can hold (`DECIMAL(38, s)` is routine in StarRocks) are typed
+  as `DotRocksDecimal`, and `GetDecimal`/`GetFieldValue<decimal>` convert such values when they
+  are representable instead of failing with an `InvalidCastException` from `Convert.ChangeType`.
 
 ### Added
 - `DotRocksFlightSqlDataSource.CreateConnection` hands out ADO.NET connections that share the

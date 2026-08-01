@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using Apache.Arrow;
 using Apache.Arrow.Types;
+using DotRocks.Data;
 using DotRocks.FlightSql;
 using Xunit;
 
@@ -140,6 +141,68 @@ public sealed class DotRocksFlightSqlDataReaderTests
         await Assert
             .ThrowsAnyAsync<OperationCanceledException>(() => pendingRead)
             .ConfigureAwait(true);
+    }
+
+    [Fact]
+    public async Task ReadAsync_ReportsDecimalsWithTheTypeItMaterializes()
+    {
+        var narrowType = new Decimal128Type(18, 4);
+        var wideType = new Decimal128Type(38, 0);
+        var schema = new Schema(
+            [new Field("narrow", narrowType, false), new Field("wide", wideType, false)],
+            null
+        );
+        using var narrow = new Decimal128Array.Builder(narrowType).Append(12.3456m).Build();
+        using var wide = new Decimal128Array.Builder(wideType)
+            .Append("12345678901234567890123456789012345678")
+            .Build();
+        using var batch = new RecordBatch(schema, [narrow, wide], 1);
+        var result = new DotRocksFlightSqlResult(schema, 1, -1, true, _ => SingleBatch(batch));
+        await using var reader = new DotRocksFlightSqlDataReader(result);
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        Assert.True(await reader.ReadAsync(cancellationToken).ConfigureAwait(true));
+
+        Assert.Equal(typeof(decimal), reader.GetFieldType(0));
+        Assert.IsType<decimal>(reader.GetValue(0));
+        Assert.Equal(12.3456m, reader.GetValue(0));
+        Assert.Equal(12.3456m, reader.GetDecimal(0));
+
+        // Precision that System.Decimal cannot hold must be reported as DotRocksDecimal so the
+        // declared field type matches the materialized value.
+        Assert.Equal(typeof(DotRocksDecimal), reader.GetFieldType(1));
+        var value = Assert.IsType<DotRocksDecimal>(reader.GetValue(1));
+        Assert.Equal("12345678901234567890123456789012345678", value.ToString());
+        Assert.Equal(
+            value,
+            await reader
+                .GetFieldValueAsync<DotRocksDecimal>(1, cancellationToken)
+                .ConfigureAwait(true)
+        );
+        Assert.Throws<DotRocksPrecisionLossException>(() => reader.GetDecimal(1));
+    }
+
+    [Fact]
+    public async Task GetDecimal_ConvertsWideColumnsThatHoldRepresentableValues()
+    {
+        var wideType = new Decimal128Type(38, 2);
+        var schema = new Schema([new Field("amount", wideType, false)], null);
+        using var amounts = new Decimal128Array.Builder(wideType).Append("1234.56").Build();
+        using var batch = new RecordBatch(schema, [amounts], 1);
+        var result = new DotRocksFlightSqlResult(schema, 1, -1, true, _ => SingleBatch(batch));
+        await using var reader = new DotRocksFlightSqlDataReader(result);
+
+        Assert.True(
+            await reader.ReadAsync(TestContext.Current.CancellationToken).ConfigureAwait(true)
+        );
+
+        Assert.Equal(1234.56m, reader.GetDecimal(0));
+        Assert.Equal(
+            1234.56m,
+            await reader
+                .GetFieldValueAsync<decimal>(0, TestContext.Current.CancellationToken)
+                .ConfigureAwait(true)
+        );
     }
 
     private static async IAsyncEnumerable<RecordBatch> SingleBatch(RecordBatch batch)
