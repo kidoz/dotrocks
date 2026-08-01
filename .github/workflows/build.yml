@@ -56,3 +56,35 @@ jobs:
           dotnet test tests/DotRocks.Analyzers.Tests --configuration Release --no-build
           dotnet test tests/DotRocks.Benchmarks.Tests --configuration Release --no-build
           dotnet test tests/DotRocks.PackageTests --configuration Release --no-build
+
+  # The budget-gated benchmarks are server-free but take minutes, so they run beside the build
+  # job rather than extending it. Without this the catalog in PerformanceBudget.cs is only ever
+  # enforced when a developer remembers to run `just bench`, so a read-path allocation or
+  # latency regression could land unnoticed.
+  benchmarks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+      DOTNET_CLI_DO_NOT_USE_MSBUILD_SERVER: 1
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        with:
+          global-json-file: global.json
+
+      - name: Restore packages
+        run: dotnet restore DotRocks.slnx --locked-mode
+
+      # Exit code 1 means a benchmark exceeded its configured mean or allocation budget, that a
+      # budgeted benchmark has no catalog entry, or that nothing was measured.
+      - name: Run budgeted benchmarks
+        run: >
+          dotnet run --project benchmarks/DotRocks.Benchmarks --configuration Release
+          -- --anyCategories Local

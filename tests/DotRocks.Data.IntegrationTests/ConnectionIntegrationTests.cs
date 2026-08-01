@@ -1595,6 +1595,7 @@ public sealed class ConnectionIntegrationTests
             $"Opening the reader allocated {allocatedForOpen.ToString(CultureInfo.InvariantCulture)} byte(s), which indicates result buffering."
         );
 
+        long allocatedBeforeDrain = GC.GetTotalAllocatedBytes(precise: true);
         int rowsRead = 0;
         while (await reader.ReadAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
         {
@@ -1603,6 +1604,32 @@ public sealed class ConnectionIntegrationTests
         }
 
         Assert.Equal(rowCount, rowsRead);
+
+        // Opening the reader lazily proves nothing on its own — a reader that buffered on the
+        // first Read would still pass the check above. Bound the whole drain too: streaming
+        // costs O(row) per row and retains nothing, so the total stays far below what
+        // materializing 100k rows into a list would take.
+        long allocatedForDrain = GC.GetTotalAllocatedBytes(precise: true) - allocatedBeforeDrain;
+        long allocatedPerRow = allocatedForDrain / rowCount;
+        Assert.True(
+            allocatedPerRow < 512,
+            $"Draining allocated {allocatedPerRow.ToString(CultureInfo.InvariantCulture)} byte(s) per row "
+                + $"({allocatedForDrain.ToString(CultureInfo.InvariantCulture)} total), which indicates the "
+                + "result set is being retained rather than streamed."
+        );
+
+        // Retention, not just allocation rate: a reader that accumulated rows would hold roughly
+        // 100k live objects here, so the managed heap after a collection would grow with the
+        // result set instead of staying flat.
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        long retained = GC.GetTotalMemory(forceFullCollection: false);
+        Assert.True(
+            retained < allocatedForDrain,
+            $"The reader retained {retained.ToString(CultureInfo.InvariantCulture)} byte(s) after draining "
+                + $"{rowCount.ToString(CultureInfo.InvariantCulture)} rows, which indicates buffering."
+        );
     }
 
     [Fact]

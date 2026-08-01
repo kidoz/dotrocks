@@ -8,7 +8,14 @@ version is derived from the release tag at publish time.
 
 ## [Unreleased]
 
-## [1.4.1] - 2026-08-01
+### Added
+- The read path's per-row cost is now guarded by the performance budget. A server-free
+  `MaterializeRows` benchmark drives rows through the typed `DotRocksDataReader` accessors
+  (measured at ~478 bytes per row for a three-column row) with a tight allocation ceiling, and
+  the budgeted benchmark suite runs in CI, so a regression in per-row buffering or boxing fails
+  the build instead of going unnoticed. The live large-result test now also bounds allocation
+  per row across the whole 100k-row drain and asserts the reader retains nothing afterwards,
+  rather than only checking that opening the reader does not buffer.
 
 ### Fixed
 - `CommandTimeout` and `DbCommand.Cancel()` now apply while a `DbDataReader` iterates rows.

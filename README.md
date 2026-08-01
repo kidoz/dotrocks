@@ -548,7 +548,10 @@ just bench            # or: dotnet run --project benchmarks/DotRocks.Benchmarks 
 
 Benchmark results fail the process if a measured benchmark exceeds its configured mean
 time or allocation budget, if a new budgeted benchmark is added without a budget entry, or if
-no measurements were validated at all (for example a typoed filter or a Dry-only run).
+no measurements were validated at all (for example a typoed filter or a Dry-only run). This
+budgeted suite runs in CI, so a regression fails the build — including `MaterializeRows`,
+which drives rows through the typed reader accessors and bounds the read path's per-row
+allocation.
 
 Server-backed stress benchmarks (warm-pool open, lease latency and contention, cancellation
 discard, large-result streaming, EF Core materialization, and Stream Load throughput) need a live
