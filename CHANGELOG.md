@@ -64,6 +64,10 @@ version is derived from the release tag at publish time.
   precision than `System.Decimal` can hold (`DECIMAL(38, s)` is routine in StarRocks) are typed
   as `DotRocksDecimal`, and `GetDecimal`/`GetFieldValue<decimal>` convert such values when they
   are representable instead of failing with an `InvalidCastException` from `Convert.ChangeType`.
+- Cancelling a Flight SQL command raises `OperationCanceledException` rather than a raw
+  `RpcException`, so consumers can tell cancellation from a transport failure. `Cancel()` no
+  longer races with the end of execution, and no longer misses a cancellation issued in the
+  instant after execution starts.
 - `DbDataReader.HasRows` reports the real result. StarRocks does not declare a record count, and
   the reader previously answered `true` for every such result, including empty ones; a command
   now fetches the first batch before returning the reader.

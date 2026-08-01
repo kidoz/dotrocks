@@ -151,7 +151,16 @@ public sealed class DotRocksFlightSqlCommand : DbCommand
             fallbackCommand = _activeFallbackCommand;
         }
 
-        cancellation?.Cancel();
+        try
+        {
+            cancellation?.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // The execution completed between reading the source and cancelling it, which makes
+            // cancellation a no-op rather than an error.
+        }
+
         fallbackCommand?.Cancel();
     }
 
@@ -428,21 +437,26 @@ public sealed class DotRocksFlightSqlCommand : DbCommand
 
     private ExecutionScope BeginExecution(CancellationToken cancellationToken)
     {
+        CancellationTokenSource source = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken
+        );
+
+        // The source is published together with the executing flag so that Cancel() cannot observe
+        // an execution that has started but has no cancellation source yet.
         lock (_executionSync)
         {
             if (_executing)
             {
+                source.Dispose();
                 throw new InvalidOperationException(
                     "Concurrent execution of the same Flight SQL command is not supported."
                 );
             }
 
             _executing = true;
+            _activeCancellation = source;
         }
 
-        CancellationTokenSource source = CancellationTokenSource.CreateLinkedTokenSource(
-            cancellationToken
-        );
         TimeSpan? commandTimeout;
         if (CommandTimeout == 0)
         {
@@ -452,11 +466,6 @@ public sealed class DotRocksFlightSqlCommand : DbCommand
         {
             commandTimeout = TimeSpan.FromSeconds(CommandTimeout);
             source.CancelAfter(commandTimeout.Value);
-        }
-
-        lock (_executionSync)
-        {
-            _activeCancellation = source;
         }
 
         return new ExecutionScope(this, source, commandTimeout);

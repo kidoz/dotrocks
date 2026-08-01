@@ -120,8 +120,9 @@ real result even though StarRocks does not declare a record count.
 
 `CommandTimeout`, the token passed to `ExecuteReaderAsync`, and `Cancel()` remain active through
 result streaming until the reader is exhausted or disposed. A token passed to any later
-`ReadAsync` call can cancel the remaining stream. `CloseAsync` rolls back an active Flight
-transaction asynchronously before closing the logical connection.
+`ReadAsync` call can cancel the remaining stream. Cancellation surfaces as
+`OperationCanceledException`, not as a gRPC `RpcException`. `CloseAsync` rolls back an active
+Flight transaction asynchronously before closing the logical connection.
 
 A Flight transaction is marked completed only once the server confirms it, so a `CommitAsync` or
 `RollbackAsync` that fails leaves the transaction active and lets the caller retry or roll back.
