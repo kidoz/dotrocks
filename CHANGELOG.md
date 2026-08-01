@@ -88,6 +88,13 @@ version is derived from the release tag at publish time.
   is the preferred way to dispose it because releasing server sessions is a network operation.
 - `DotRocksFlightSqlTransaction.IsCompleted` reports whether the server confirmed completion.
 
+### Changed
+- The Flight SQL benchmarks establish their connections once in setup rather than per iteration,
+  and the direct record-batch benchmark now projects and consumes the same columns as the row
+  benchmarks, so the comparison measures row materialization rather than a smaller projection
+  plus per-iteration connection setup. `just integration-test` no longer runs the Flight SQL
+  suite twice.
+
 ## [1.4.1] - 2026-08-01
 
 ### Fixed

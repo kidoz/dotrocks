@@ -24,8 +24,12 @@ public class FlightSqlTransportBenchmarks
 {
     private const int RowCount = 10_000;
     private const int InsertChunk = 2_000;
+    private const string RowQuery =
+        $"SELECT id, value FROM `{BenchmarkServer.Database}`.`flight_rows`";
     private string _connectionString = string.Empty;
-    private DotRocksFlightSqlOptions _flightOptions = null!;
+    private DotRocksFlightSqlDataSource _flightDataSource = null!;
+    private DotRocksFlightSqlDbConnection _flightConnection = null!;
+    private DotRocksConnection _mysqlConnection = null!;
 
     [GlobalSetup]
     public void Setup()
@@ -65,7 +69,7 @@ public class FlightSqlTransportBenchmarks
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(value => new Uri(value, UriKind.Absolute))
             .ToArray();
-        _flightOptions = new DotRocksFlightSqlOptions(
+        var flightOptions = new DotRocksFlightSqlOptions(
             new Uri(endpoint),
             Environment.GetEnvironmentVariable("DOTROCKS_BENCH_USER") ?? "root",
             Environment.GetEnvironmentVariable("DOTROCKS_BENCH_PASSWORD") ?? string.Empty
@@ -75,14 +79,20 @@ public class FlightSqlTransportBenchmarks
             AllowedEndpointAddresses = allowedEndpoints,
             CommandTimeout = TimeSpan.FromMinutes(2),
         };
+
+        // Connections are established once so that every iteration measures transport throughput
+        // instead of connection and session setup.
+        _flightDataSource = new DotRocksFlightSqlDataSource(flightOptions);
+        _flightConnection = _flightDataSource.CreateConnection();
+        _flightConnection.Open();
+        _mysqlConnection = new DotRocksConnection(_connectionString);
+        _mysqlConnection.Open();
     }
 
     [Benchmark(Baseline = true)]
     public async Task<long> MySqlProtocolRows()
     {
-        await using var connection = new DotRocksConnection(_connectionString);
-        await connection.OpenAsync();
-        await using DbCommand command = connection.CreateCommand();
+        await using DbCommand command = _mysqlConnection.CreateCommand();
         command.CommandText = "SELECT id, value FROM flight_rows";
         await using DbDataReader reader = await command.ExecuteReaderAsync();
 
@@ -99,10 +109,8 @@ public class FlightSqlTransportBenchmarks
     [Benchmark]
     public async Task<long> FlightSqlRows()
     {
-        await using var connection = new DotRocksFlightSqlDbConnection(_flightOptions);
-        await connection.OpenAsync();
-        await using DotRocksFlightSqlCommand command = connection.CreateCommand();
-        command.CommandText = $"SELECT id, value FROM `{BenchmarkServer.Database}`.`flight_rows`";
+        await using DotRocksFlightSqlCommand command = _flightConnection.CreateCommand();
+        command.CommandText = RowQuery;
         await using DbDataReader reader = await command.ExecuteReaderAsync();
 
         long checksum = 0;
@@ -115,26 +123,37 @@ public class FlightSqlTransportBenchmarks
         return checksum;
     }
 
+    /// <summary>
+    /// Consumes the same columns as the row benchmarks, so the difference measures only row
+    /// materialization rather than a smaller projection.
+    /// </summary>
     [Benchmark]
     public async Task<long> FlightSqlRecordBatches()
     {
-        using var dataSource = new DotRocksFlightSqlDataSource(_flightOptions);
-        DotRocksFlightSqlResult result = await dataSource.ExecuteQueryAsync(
-            $"SELECT id FROM `{BenchmarkServer.Database}`.`flight_rows`"
-        );
+        DotRocksFlightSqlResult result = await _flightDataSource.ExecuteQueryAsync(RowQuery);
         long checksum = 0;
         await foreach (RecordBatch batch in result.ReadRecordBatchesAsync())
         {
             using (batch)
             {
                 var ids = (Int64Array)batch.Column(0);
+                var values = (StringArray)batch.Column(1);
                 for (int index = 0; index < ids.Length; index++)
                 {
                     checksum += ids.GetValue(index)!.Value;
+                    _ = values.GetString(index);
                 }
             }
         }
 
         return checksum;
+    }
+
+    [GlobalCleanup]
+    public void Cleanup()
+    {
+        _flightConnection.Dispose();
+        _flightDataSource.Dispose();
+        _mysqlConnection.Dispose();
     }
 }
