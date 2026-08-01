@@ -127,6 +127,7 @@ public sealed class DotRocks.FlightSql.DotRocksFlightSqlResult
   public method System.Collections.Generic.IAsyncEnumerable<Apache.Arrow.RecordBatch> ReadRecordBatchesAsync(System.Threading.CancellationToken cancellationToken)
 
 public sealed class DotRocks.FlightSql.DotRocksFlightSqlTransaction System.IAsyncDisposable
+  public property System.Boolean IsCompleted { get; }
   public method System.Threading.Tasks.Task CommitAsync(System.Threading.CancellationToken cancellationToken)
   public method System.Threading.Tasks.Task RollbackAsync(System.Threading.CancellationToken cancellationToken)
   public method System.Threading.Tasks.Task<DotRocks.FlightSql.DotRocksFlightSqlResult> ExecuteQueryAsync(System.String sql, System.Threading.CancellationToken cancellationToken)

@@ -42,6 +42,7 @@ DotRocks.FlightSql.DotRocksFlightSqlTransaction.CommitAsync(System.Threading.Can
 DotRocks.FlightSql.DotRocksFlightSqlTransaction.DisposeAsync() -> System.Threading.Tasks.ValueTask
 DotRocks.FlightSql.DotRocksFlightSqlTransaction.ExecuteQueryAsync(string! sql, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<DotRocks.FlightSql.DotRocksFlightSqlResult!>!
 DotRocks.FlightSql.DotRocksFlightSqlTransaction.ExecuteUpdateAsync(string! sql, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<long>!
+DotRocks.FlightSql.DotRocksFlightSqlTransaction.IsCompleted.get -> bool
 DotRocks.FlightSql.DotRocksFlightSqlTransaction.RollbackAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
 override DotRocks.FlightSql.DotRocksFlightSqlCommand.Cancel() -> void
 override DotRocks.FlightSql.DotRocksFlightSqlCommand.CommandText.get -> string!

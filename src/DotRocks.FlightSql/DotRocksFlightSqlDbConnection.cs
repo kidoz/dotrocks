@@ -159,7 +159,8 @@ public sealed class DotRocksFlightSqlDbConnection : DbConnection
             if (_activeTransaction is not null)
             {
                 _activeTransaction
-                    .RollbackAsync(CancellationToken.None)
+                    .DisposeAsync()
+                    .AsTask()
                     .ConfigureAwait(false)
                     .GetAwaiter()
                     .GetResult();
@@ -184,9 +185,7 @@ public sealed class DotRocksFlightSqlDbConnection : DbConnection
         {
             if (_activeTransaction is not null)
             {
-                await _activeTransaction
-                    .RollbackAsync(CancellationToken.None)
-                    .ConfigureAwait(false);
+                await _activeTransaction.DisposeAsync().ConfigureAwait(false);
             }
         }
         finally

@@ -55,12 +55,18 @@ version is derived from the release tag at publish time.
   disposal releases the session with the Flight SQL `CloseSession` action. Measured against
   StarRocks 4.0.7: five queries created eleven sessions before the fix and none after it.
   Servers that do not implement the handshake keep the previous per-call behavior.
+- A Flight SQL transaction is marked completed only after the server confirms completion, so a
+  failed `CommitAsync` or `RollbackAsync` leaves it active and recoverable instead of stranding
+  an open server transaction that the client can neither retry nor roll back. A failed rollback
+  during disposal now also releases the connection, which previously stayed bound to a
+  transaction that could no longer be completed.
 
 ### Added
 - `DotRocksFlightSqlDataSource.CreateConnection` hands out ADO.NET connections that share the
   data source's channels and authenticated sessions, so short-lived connections no longer each
   build a private channel and session. The data source also implements `IAsyncDisposable`, which
   is the preferred way to dispose it because releasing server sessions is a network operation.
+- `DotRocksFlightSqlTransaction.IsCompleted` reports whether the server confirmed completion.
 
 ## [1.4.1] - 2026-08-01
 

@@ -380,6 +380,94 @@ public sealed class FlightSqlTransportTests
     }
 
     [Fact]
+    public async Task Transaction_StaysActiveWhenTheServerRejectsCompletion()
+    {
+        using IHost host = CreateHost();
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        await host.StartAsync(cancellationToken).ConfigureAwait(true);
+
+        try
+        {
+            var options = new DotRocksFlightSqlOptions(GetServerAddress(host), "root", "secret")
+            {
+                AllowInsecureTransport = true,
+            };
+            using var dataSource = new DotRocksFlightSqlDataSource(options);
+            await using DotRocksFlightSqlTransaction transaction = await dataSource
+                .BeginTransactionAsync(cancellationToken)
+                .ConfigureAwait(true);
+            QueryCapture capture = GetQueryCapture(host);
+            capture.FailEndTransaction = true;
+
+            await Assert
+                .ThrowsAsync<RpcException>(() => transaction.CommitAsync(cancellationToken))
+                .ConfigureAwait(true);
+
+            // A commit the server never confirmed must leave the transaction recoverable.
+            Assert.False(transaction.IsCompleted);
+            capture.FailEndTransaction = false;
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(true);
+            Assert.True(transaction.IsCompleted);
+        }
+        finally
+        {
+            await host.StopAsync(cancellationToken).ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
+    public async Task DbTransaction_FailedCompletionLeavesTheConnectionUsable()
+    {
+        using IHost host = CreateHost();
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        await host.StartAsync(cancellationToken).ConfigureAwait(true);
+
+        try
+        {
+            var options = new DotRocksFlightSqlOptions(GetServerAddress(host), "root", "secret")
+            {
+                AllowInsecureTransport = true,
+            };
+            await using var connection = new DotRocksFlightSqlDbConnection(options);
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(true);
+            QueryCapture capture = GetQueryCapture(host);
+
+            DbTransaction failedCommit = await connection
+                .BeginTransactionAsync(cancellationToken)
+                .ConfigureAwait(true);
+            capture.FailEndTransaction = true;
+            await Assert
+                .ThrowsAsync<RpcException>(() => failedCommit.CommitAsync(cancellationToken))
+                .ConfigureAwait(true);
+            capture.FailEndTransaction = false;
+            await failedCommit.CommitAsync(cancellationToken).ConfigureAwait(true);
+            await failedCommit.DisposeAsync().ConfigureAwait(true);
+
+            DbTransaction failedRollback = await connection
+                .BeginTransactionAsync(cancellationToken)
+                .ConfigureAwait(true);
+            capture.FailEndTransaction = true;
+            await Assert
+                .ThrowsAsync<RpcException>(async () =>
+                    await failedRollback.DisposeAsync().ConfigureAwait(true)
+                )
+                .ConfigureAwait(true);
+            capture.FailEndTransaction = false;
+
+            // A rollback the server rejected must not leave the connection owning a dead handle.
+            await using DbTransaction recovered = await connection
+                .BeginTransactionAsync(cancellationToken)
+                .ConfigureAwait(true);
+            Assert.NotNull(recovered);
+            await recovered.RollbackAsync(cancellationToken).ConfigureAwait(true);
+        }
+        finally
+        {
+            await host.StopAsync(cancellationToken).ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
     public async Task ConnectionCloseAsync_RollsBackActiveTransactionAsynchronously()
     {
         using IHost host = CreateHost();
@@ -608,6 +696,12 @@ public sealed class FlightSqlTransportTests
                     .Parser.ParseFrom(request.Body)
                     .Unpack<ActionEndTransactionRequest>();
                 _capture.LastEndTransactionAction = (int)end.Action;
+                if (_capture.FailEndTransaction)
+                {
+                    throw new RpcException(
+                        new Status(StatusCode.Internal, "End transaction failed.")
+                    );
+                }
             }
             else if (request.Type == "CloseSession")
             {
@@ -677,6 +771,8 @@ public sealed class FlightSqlTransportTests
         public string LastAction { get; set; } = string.Empty;
 
         public int LastEndTransactionAction { get; set; }
+
+        public bool FailEndTransaction { get; set; }
     }
 
     private sealed class FlightContext(DbContextOptions<FlightContext> options) : DbContext(options)

@@ -120,6 +120,9 @@ result streaming until the reader is exhausted or disposed. A token passed to an
 `ReadAsync` call can cancel the remaining stream. `CloseAsync` rolls back an active Flight
 transaction asynchronously before closing the logical connection.
 
+A Flight transaction is marked completed only once the server confirms it, so a `CommitAsync` or
+`RollbackAsync` that fails leaves the transaction active and lets the caller retry or roll back.
+
 Named `@parameter` values are validated and escaped with the same binder used by `DotRocks.Data`.
 They are sent as SQL literals because the current transport does not expose server-prepared bind
 batches. Output parameters and positional `?` placeholders are not supported.

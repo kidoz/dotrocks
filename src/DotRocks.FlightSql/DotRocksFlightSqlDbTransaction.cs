@@ -6,6 +6,10 @@ namespace DotRocks.FlightSql;
 /// <summary>
 /// Represents an ADO.NET transaction executed through Arrow Flight SQL.
 /// </summary>
+/// <remarks>
+/// Completion is recorded only after the server confirms it. A failed <see cref="CommitAsync" />
+/// therefore leaves the transaction usable so that the caller can retry or roll back.
+/// </remarks>
 public sealed class DotRocksFlightSqlDbTransaction : DbTransaction
 {
     private readonly DotRocksFlightSqlDbConnection _connection;
@@ -50,14 +54,8 @@ public sealed class DotRocksFlightSqlDbTransaction : DbTransaction
     public override async Task CommitAsync(CancellationToken cancellationToken = default)
     {
         EnsureActive();
-        try
-        {
-            await _transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-        }
-        finally
-        {
-            MarkCompleted();
-        }
+        await _transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        MarkCompleted();
     }
 
     /// <inheritdoc />
@@ -70,14 +68,8 @@ public sealed class DotRocksFlightSqlDbTransaction : DbTransaction
     public override async Task RollbackAsync(CancellationToken cancellationToken = default)
     {
         EnsureActive();
-        try
-        {
-            await _transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
-        }
-        finally
-        {
-            MarkCompleted();
-        }
+        await _transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+        MarkCompleted();
     }
 
     /// <inheritdoc />
@@ -98,8 +90,16 @@ public sealed class DotRocksFlightSqlDbTransaction : DbTransaction
     {
         if (Interlocked.Exchange(ref _completed, 1) == 0)
         {
-            await _transaction.DisposeAsync().ConfigureAwait(false);
-            _connection.ClearActiveTransaction(this);
+            try
+            {
+                await _transaction.DisposeAsync().ConfigureAwait(false);
+            }
+            finally
+            {
+                // The connection must be released even when the rollback fails, otherwise it keeps
+                // pointing at a transaction that can no longer be completed.
+                _connection.ClearActiveTransaction(this);
+            }
         }
 
         await base.DisposeAsync().ConfigureAwait(false);
