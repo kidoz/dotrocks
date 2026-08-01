@@ -21,4 +21,11 @@ internal sealed class MalformedPacketException : Exception
 
     public MalformedPacketException(string message, Exception innerException)
         : base(message, innerException) { }
+
+    /// <summary>
+    /// True when the payload was well-formed but larger than the client's configured limit,
+    /// rather than corrupt. The two failures need different messages: an oversized result is a
+    /// client limit the caller can act on, not evidence that StarRocks sent malformed bytes.
+    /// </summary>
+    public bool IsPayloadTooLarge { get; init; }
 }

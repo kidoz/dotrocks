@@ -368,7 +368,7 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
         catch (MalformedPacketException ex)
         {
             MarkBroken();
-            throw new DotRocksException("StarRocks returned malformed protocol bytes.", ex);
+            throw new DotRocksException(DescribeMalformedPacket(ex), ex);
         }
         catch (IOException ex)
         {
@@ -421,7 +421,7 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
         catch (MalformedPacketException ex)
         {
             MarkBroken();
-            throw new DotRocksException("StarRocks returned malformed protocol bytes.", ex);
+            throw new DotRocksException(DescribeMalformedPacket(ex), ex);
         }
         catch (IOException ex)
         {
@@ -792,6 +792,15 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
     }
 
     public void MarkBroken() => _isBroken = true;
+
+    // An oversized payload is a client-side limit, not corrupt wire bytes. Reporting both as
+    // "malformed protocol bytes" sends the caller looking for a protocol bug when the actual
+    // cause is a result value larger than the reader is configured to accept.
+    private static string DescribeMalformedPacket(MalformedPacketException exception) =>
+        exception.IsPayloadTooLarge
+            ? "A StarRocks result exceeded the client's maximum logical packet size. "
+                + "Select fewer or smaller columns, or narrow the query."
+            : "StarRocks returned malformed protocol bytes.";
 
     // Discard connections after USE / SET because per-lease session reset is not verified.
     private void MarkSessionDirtyIfMutating(string commandText)

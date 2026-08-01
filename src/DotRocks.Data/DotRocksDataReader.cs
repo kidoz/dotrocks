@@ -12,6 +12,22 @@ namespace DotRocks.Data;
 /// <summary>
 /// Reads rows returned by a DotRocks command.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Rows stream one at a time: memory use is bounded by the widest single row, not by the size
+/// of the result set, so a large scan does not have to fit in memory. Row iteration is bounded
+/// by the command's <c>CommandTimeout</c>, which is re-armed for each row fetch, and by
+/// <c>DbCommand.Cancel()</c>.
+/// </para>
+/// <para>
+/// <c>CommandBehavior.SequentialAccess</c> is accepted but imposes no restrictions and yields no
+/// additional memory benefit, because a row is decoded as a unit before any accessor runs. That
+/// also means <see cref="GetStream"/>, <see cref="GetTextReader"/>, <see cref="GetBytes"/>, and
+/// <see cref="GetChars"/> read from an already-materialized value; columns may be read in any
+/// order and more than once. Per-field streaming for values larger than one packet is not
+/// implemented.
+/// </para>
+/// </remarks>
 public sealed class DotRocksDataReader
     : DbDataReader,
         IEnumerable<IDataRecord>,
@@ -158,6 +174,43 @@ public sealed class DotRocksDataReader
         Array.Copy(bytes, sourceOffset, buffer, bufferOffset, count);
         return count;
     }
+
+    /// <summary>
+    /// Returns the column's bytes as a stream.
+    /// </summary>
+    /// <remarks>
+    /// The stream reads from the already-materialized field: DotRocks decodes a whole row packet
+    /// at a time, so this is an API-compatibility convenience rather than a way to bound memory
+    /// for a large value. The reader's memory guarantee is per row, not per field. A NULL value
+    /// yields an empty stream, matching the ADO.NET convention.
+    /// </remarks>
+    /// <param name="ordinal">The zero-based column ordinal.</param>
+    /// <returns>A read-only stream over the column's bytes.</returns>
+    public override Stream GetStream(int ordinal)
+    {
+        object value = GetValue(ordinal);
+        if (value is DBNull)
+        {
+            return new MemoryStream([], writable: false);
+        }
+
+        byte[] bytes = value as byte[] ?? GetFieldValue<byte[]>(ordinal);
+        return new MemoryStream(bytes, writable: false);
+    }
+
+    /// <summary>
+    /// Returns the column's text as a reader.
+    /// </summary>
+    /// <remarks>
+    /// Like <see cref="GetStream"/>, this reads from the already-materialized field value. A NULL
+    /// value yields an empty reader.
+    /// </remarks>
+    /// <param name="ordinal">The zero-based column ordinal.</param>
+    /// <returns>A reader over the column's text.</returns>
+    public override TextReader GetTextReader(int ordinal) =>
+        GetValue(ordinal) is DBNull
+            ? new StringReader(string.Empty)
+            : new StringReader(GetString(ordinal));
 
     /// <inheritdoc />
     public override char GetChar(int ordinal) =>

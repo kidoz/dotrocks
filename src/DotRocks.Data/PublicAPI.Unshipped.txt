@@ -30,3 +30,5 @@ override DotRocks.Data.DotRocksDataReader.DisposeAsync() -> System.Threading.Tas
 override DotRocks.Data.DotRocksJson.Equals(object? obj) -> bool
 override DotRocks.Data.DotRocksJson.GetHashCode() -> int
 override DotRocks.Data.DotRocksJson.ToString() -> string!
+override DotRocks.Data.DotRocksDataReader.GetStream(int ordinal) -> System.IO.Stream!
+override DotRocks.Data.DotRocksDataReader.GetTextReader(int ordinal) -> System.IO.TextReader!

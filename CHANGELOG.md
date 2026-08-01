@@ -9,6 +9,12 @@ version is derived from the release tag at publish time.
 ## [Unreleased]
 
 ### Added
+- `DotRocksDataReader` implements `GetStream` and `GetTextReader`, so code written against the
+  standard ADO.NET large-value accessors works without falling back to the base implementations.
+  Both read from the already-materialized field value (a NULL yields an empty stream/reader);
+  the reader's memory guarantee remains per row, not per field, and that is now stated on the
+  type along with the fact that `CommandBehavior.SequentialAccess` is accepted but imposes no
+  restrictions and yields no additional memory benefit.
 - The read path's per-row cost is now guarded by the performance budget. A server-free
   `MaterializeRows` benchmark drives rows through the typed `DotRocksDataReader` accessors
   (measured at ~478 bytes per row for a three-column row) with a tight allocation ceiling, and
@@ -16,6 +22,13 @@ version is derived from the release tag at publish time.
   the build instead of going unnoticed. The live large-result test now also bounds allocation
   per row across the whole 100k-row drain and asserts the reader retains nothing afterwards,
   rather than only checking that opening the reader does not buffer.
+
+### Fixed
+- A result value larger than the reader's maximum logical packet size now reports that limit
+  instead of "StarRocks returned malformed protocol bytes", which sent callers looking for a
+  protocol bug when the real cause was an oversized field.
+
+## [1.4.1] - 2026-08-01
 
 ### Fixed
 - `CommandTimeout` and `DbCommand.Cancel()` now apply while a `DbDataReader` iterates rows.

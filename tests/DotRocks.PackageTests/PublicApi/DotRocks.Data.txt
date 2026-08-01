@@ -125,6 +125,8 @@ public sealed class DotRocks.Data.DotRocksDataReader System.Data.Common.DbDataRe
   public virtual method System.Decimal GetDecimal(System.Int32 ordinal)
   public virtual method System.Double GetDouble(System.Int32 ordinal)
   public virtual method System.Guid GetGuid(System.Int32 ordinal)
+  public virtual method System.IO.Stream GetStream(System.Int32 ordinal)
+  public virtual method System.IO.TextReader GetTextReader(System.Int32 ordinal)
   public virtual method System.Int16 GetInt16(System.Int32 ordinal)
   public virtual method System.Int32 GetInt32(System.Int32 ordinal)
   public virtual method System.Int32 GetOrdinal(System.String name)

@@ -171,6 +171,60 @@ public sealed class DotRocksDataReaderTests
     }
 
     [Fact]
+    public void GetStream_ReadsBinaryValuesAndEmptyForNull()
+    {
+        byte[] bytes = [0x00, 0xFF, 0x10, 0x20];
+        using var reader = new DotRocksDataReader(
+            QueryResult.FromRows(
+                [Column("bytes", (byte)ColumnType.Blob), Column("missing", (byte)ColumnType.Blob)],
+                [
+                    [bytes, null],
+                ]
+            )
+        );
+
+        Assert.True(reader.Read());
+
+        using (Stream stream = reader.GetStream(0))
+        {
+            Assert.False(stream.CanWrite);
+            using var copy = new MemoryStream();
+            stream.CopyTo(copy);
+            Assert.Equal(bytes, copy.ToArray());
+        }
+
+        // A NULL value yields an empty stream rather than throwing, per the ADO.NET convention.
+        using Stream nullStream = reader.GetStream(1);
+        Assert.Equal(0, nullStream.Length);
+    }
+
+    [Fact]
+    public void GetTextReader_ReadsTextValuesAndEmptyForNull()
+    {
+        using var reader = new DotRocksDataReader(
+            QueryResult.FromRows(
+                [
+                    Column("name", (byte)ColumnType.VarString),
+                    Column("missing", (byte)ColumnType.VarString),
+                ],
+                [
+                    ["warehouse", null],
+                ]
+            )
+        );
+
+        Assert.True(reader.Read());
+
+        using (TextReader text = reader.GetTextReader(0))
+        {
+            Assert.Equal("warehouse", text.ReadToEnd());
+        }
+
+        using TextReader nullText = reader.GetTextReader(1);
+        Assert.Equal(string.Empty, nullText.ReadToEnd());
+    }
+
+    [Fact]
     public void GetBytes_ReadsBinaryValues()
     {
         byte[] bytes = [0x00, 0xFF, 0x10, 0x20];

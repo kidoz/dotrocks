@@ -173,11 +173,15 @@ public sealed class PacketFramingTests
 
         var reader = new PacketReader(stream, maxPayloadPerPacket: 4, maxLogicalPayloadLength: 7);
 
-        await Assert
+        MalformedPacketException exception = await Assert
             .ThrowsAsync<MalformedPacketException>(async () =>
                 await reader.ReadPayloadAsync(ct).ConfigureAwait(true)
             )
             .ConfigureAwait(true);
+
+        // An oversized payload is a client limit, not corrupt bytes; the flag lets the connection
+        // report an accurate message instead of blaming the server's framing.
+        Assert.True(exception.IsPayloadTooLarge);
     }
 
     [Fact]
