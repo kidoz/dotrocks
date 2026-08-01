@@ -33,6 +33,8 @@ public sealed class DotRocksDataReader
     private bool _isConsumed;
     private bool _connectionCompletionReported;
     private bool _hasPrefetchedRow;
+    private ActiveOperationScope? _operationScope;
+    private CancellationTokenRegistration _operationAbortRegistration;
 
     internal DotRocksDataReader(
         QueryResult result,
@@ -576,6 +578,7 @@ public sealed class DotRocksDataReader
             return null;
         }
 
+        _operationScope?.ResumeTimeout();
         try
         {
             object?[]? row = await _rowReader.ReadRowAsync(cancellationToken).ConfigureAwait(false);
@@ -589,6 +592,22 @@ public sealed class DotRocksDataReader
 
             return row;
         }
+        catch (Exception ex) when (_operationScope?.IsTimeout == true)
+        {
+            _isConsumed = true;
+            ReportConnectionCompletion(reusable: false);
+            throw CreateRowTimeoutException(ex);
+        }
+        catch (Exception ex) when (_operationScope?.IsCanceledByCancelMethod == true)
+        {
+            _isConsumed = true;
+            ReportConnectionCompletion(reusable: false);
+            throw new OperationCanceledException(
+                "The DotRocks command was canceled.",
+                ex,
+                _operationScope.OperationToken
+            );
+        }
         catch (DotRocksException) when (_rowReader.IsConsumed)
         {
             _isConsumed = true;
@@ -600,6 +619,10 @@ public sealed class DotRocksDataReader
             _isConsumed = true;
             ReportConnectionCompletion(reusable: false);
             throw;
+        }
+        finally
+        {
+            _operationScope?.SuspendTimeout();
         }
     }
 
@@ -617,6 +640,7 @@ public sealed class DotRocksDataReader
             return null;
         }
 
+        _operationScope?.ResumeTimeout();
         try
         {
             object?[]? row = _rowReader.ReadRow();
@@ -630,6 +654,24 @@ public sealed class DotRocksDataReader
 
             return row;
         }
+        catch (Exception ex) when (_operationScope?.IsTimeout == true)
+        {
+            // The synchronous row read has no cancellation token; the timeout reaches it by
+            // aborting the connection, which fails the in-flight socket read.
+            _isConsumed = true;
+            ReportConnectionCompletion(reusable: false);
+            throw CreateRowTimeoutException(ex);
+        }
+        catch (Exception ex) when (_operationScope?.IsCanceledByCancelMethod == true)
+        {
+            _isConsumed = true;
+            ReportConnectionCompletion(reusable: false);
+            throw new OperationCanceledException(
+                "The DotRocks command was canceled.",
+                ex,
+                _operationScope.OperationToken
+            );
+        }
         catch (DotRocksException) when (_rowReader.IsConsumed)
         {
             _isConsumed = true;
@@ -642,6 +684,59 @@ public sealed class DotRocksDataReader
             ReportConnectionCompletion(reusable: false);
             throw;
         }
+        finally
+        {
+            _operationScope?.SuspendTimeout();
+        }
+    }
+
+    private static DotRocksException CreateRowTimeoutException(Exception innerException) =>
+        new(
+            "The DotRocks command timed out while reading the result set.",
+            serverErrorCode: null,
+            sqlState: null,
+            isTransient: true,
+            connectionId: null,
+            innerException
+        );
+
+    /// <summary>
+    /// Takes ownership of the executing command's cancellation scope so <c>CommandTimeout</c> and
+    /// <c>Cancel()</c> keep applying while rows are read. Without this the scope would end when
+    /// the reader is handed back, leaving row iteration unbounded: a server that stops sending
+    /// mid-result would hang the reader forever.
+    /// </summary>
+    internal void AttachOperationScope(ActiveOperationScope scope)
+    {
+        _operationScope = scope;
+
+        // The command's timeout bounded query submission. From here it bounds each row fetch
+        // individually, so a legitimately long scan is not killed by one total budget while a
+        // stalled fetch still fails.
+        scope.SuspendTimeout();
+        if (_connection is not null)
+        {
+            _operationAbortRegistration = scope.Token.Register(
+                static state => ((DotRocksConnection)state!).Abort(),
+                _connection
+            );
+        }
+    }
+
+    private void ReleaseOperationScope()
+    {
+        // Unregister rather than Dispose: this can run inside the registration's own callback
+        // (a timeout aborts the connection, which completes the reader), and Dispose would wait
+        // for that callback to finish.
+        _operationAbortRegistration.Unregister();
+        _operationAbortRegistration = default;
+
+        // The scope is disposed but deliberately not cleared: a timeout aborts the connection,
+        // which completes the reader through this method *before* the interrupted fetch's catch
+        // filters run. Those filters ask the scope whether the failure was a timeout or Cancel(),
+        // so the reference must survive; a disposed scope still answers, and its arm/disarm calls
+        // become no-ops.
+        _operationScope?.Dispose();
     }
 
     private bool HasStreamingRows()
@@ -735,6 +830,10 @@ public sealed class DotRocksDataReader
             return true;
         }
 
+        // Draining is only a courtesy that keeps the connection poolable. Bound it by the command
+        // timeout so closing a reader over a huge unread result set cannot block for the whole
+        // remaining stream — on expiry the connection is retired instead.
+        _operationScope?.ResumeTimeout();
         try
         {
             _rowReader.Drain();
@@ -748,10 +847,19 @@ public sealed class DotRocksDataReader
             return true;
         }
         catch (Exception ex)
-            when (ex is MalformedPacketException or IOException or ObjectDisposedException)
+            when (ex
+                    is MalformedPacketException
+                        or IOException
+                        or ObjectDisposedException
+                        or OperationCanceledException
+            )
         {
             // The wire state is undefined; the connection must be retired, not reused.
             return false;
+        }
+        finally
+        {
+            _operationScope?.SuspendTimeout();
         }
     }
 
@@ -762,9 +870,14 @@ public sealed class DotRocksDataReader
             return true;
         }
 
+        // See TryDrainStreamingRows: the drain is bounded by the command timeout so disposal of a
+        // partially read result set cannot block indefinitely.
+        _operationScope?.ResumeTimeout();
         try
         {
-            await _rowReader.DrainAsync(CancellationToken.None).ConfigureAwait(false);
+            await _rowReader
+                .DrainAsync(_operationScope?.Token ?? CancellationToken.None)
+                .ConfigureAwait(false);
             return true;
         }
         catch (DotRocksException)
@@ -772,9 +885,18 @@ public sealed class DotRocksDataReader
             return true;
         }
         catch (Exception ex)
-            when (ex is MalformedPacketException or IOException or ObjectDisposedException)
+            when (ex
+                    is MalformedPacketException
+                        or IOException
+                        or ObjectDisposedException
+                        or OperationCanceledException
+            )
         {
             return false;
+        }
+        finally
+        {
+            _operationScope?.SuspendTimeout();
         }
     }
 
@@ -783,6 +905,7 @@ public sealed class DotRocksDataReader
         _isClosed = true;
         _isConsumed = true;
         ReportConnectionCompletion(reusable);
+        ReleaseOperationScope();
         return (_behavior & CommandBehavior.CloseConnection) != 0 ? _connection : null;
     }
 
@@ -791,6 +914,11 @@ public sealed class DotRocksDataReader
         _connectionCompletionReported = true;
         _isClosed = true;
         _isConsumed = true;
+
+        // The connection went away underneath the reader (an abort, or the caller closing it).
+        // Release the scope here too: Close/DisposeAsync short-circuit once _isClosed is set, so
+        // otherwise the command's single-active-operation gate would stay held forever.
+        ReleaseOperationScope();
     }
 
     private ReadOnlyCollection<DbColumn> BuildColumnSchema()

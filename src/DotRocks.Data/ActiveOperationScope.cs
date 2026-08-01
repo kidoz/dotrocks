@@ -69,6 +69,15 @@ internal sealed class ActiveOperationScope : IDisposable
     private readonly CancellationTokenSource? _timeoutCancellation;
     private readonly CancellationTokenSource _linkedCancellation;
     private readonly CancellationToken _externalToken;
+    private readonly TimeSpan _timeout;
+
+    // Tokens are captured up front because a reader can outlive the disposal of its scope: an
+    // abort completes the reader (disposing the scope) before the interrupted fetch classifies
+    // the failure. Reading an already-issued token stays valid after its source is disposed,
+    // whereas CancellationTokenSource.Token throws.
+    private readonly CancellationToken _linkedToken;
+    private readonly CancellationToken _operationToken;
+    private bool _disposed;
 
     public ActiveOperationScope(
         ActiveOperationGate gate,
@@ -81,6 +90,8 @@ internal sealed class ActiveOperationScope : IDisposable
         _externalToken = externalToken;
         _operationCancellation = new CancellationTokenSource();
         // A timeout of zero means "no timeout" per the ADO.NET CommandTimeout convention.
+        _timeout =
+            timeoutSeconds == 0 ? Timeout.InfiniteTimeSpan : TimeSpan.FromSeconds(timeoutSeconds);
         _timeoutCancellation =
             timeoutSeconds == 0
                 ? null
@@ -96,6 +107,9 @@ internal sealed class ActiveOperationScope : IDisposable
                 _timeoutCancellation.Token
             );
 
+        _linkedToken = _linkedCancellation.Token;
+        _operationToken = _operationCancellation.Token;
+
         try
         {
             gate.Set(_operationCancellation, conflictMessage);
@@ -108,14 +122,14 @@ internal sealed class ActiveOperationScope : IDisposable
     }
 
     /// <summary>The token the operation observes (caller token + timeout + <c>Cancel()</c>).</summary>
-    public CancellationToken Token => _linkedCancellation.Token;
+    public CancellationToken Token => _linkedToken;
 
     /// <summary>
     /// The operation's own cancellation token — the <c>Cancel()</c> target — used to attribute a
     /// rethrown <see cref="OperationCanceledException"/> to <c>Cancel()</c> rather than to the
     /// caller's token or the timeout.
     /// </summary>
-    public CancellationToken OperationToken => _operationCancellation.Token;
+    public CancellationToken OperationToken => _operationToken;
 
     // The failure is attributable to the timeout: it fired while neither the caller's token nor
     // Cancel() did.
@@ -129,8 +143,38 @@ internal sealed class ActiveOperationScope : IDisposable
     public bool IsCanceledByCancelMethod =>
         _operationCancellation.IsCancellationRequested && !_externalToken.IsCancellationRequested;
 
+    /// <summary>
+    /// Suspends the timeout. A scope handed to a data reader must not cap the reader's total
+    /// lifetime — a long streaming scan is not a stalled one — so the reader re-arms the timeout
+    /// around each row fetch instead of letting one budget cover the whole result set.
+    /// </summary>
+    public void SuspendTimeout()
+    {
+        if (!_disposed)
+        {
+            _timeoutCancellation?.CancelAfter(Timeout.InfiniteTimeSpan);
+        }
+    }
+
+    /// <summary>
+    /// Re-arms the timeout to bound a single upcoming operation, such as fetching the next row.
+    /// </summary>
+    public void ResumeTimeout()
+    {
+        if (!_disposed && _timeout != Timeout.InfiniteTimeSpan)
+        {
+            _timeoutCancellation?.CancelAfter(_timeout);
+        }
+    }
+
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
         _gate.Clear(_operationCancellation);
         DisposeSources();
     }

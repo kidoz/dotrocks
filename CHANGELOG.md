@@ -8,6 +8,20 @@ version is derived from the release tag at publish time.
 
 ## [Unreleased]
 
+### Fixed
+- `CommandTimeout` and `DbCommand.Cancel()` now apply while a `DbDataReader` iterates rows.
+  The command's cancellation scope previously ended when the reader was handed back, so a
+  server that stopped sending mid-result left `Read`/`ReadAsync` waiting indefinitely — with
+  no timeout and no way to cancel — on both the synchronous and asynchronous paths. The
+  reader now owns the scope and re-arms the timeout around each row fetch, so a stalled fetch
+  fails with a timeout while a legitimately long streaming scan is not capped by one total
+  budget. A timed-out or cancelled read retires the connection instead of returning it to the
+  pool.
+- Disposing a reader over a partially consumed result set no longer drains the remaining rows
+  uninterruptibly. The courtesy drain that keeps a connection poolable is now bounded by the
+  command timeout; on expiry the connection is retired rather than blocking the caller for the
+  rest of the stream.
+
 ## [1.4.0] - 2026-08-01
 
 ### Added

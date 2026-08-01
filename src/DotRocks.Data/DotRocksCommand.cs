@@ -236,6 +236,11 @@ public sealed class DotRocksCommand : DbCommand
     protected override DbParameter CreateDbParameter() => new DotRocksParameter();
 
     /// <inheritdoc />
+    [SuppressMessage(
+        "Reliability",
+        "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the operation scope transfers to the returned reader when a result set is produced, so the reader disposes it; the finally block disposes it on every other path."
+    )]
     protected override DbDataReader ExecuteDbDataReader(CommandBehavior behavior)
     {
         if (_connection is null)
@@ -246,12 +251,13 @@ public sealed class DotRocksCommand : DbCommand
         _connection.ValidateCommandTransaction((DotRocksTransaction?)_transaction);
         bool serverPrepared = _parameterMode == DotRocksParameterMode.ServerPrepared;
         string commandText = serverPrepared ? CommandText : BindCommandText();
-        using var scope = new ActiveOperationScope(
+        var scope = new ActiveOperationScope(
             _activeOperationGate,
             CommandTimeout,
             "Concurrent execution of the same DotRocksCommand is not supported.",
             CancellationToken.None
         );
+        bool readerOwnsScope = false;
         using CancellationTokenRegistration cancellationRegistration = scope.Token.Register(
             static state => ((DotRocksConnection)state!).Abort(),
             _connection
@@ -277,6 +283,11 @@ public sealed class DotRocksCommand : DbCommand
             if (result.HasResultSet)
             {
                 _connection.SetActiveReader(reader);
+
+                // Hand the cancellation scope to the reader so CommandTimeout and Cancel() keep
+                // applying while rows are read; the reader disposes it when it closes.
+                reader.AttachOperationScope(scope);
+                readerOwnsScope = true;
             }
 
             succeeded = true;
@@ -310,6 +321,11 @@ public sealed class DotRocksCommand : DbCommand
         }
         finally
         {
+            if (!readerOwnsScope)
+            {
+                scope.Dispose();
+            }
+
             RecordCommandCompletion(
                 activity,
                 startTimestamp,
@@ -322,6 +338,11 @@ public sealed class DotRocksCommand : DbCommand
     }
 
     /// <inheritdoc />
+    [SuppressMessage(
+        "Reliability",
+        "CA2000:Dispose objects before losing scope",
+        Justification = "Ownership of the operation scope transfers to the returned reader when a result set is produced, so the reader disposes it; the finally block disposes it on every other path."
+    )]
     protected override async Task<DbDataReader> ExecuteDbDataReaderAsync(
         CommandBehavior behavior,
         CancellationToken cancellationToken
@@ -340,12 +361,13 @@ public sealed class DotRocksCommand : DbCommand
         // sent to COM_STMT_PREPARE and values are bound positionally. The text path tokenizes
         // named `@` parameters and inlines safely-formatted literals.
         string commandText = serverPrepared ? CommandText : BindCommandText();
-        using var scope = new ActiveOperationScope(
+        var scope = new ActiveOperationScope(
             _activeOperationGate,
             CommandTimeout,
             "Concurrent execution of the same DotRocksCommand is not supported.",
             cancellationToken
         );
+        bool readerOwnsScope = false;
 
         using Activity? activity = DotRocksTelemetry.ActivitySource.StartActivity(
             "dotrocks.command.execute",
@@ -381,6 +403,11 @@ public sealed class DotRocksCommand : DbCommand
             if (result.HasResultSet)
             {
                 _connection.SetActiveReader(reader);
+
+                // Hand the cancellation scope to the reader so CommandTimeout and Cancel() keep
+                // applying while rows are read; the reader disposes it when it closes.
+                reader.AttachOperationScope(scope);
+                readerOwnsScope = true;
             }
 
             succeeded = true;
@@ -436,6 +463,11 @@ public sealed class DotRocksCommand : DbCommand
         }
         finally
         {
+            if (!readerOwnsScope)
+            {
+                scope.Dispose();
+            }
+
             RecordCommandCompletion(
                 activity,
                 startTimestamp,

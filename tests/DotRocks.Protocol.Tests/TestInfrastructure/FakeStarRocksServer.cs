@@ -30,6 +30,9 @@ internal sealed class FakeStarRocksServer : IDisposable
     /// </summary>
     public const string Secret = "fake-server-secret";
 
+    /// <summary>Upper bound on a deliberate mid-result stall, so teardown cannot hang.</summary>
+    private static readonly TimeSpan StallGracePeriod = TimeSpan.FromSeconds(30);
+
     private readonly TcpListener _listener;
     private readonly Func<NetworkStream, Task>[] _handlers;
     private readonly CancellationTokenSource _cancellation = new();
@@ -194,6 +197,43 @@ internal sealed class FakeStarRocksServer : IDisposable
 
         await writer.WritePayloadAsync(StarRocksPacketFactory.Eof(), ct).ConfigureAwait(true);
         return Encoding.UTF8.GetString(payload.AsSpan(1));
+    }
+
+    /// <summary>
+    /// Reads one command packet, replies with a single text column named "value" containing the
+    /// given rows, and then stops sending while holding the connection open — leaving the result
+    /// set unterminated so the client blocks waiting for the next row. The stall ends when
+    /// <paramref name="release"/> completes, or after a bounded grace period so a failing test
+    /// cannot hang server teardown.
+    /// </summary>
+    public static async Task ReadCommandAndStallMidResultSetAsync(
+        NetworkStream stream,
+        Task release,
+        params string[] rows
+    )
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        var reader = new PacketReader(stream);
+        reader.ResetSequence(0);
+        _ = await reader.ReadPayloadAsync(ct).ConfigureAwait(true);
+
+        var writer = new PacketWriter(stream);
+        writer.ResetSequence(reader.SequenceId);
+        await writer.WritePayloadAsync(new byte[] { 0x01 }, ct).ConfigureAwait(true);
+        await writer
+            .WritePayloadAsync(StarRocksPacketFactory.ColumnDefinition("value"), ct)
+            .ConfigureAwait(true);
+        await writer.WritePayloadAsync(StarRocksPacketFactory.Eof(), ct).ConfigureAwait(true);
+        foreach (string row in rows)
+        {
+            await writer
+                .WritePayloadAsync(StarRocksPacketFactory.TextRow(row), ct)
+                .ConfigureAwait(true);
+        }
+
+        // No terminating EOF packet: the result set stays open mid-stream.
+        await Task.WhenAny(release, Task.Delay(StallGracePeriod, CancellationToken.None))
+            .ConfigureAwait(true);
     }
 
     /// <summary>Authenticates the connection and then keeps it idle briefly.</summary>
