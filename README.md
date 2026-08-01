@@ -548,10 +548,15 @@ just bench            # or: dotnet run --project benchmarks/DotRocks.Benchmarks 
 
 Benchmark results fail the process if a measured benchmark exceeds its configured mean
 time or allocation budget, if a new budgeted benchmark is added without a budget entry, or if
-no measurements were validated at all (for example a typoed filter or a Dry-only run). This
-budgeted suite runs in CI, so a regression fails the build — including `MaterializeRows`,
-which drives rows through the typed reader accessors and bounds the read path's per-row
-allocation.
+no measurements were validated at all (for example a typoed filter or a Dry-only run).
+
+This budgeted suite also runs in CI, where `DOTROCKS_BENCHMARK_ALLOCATION_ONLY=1` enforces the
+**allocation** budgets only and the report says so. Allocation is byte-identical across
+machines, whereas mean times are not — the same benchmark measures roughly 44 µs on a
+developer machine and 112 µs on a shared runner — so gating CI on wall clock would fail on
+runner speed rather than on a real regression. Timing budgets stay enforced locally. The
+read-path guard is `MaterializeRows`, which drives rows through the typed reader accessors and
+bounds per-row allocation.
 
 Server-backed stress benchmarks (warm-pool open, lease latency and contention, cancellation
 discard, large-result streaming, EF Core materialization, and Stream Load throughput) need a live

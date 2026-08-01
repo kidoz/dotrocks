@@ -24,6 +24,43 @@ public sealed class PerformanceBudgetValidatorTests
     }
 
     [Fact]
+    public void Validate_WhenMeanBudgetsAreNotEnforced_IgnoresSlowMeanButStillGatesAllocation()
+    {
+        // CI runs allocation-only because mean times are hardware-dependent. A slow mean must be
+        // ignored, an over-budget allocation must still fail, and the result must record that
+        // timing went unchecked so a green report cannot be read as "timing verified".
+        PerformanceBudgetResult slowButLean = PerformanceBudgetValidator.Validate(
+            [
+                new PerformanceBudgetMeasurement(
+                    "ParseIntegerValue",
+                    MeanNanoseconds: 1_000_000,
+                    AllocatedBytes: 64
+                ),
+            ],
+            PerformanceBudgetCatalog.Budgets,
+            enforceMeanBudgets: false
+        );
+
+        Assert.True(slowButLean.Succeeded);
+        Assert.False(slowButLean.MeanBudgetsEnforced);
+
+        PerformanceBudgetResult fastButFat = PerformanceBudgetValidator.Validate(
+            [
+                new PerformanceBudgetMeasurement(
+                    "ParseIntegerValue",
+                    MeanNanoseconds: 1,
+                    AllocatedBytes: 513
+                ),
+            ],
+            PerformanceBudgetCatalog.Budgets,
+            enforceMeanBudgets: false
+        );
+
+        PerformanceBudgetViolation violation = Assert.Single(fastButFat.Violations);
+        Assert.Contains("allocated", violation.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Validate_WhenMeanExceedsBudget_ReportsViolation()
     {
         PerformanceBudgetResult result = PerformanceBudgetValidator.Validate(

@@ -82,9 +82,14 @@ jobs:
       - name: Restore packages
         run: dotnet restore DotRocks.slnx --locked-mode
 
-      # Exit code 1 means a benchmark exceeded its configured mean or allocation budget, that a
-      # budgeted benchmark has no catalog entry, or that nothing was measured.
+      # Allocation budgets only: allocation is byte-identical across machines, while mean times
+      # are not (the same benchmark measures ~43.8 us on a dev machine and ~111.6 us here), so
+      # gating on wall clock would fail on runner speed rather than on a real regression. Local
+      # `just bench` still enforces both. Exit code 1 means an allocation budget was exceeded, a
+      # budgeted benchmark has no catalog entry, or nothing was measured.
       - name: Run budgeted benchmarks
+        env:
+          DOTROCKS_BENCHMARK_ALLOCATION_ONLY: 1
         run: >
           dotnet run --project benchmarks/DotRocks.Benchmarks --configuration Release
           -- --anyCategories Local

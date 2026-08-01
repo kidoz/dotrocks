@@ -31,16 +31,32 @@ internal readonly record struct PerformanceReportDisposition(
     PerformanceBudgetViolation? ExecutionViolation
 );
 
-internal sealed class PerformanceBudgetResult(IReadOnlyList<PerformanceBudgetViolation> violations)
+internal sealed class PerformanceBudgetResult(
+    IReadOnlyList<PerformanceBudgetViolation> violations,
+    bool meanBudgetsEnforced = true
+)
 {
     public IReadOnlyList<PerformanceBudgetViolation> Violations { get; } =
         new ReadOnlyCollection<PerformanceBudgetViolation>(violations.ToArray());
+
+    /// <summary>
+    /// False when only allocation budgets were checked, so a passing report never implies the
+    /// timing budgets were verified.
+    /// </summary>
+    public bool MeanBudgetsEnforced { get; } = meanBudgetsEnforced;
 
     public bool Succeeded => Violations.Count == 0;
 
     public void WriteTo(TextWriter writer)
     {
         ArgumentNullException.ThrowIfNull(writer);
+
+        if (!MeanBudgetsEnforced)
+        {
+            writer.WriteLine(
+                "Mean-time budgets were not enforced for this run (allocation budgets only)."
+            );
+        }
 
         if (Succeeded)
         {
@@ -179,7 +195,10 @@ internal static class PerformanceBudgetValidator
         "CA1303:Do not pass literals as localized parameters",
         Justification = "Benchmark budget output is developer-facing tooling text."
     )]
-    public static PerformanceBudgetResult Validate(IEnumerable<Summary> summaries)
+    public static PerformanceBudgetResult Validate(
+        IEnumerable<Summary> summaries,
+        bool enforceMeanBudgets = true
+    )
     {
         ArgumentNullException.ThrowIfNull(summaries);
 
@@ -261,14 +280,18 @@ internal static class PerformanceBudgetValidator
             )
         )
         {
-            return new PerformanceBudgetResult(reportViolations);
+            return new PerformanceBudgetResult(reportViolations, enforceMeanBudgets);
         }
 
         PerformanceBudgetResult budgetResult = Validate(
             measurements,
-            PerformanceBudgetCatalog.Budgets
+            PerformanceBudgetCatalog.Budgets,
+            enforceMeanBudgets
         );
-        return new PerformanceBudgetResult([.. reportViolations, .. budgetResult.Violations]);
+        return new PerformanceBudgetResult(
+            [.. reportViolations, .. budgetResult.Violations],
+            enforceMeanBudgets
+        );
     }
 
     internal static PerformanceReportDisposition ClassifyReport(
@@ -304,7 +327,8 @@ internal static class PerformanceBudgetValidator
     )]
     internal static PerformanceBudgetResult Validate(
         IEnumerable<PerformanceBudgetMeasurement> measurements,
-        IReadOnlyDictionary<string, PerformanceBudget> budgets
+        IReadOnlyDictionary<string, PerformanceBudget> budgets,
+        bool enforceMeanBudgets = true
     )
     {
         ArgumentNullException.ThrowIfNull(measurements);
@@ -326,7 +350,11 @@ internal static class PerformanceBudgetValidator
                 continue;
             }
 
-            if (measurement.MeanNanoseconds > budget.MaxMeanNanoseconds)
+            // Mean budgets are calibrated on developer hardware and do not transfer to shared CI
+            // runners (the same benchmark measured 43.8 us locally and 111.6 us on a GitHub
+            // runner). Allocation, by contrast, is byte-identical across machines, so a CI run
+            // enforces allocation only and says so in its report rather than passing silently.
+            if (enforceMeanBudgets && measurement.MeanNanoseconds > budget.MaxMeanNanoseconds)
             {
                 violations.Add(
                     new PerformanceBudgetViolation(
@@ -380,6 +408,6 @@ internal static class PerformanceBudgetValidator
             );
         }
 
-        return new PerformanceBudgetResult(violations);
+        return new PerformanceBudgetResult(violations, enforceMeanBudgets);
     }
 }
