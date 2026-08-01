@@ -64,7 +64,9 @@ version is derived from the release tag at publish time.
   during the Flight handshake for the session bearer token that every later call reuses, and
   disposal releases the session with the Flight SQL `CloseSession` action. Measured against
   StarRocks 4.0.7: five queries created eleven sessions before the fix and none after it.
-  Servers that do not implement the handshake keep the previous per-call behavior.
+  Servers that do not implement the handshake keep the previous per-call behavior, and servers
+  without the `CloseSession` action (StarRocks 3.5) hold one session per data source until it
+  expires instead of one per call.
 - A Flight SQL transaction is marked completed only after the server confirms completion, so a
   failed `CommitAsync` or `RollbackAsync` leaves it active and recoverable instead of stranding
   an open server transaction that the client can neither retry nor roll back. A failed rollback

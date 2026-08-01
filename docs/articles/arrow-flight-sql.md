@@ -62,7 +62,9 @@ server supplied them. Dispose each record batch after consuming it.
 StarRocks creates a frontend session for every authenticated call. DotRocks therefore exchanges the
 credentials once, during the Flight handshake, for a session bearer token that all later calls on
 that channel reuse, and releases the session with the Flight SQL `CloseSession` action on disposal.
-Servers that do not implement the handshake fall back to per-call Basic authentication.
+Servers that do not implement the handshake fall back to per-call Basic authentication, and
+servers without the `CloseSession` action — StarRocks 3.5 — keep that one session until it
+expires. Either way the cost is one session per data source, not one per call.
 
 Two consequences matter in application code:
 

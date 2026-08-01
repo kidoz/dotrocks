@@ -117,7 +117,7 @@ public sealed class FlightSqlIntegrationTests
         );
         await using (dataSource.ConfigureAwait(true))
         {
-            for (int attempt = 0; attempt < 5; attempt++)
+            for (int attempt = 0; attempt < 10; attempt++)
             {
                 await using DotRocksFlightSqlDbConnection flight = dataSource.CreateConnection();
                 await flight.OpenAsync(cancellationToken).ConfigureAwait(true);
@@ -132,11 +132,15 @@ public sealed class FlightSqlIntegrationTests
 
         int after = await CountSessionsAsync(mysql, cancellationToken).ConfigureAwait(true);
 
-        // Before session authentication, every discovery and DoGet call left one sleeping frontend
+        // Before session authentication, each of these 20 RPCs left its own sleeping frontend
         // connection behind, which exhausted the per-user connection limit during benchmarks.
+        // StarRocks 4.0 releases the session on disposal through the Flight SQL CloseSession
+        // action and settles at zero; 3.5 does not implement that action, so its single
+        // handshake session lingers until the server expires it. Either way the cost is per data
+        // source, not per RPC.
         Assert.True(
-            after <= before,
-            $"Flight queries left {after - before} extra StarRocks sessions behind."
+            after - before <= 1,
+            $"Twenty Flight RPCs left {after - before} extra StarRocks sessions behind."
         );
     }
 
