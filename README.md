@@ -23,7 +23,7 @@ Roslyn analyzer suite built specifically for [StarRocks](https://www.starrocks.i
 
 ## Status
 
-The latest tagged release is DotRocks 1.4.0. The `main` branch is post-1.4.0; this
+The latest tagged release is DotRocks 1.4.1. The `main` branch is post-1.4.1; this
 README tracks `main`, and unreleased changes are listed in
 [CHANGELOG.md](https://github.com/kidoz/dotrocks/blob/main/CHANGELOG.md).
 The ADO.NET driver (`DotRocks.Data`), EF Core provider (`DotRocks.EntityFrameworkCore`),
@@ -335,13 +335,13 @@ output.
 Package consumption:
 
 ```xml
-<PackageReference Include="DotRocks.Data" Version="1.4.0" />
-<PackageReference Include="DotRocks.EntityFrameworkCore" Version="1.4.0" />
-<PackageReference Include="DotRocks.EntityFrameworkCore.Design" Version="1.4.0" PrivateAssets="all" />
+<PackageReference Include="DotRocks.Data" Version="1.4.1" />
+<PackageReference Include="DotRocks.EntityFrameworkCore" Version="1.4.1" />
+<PackageReference Include="DotRocks.EntityFrameworkCore.Design" Version="1.4.1" PrivateAssets="all" />
 <!-- Optional, experimental Arrow Flight SQL transport. -->
-<PackageReference Include="DotRocks.FlightSql" Version="1.4.0" />
-<PackageReference Include="DotRocks.Analyzers" Version="1.4.0" PrivateAssets="all" />
-<PackageReference Include="DotRocks.Analyzers.CodeFixes" Version="1.4.0" PrivateAssets="all" />
+<PackageReference Include="DotRocks.FlightSql" Version="1.4.1" />
+<PackageReference Include="DotRocks.Analyzers" Version="1.4.1" PrivateAssets="all" />
+<PackageReference Include="DotRocks.Analyzers.CodeFixes" Version="1.4.1" PrivateAssets="all" />
 ```
 
 The test suite validates these packages through a local NuGet-source consumer project
