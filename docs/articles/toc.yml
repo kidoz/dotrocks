@@ -14,5 +14,7 @@
   href: observability.md
 - name: EF Core entity mapping
   href: ef-core-entity-mapping.md
+- name: EF Core query translation
+  href: ef-core-queries.md
 - name: Analyzers
   href: analyzers.md

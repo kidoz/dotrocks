@@ -52,6 +52,7 @@ driver, and it is not a general-purpose MySQL driver.
 - [Stream Load](https://github.com/kidoz/dotrocks/blob/main/docs/articles/stream-load.md)
 - [Observability](https://github.com/kidoz/dotrocks/blob/main/docs/articles/observability.md)
 - [EF Core entity mapping](https://github.com/kidoz/dotrocks/blob/main/docs/articles/ef-core-entity-mapping.md)
+- [EF Core query translation](https://github.com/kidoz/dotrocks/blob/main/docs/articles/ef-core-queries.md)
 - [Analyzers](https://github.com/kidoz/dotrocks/blob/main/docs/articles/analyzers.md)
 - [StarRocks 3.x driver developer notes](https://github.com/kidoz/dotrocks/blob/main/docs/starrocks-3x-driver-developer-notes.md)
 - [StarRocks 4.x driver developer notes](https://github.com/kidoz/dotrocks/blob/main/docs/starrocks-4x-driver-developer-notes.md)
@@ -165,7 +166,9 @@ int count = await context.Widgets
     .CountAsync();
 ```
 
-Supported EF Core query surface:
+Supported EF Core query surface (the
+[query translation guide](https://github.com/kidoz/dotrocks/blob/main/docs/articles/ef-core-queries.md)
+expands this list with emitted SQL and NULL-semantics notes):
 
 - `Database.ExecuteSqlRawAsync` for raw SQL commands.
 - `DbSet<TEntity>.FromSqlRaw("SELECT ...")` materialization, including positional `{0}`

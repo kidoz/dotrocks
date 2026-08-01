@@ -181,3 +181,4 @@ convention), and the record `ToString()` redacts it as `***`. See
 - [Security](security.md)
 - [Stream Load](stream-load.md)
 - [EF Core entity mapping](ef-core-entity-mapping.md)
+- [EF Core query translation](ef-core-queries.md)

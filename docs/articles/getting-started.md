@@ -54,7 +54,8 @@ Pin the server version in provider options. To discover it once at startup, call
 
 Write one row per `SaveChanges`, or use Stream Load for bulk ingestion. See
 [EF Core entity mapping](ef-core-entity-mapping.md) for model validation and migration
-table-shape rules.
+table-shape rules, and [EF Core query translation](ef-core-queries.md) for the translated
+LINQ surface and raw-SQL entry points.
 
 ## Stream Load
 

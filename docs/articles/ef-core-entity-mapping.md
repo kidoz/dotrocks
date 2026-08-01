@@ -9,6 +9,9 @@ fixes for validation errors.
 > article expands it with mapping rules and examples. When the two disagree, the README and
 > source win.
 
+For what the provider translates once the model is mapped, see
+[EF Core query translation](ef-core-queries.md).
+
 ## Model Validation Timing
 
 **DotRocks validates the entire mapped model the first time the model is built — not at
