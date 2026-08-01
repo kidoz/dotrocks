@@ -11,6 +11,7 @@ var options = new DotRocksFlightSqlOptions(new Uri(endpoint), userName, password
     // a trusted private network; credentials and results are otherwise visible on the wire.
     AllowInsecureTransport = endpoint.StartsWith("grpc://", StringComparison.OrdinalIgnoreCase),
 };
+
 // Dispose asynchronously: the data source releases its StarRocks session on the wire.
 await using var dataSource = new DotRocksFlightSqlDataSource(options);
 
