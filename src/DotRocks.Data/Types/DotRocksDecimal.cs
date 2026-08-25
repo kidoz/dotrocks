@@ -10,7 +10,8 @@ namespace DotRocks.Data;
 public readonly struct DotRocksDecimal
     : IEquatable<DotRocksDecimal>,
         IComparable<DotRocksDecimal>,
-        IComparable
+        IComparable,
+        IConvertible
 {
     private static readonly BigInteger DecimalMaxUnscaled = BigInteger.Parse(
         "79228162514264337593543950335",
@@ -315,6 +316,114 @@ public readonly struct DotRocksDecimal
     /// </returns>
     public static bool operator >=(DotRocksDecimal left, DotRocksDecimal right) =>
         left.CompareTo(right) >= 0;
+
+    TypeCode IConvertible.GetTypeCode() => TypeCode.Object;
+
+    bool IConvertible.ToBoolean(IFormatProvider? provider) => !UnscaledValue.IsZero;
+
+    byte IConvertible.ToByte(IFormatProvider? provider) => (byte)ToRoundedInteger();
+
+    char IConvertible.ToChar(IFormatProvider? provider) =>
+        throw CreateInvalidConversionException(typeof(char));
+
+    DateTime IConvertible.ToDateTime(IFormatProvider? provider) =>
+        throw CreateInvalidConversionException(typeof(DateTime));
+
+    decimal IConvertible.ToDecimal(IFormatProvider? provider) => ToDecimal();
+
+    // The invariant text form is exact, so parsing it yields the correctly rounded floating-point
+    // value even when the value is too wide for System.Decimal.
+    double IConvertible.ToDouble(IFormatProvider? provider) =>
+        double.Parse(ToString(), NumberStyles.Float, CultureInfo.InvariantCulture);
+
+    short IConvertible.ToInt16(IFormatProvider? provider) => (short)ToRoundedInteger();
+
+    int IConvertible.ToInt32(IFormatProvider? provider) => (int)ToRoundedInteger();
+
+    long IConvertible.ToInt64(IFormatProvider? provider) => (long)ToRoundedInteger();
+
+    sbyte IConvertible.ToSByte(IFormatProvider? provider) => (sbyte)ToRoundedInteger();
+
+    float IConvertible.ToSingle(IFormatProvider? provider) =>
+        float.Parse(ToString(), NumberStyles.Float, CultureInfo.InvariantCulture);
+
+    // The canonical text form is invariant regardless of the requested provider: it is the form
+    // SQL literals and Parse round-trip, and a culture-specific separator would not survive either.
+    string IConvertible.ToString(IFormatProvider? provider) => ToString();
+
+    object IConvertible.ToType(Type conversionType, IFormatProvider? provider)
+    {
+        ArgumentNullException.ThrowIfNull(conversionType);
+        if (conversionType == typeof(DotRocksDecimal) || conversionType == typeof(object))
+        {
+            return this;
+        }
+
+        // Type.GetTypeCode reports an enum as its underlying integral type, which would make the
+        // switch below hand back a boxed integer instead of the requested enum type. Refuse the
+        // conversion instead, matching System.Decimal's IConvertible behavior for enum targets.
+        if (conversionType.IsEnum)
+        {
+            throw CreateInvalidConversionException(conversionType);
+        }
+
+        IConvertible convertible = this;
+        return Type.GetTypeCode(conversionType) switch
+        {
+            TypeCode.Boolean => convertible.ToBoolean(provider),
+            TypeCode.Byte => convertible.ToByte(provider),
+            TypeCode.Char => convertible.ToChar(provider),
+            TypeCode.DateTime => convertible.ToDateTime(provider),
+            TypeCode.Decimal => convertible.ToDecimal(provider),
+            TypeCode.Double => convertible.ToDouble(provider),
+            TypeCode.Int16 => convertible.ToInt16(provider),
+            TypeCode.Int32 => convertible.ToInt32(provider),
+            TypeCode.Int64 => convertible.ToInt64(provider),
+            TypeCode.SByte => convertible.ToSByte(provider),
+            TypeCode.Single => convertible.ToSingle(provider),
+            TypeCode.String => convertible.ToString(provider),
+            TypeCode.UInt16 => convertible.ToUInt16(provider),
+            TypeCode.UInt32 => convertible.ToUInt32(provider),
+            TypeCode.UInt64 => convertible.ToUInt64(provider),
+            _ => throw CreateInvalidConversionException(conversionType),
+        };
+    }
+
+    ushort IConvertible.ToUInt16(IFormatProvider? provider) => (ushort)ToRoundedInteger();
+
+    uint IConvertible.ToUInt32(IFormatProvider? provider) => (uint)ToRoundedInteger();
+
+    ulong IConvertible.ToUInt64(IFormatProvider? provider) => (ulong)ToRoundedInteger();
+
+    private static InvalidCastException CreateInvalidConversionException(Type conversionType) =>
+        new($"Cannot convert a DotRocks decimal value to '{conversionType.FullName}'.");
+
+    // Convert.* integral conversions on System.Decimal round half to even; match that here so a
+    // wide DECIMAL behaves like a narrow one under the same Convert call. The BigInteger casts in
+    // the callers throw OverflowException when the rounded value is outside the target range.
+    private BigInteger ToRoundedInteger()
+    {
+        if (Scale == 0)
+        {
+            return UnscaledValue;
+        }
+
+        BigInteger divisor = BigInteger.Pow(10, Scale);
+        BigInteger quotient = BigInteger.DivRem(UnscaledValue, divisor, out BigInteger remainder);
+        if (remainder.IsZero)
+        {
+            return quotient;
+        }
+
+        BigInteger doubledRemainder = BigInteger.Abs(remainder) * 2;
+        int comparison = doubledRemainder.CompareTo(divisor);
+        if (comparison > 0 || (comparison == 0 && !quotient.IsEven))
+        {
+            quotient += UnscaledValue.Sign < 0 ? BigInteger.MinusOne : BigInteger.One;
+        }
+
+        return quotient;
+    }
 
     private static uint ExtractUInt32(BigInteger value, int shift) =>
         (uint)((value >> shift) & uint.MaxValue);

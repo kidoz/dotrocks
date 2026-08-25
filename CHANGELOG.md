@@ -8,6 +8,15 @@ version is derived from the release tag at publish time.
 
 ## [Unreleased]
 
+### Fixed
+- `DotRocksDecimal` implements `IConvertible`, so a wide `DECIMAL` read through `GetValue`
+  also survives `Convert.ChangeType` and the `Convert.To*` family. Conversions stay lossless:
+  `decimal` conversion throws `DotRocksPrecisionLossException` rather than rounding, integral
+  conversions round half to even exactly like `System.Decimal` and throw `OverflowException`
+  outside the target range, floating-point conversions parse the exact invariant text form to
+  the correctly rounded value, and unsupported targets (`char`, `DateTime`) throw
+  `InvalidCastException`.
+
 ## [1.4.2] - 2026-08-01
 
 ### Added

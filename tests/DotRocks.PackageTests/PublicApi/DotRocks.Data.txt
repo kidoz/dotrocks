@@ -159,7 +159,7 @@ public sealed class DotRocks.Data.DotRocksDataSource System.Data.Common.DbDataSo
   protected virtual method System.Void Dispose(System.Boolean disposing)
   public method System.Void ClearPool()
 
-public struct DotRocks.Data.DotRocksDecimal , System.IComparable, System.IComparable<DotRocks.Data.DotRocksDecimal>, System.IEquatable<DotRocks.Data.DotRocksDecimal>
+public struct DotRocks.Data.DotRocksDecimal , System.IComparable, System.IComparable<DotRocks.Data.DotRocksDecimal>, System.IConvertible, System.IEquatable<DotRocks.Data.DotRocksDecimal>
   public DotRocks.Data.DotRocksDecimal(System.Numerics.BigInteger unscaledValue, System.Int32 scale)
   public property System.Int32 Scale { get; }
   public property System.Numerics.BigInteger UnscaledValue { get; }
@@ -322,3 +322,4 @@ public sealed class DotRocks.Data.Loading.DotRocksStreamLoadTransactionOptions
   public property System.String Label { get; set; }
   public property System.TimeSpan? PreparedTimeout { get; set; }
   public property System.TimeSpan? Timeout { get; set; }
+

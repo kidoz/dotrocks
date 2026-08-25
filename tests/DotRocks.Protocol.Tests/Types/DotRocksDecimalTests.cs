@@ -99,4 +99,126 @@ public sealed class DotRocksDecimalTests
         Assert.True(DotRocksDecimal.Parse("1.20") <= DotRocksDecimal.Parse("1.200"));
         Assert.True(DotRocksDecimal.Parse("1.21") > DotRocksDecimal.Parse("1.20"));
     }
+
+    [Fact]
+    public void ChangeType_ToDecimal_ConvertsExactly()
+    {
+        // Convert.ChangeType is what generic row mappers apply to GetValue results, so the
+        // struct must participate through IConvertible instead of throwing InvalidCastException.
+        object value = DotRocksDecimal.Parse("-12.340000000000");
+
+        Assert.Equal(
+            -12.340000000000m,
+            Convert.ChangeType(value, typeof(decimal), CultureInfo.InvariantCulture)
+        );
+    }
+
+    [Fact]
+    public void ChangeType_ToDecimal_WhenValueCannotFitExactly_ThrowsPrecisionLoss()
+    {
+        object value = DotRocksDecimal.Parse("1234567890123456789012345678901234.5678");
+
+        Assert.Throws<DotRocksPrecisionLossException>(() =>
+            Convert.ChangeType(value, typeof(decimal), CultureInfo.InvariantCulture)
+        );
+    }
+
+    [Fact]
+    public void ChangeType_ToDouble_ParsesWideValuesCorrectlyRounded()
+    {
+        object value = DotRocksDecimal.Parse("1234567890123456789012345678901234.5678");
+
+        Assert.Equal(
+            1234567890123456789012345678901234.5678d,
+            Convert.ChangeType(value, typeof(double), CultureInfo.InvariantCulture)
+        );
+    }
+
+    [Theory]
+    [InlineData("2.5", 2L)]
+    [InlineData("3.5", 4L)]
+    [InlineData("-2.5", -2L)]
+    [InlineData("-3.5", -4L)]
+    [InlineData("2.51", 3L)]
+    [InlineData("7.00", 7L)]
+    public void ChangeType_ToIntegral_RoundsHalfToEvenLikeSystemDecimal(string text, long expected)
+    {
+        DotRocksDecimal value = DotRocksDecimal.Parse(text);
+
+        Assert.Equal(
+            Convert.ToInt64(decimal.Parse(text, CultureInfo.InvariantCulture)),
+            Convert.ChangeType(value, typeof(long), CultureInfo.InvariantCulture)
+        );
+        Assert.Equal(
+            expected,
+            Convert.ChangeType(value, typeof(long), CultureInfo.InvariantCulture)
+        );
+    }
+
+    [Fact]
+    public void ChangeType_ToIntegral_WhenValueExceedsTargetRange_ThrowsOverflow()
+    {
+        // A value wider than the target must overflow, not lose precision silently.
+        object value = DotRocksDecimal.Parse("12345678901234567890123456789012345678.9");
+
+        Assert.Throws<OverflowException>(() =>
+            Convert.ChangeType(value, typeof(long), CultureInfo.InvariantCulture)
+        );
+    }
+
+    [Fact]
+    public void ChangeType_ToStringAndBoolean_UseCanonicalSemantics()
+    {
+        object value = DotRocksDecimal.Parse("12.34");
+        object zero = DotRocksDecimal.Parse("0.00");
+
+        Assert.Equal(
+            "12.34",
+            Convert.ChangeType(value, typeof(string), CultureInfo.InvariantCulture)
+        );
+        Assert.Equal(true, Convert.ChangeType(value, typeof(bool), CultureInfo.InvariantCulture));
+        Assert.Equal(false, Convert.ChangeType(zero, typeof(bool), CultureInfo.InvariantCulture));
+    }
+
+    [Fact]
+    public void ChangeType_ToUnsupportedTypes_ThrowsInvalidCast()
+    {
+        object value = DotRocksDecimal.Parse("12.34");
+
+        Assert.Throws<InvalidCastException>(() =>
+            Convert.ChangeType(value, typeof(DateTime), CultureInfo.InvariantCulture)
+        );
+        Assert.Throws<InvalidCastException>(() =>
+            Convert.ChangeType(value, typeof(char), CultureInfo.InvariantCulture)
+        );
+        Assert.Throws<InvalidCastException>(() =>
+            Convert.ChangeType(value, typeof(Guid), CultureInfo.InvariantCulture)
+        );
+    }
+
+    [Fact]
+    public void ChangeType_ToEnum_ThrowsInvalidCastLikeSystemDecimal()
+    {
+        // Type.GetTypeCode reports an enum as its underlying integral type; the conversion must
+        // be refused rather than returning a boxed integer for an enum target.
+        object value = DotRocksDecimal.Parse("3");
+
+        Assert.Throws<InvalidCastException>(() =>
+            Convert.ChangeType(value, typeof(DayOfWeek), CultureInfo.InvariantCulture)
+        );
+        Assert.Throws<InvalidCastException>(() =>
+            Convert.ChangeType(3m, typeof(DayOfWeek), CultureInfo.InvariantCulture)
+        );
+    }
+
+    [Fact]
+    public void ChangeType_ToDotRocksDecimal_ReturnsSameValue()
+    {
+        object value = DotRocksDecimal.Parse("12.34");
+
+        Assert.Equal(
+            DotRocksDecimal.Parse("12.34"),
+            Convert.ChangeType(value, typeof(DotRocksDecimal), CultureInfo.InvariantCulture)
+        );
+    }
 }
