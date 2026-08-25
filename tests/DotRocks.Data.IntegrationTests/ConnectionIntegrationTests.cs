@@ -235,6 +235,40 @@ public sealed class ConnectionIntegrationTests
         }
     }
 
+    [Fact]
+    public async Task ServerPrepared_DecimalGetValueMaterializesByPrecision()
+    {
+        IntegrationTestEnvironment.SkipUnlessEnabled();
+
+        using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
+        await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+        using DotRocksCommand command = connection.CreateCommand();
+        // The prepared (binary) result path must apply the same precision rule as the text
+        // protocol: decimal(28,12) materializes as decimal, decimal(38,4) as DotRocksDecimal.
+        command.CommandText = """
+            SELECT
+                CAST('12.34' AS DECIMAL(28, 12)) AS narrow_decimal,
+                CAST('1234567890123456789012345678901234.5678' AS DECIMAL(38, 4)) AS wide_decimal
+            """;
+        command.ParameterMode = DotRocksParameterMode.ServerPrepared;
+
+        using DbDataReader reader = await command
+            .ExecuteReaderAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+
+        Assert.Equal(typeof(decimal), reader.GetFieldType(0));
+        Assert.Equal(typeof(DotRocksDecimal), reader.GetFieldType(1));
+        Assert.True(
+            await reader.ReadAsync(TestContext.Current.CancellationToken).ConfigureAwait(true)
+        );
+        Assert.Equal(12.34m, Assert.IsType<decimal>(reader.GetValue(0)));
+        DotRocksDecimal wide = Assert.IsType<DotRocksDecimal>(reader.GetValue(1));
+        Assert.Equal("1234567890123456789012345678901234.5678", wide.ToString());
+        Assert.False(
+            await reader.ReadAsync(TestContext.Current.CancellationToken).ConfigureAwait(true)
+        );
+    }
+
     [Theory]
     [InlineData("SELECT to_bitmap(1) AS v")]
     [InlineData("SELECT hll_hash(1) AS v")]
@@ -502,7 +536,7 @@ public sealed class ConnectionIntegrationTests
         );
         Assert.Equal(typeof(int), reader.GetFieldType(0));
         Assert.Equal(typeof(long), reader.GetFieldType(1));
-        Assert.Equal(typeof(DotRocksDecimal), reader.GetFieldType(2));
+        Assert.Equal(typeof(decimal), reader.GetFieldType(2));
         Assert.Equal(typeof(double), reader.GetFieldType(3));
         Assert.Equal(typeof(DateTime), reader.GetFieldType(4));
         Assert.Equal(typeof(DateTime), reader.GetFieldType(5));
@@ -546,7 +580,7 @@ public sealed class ConnectionIntegrationTests
         Assert.Equal("i64", schema[1].ColumnName);
         Assert.Equal(typeof(long), schema[1].DataType);
         Assert.Equal("amount", schema[2].ColumnName);
-        Assert.Equal(typeof(DotRocksDecimal), schema[2].DataType);
+        Assert.Equal(typeof(decimal), schema[2].DataType);
         Assert.Equal("ratio", schema[3].ColumnName);
         Assert.Equal(typeof(double), schema[3].DataType);
         Assert.Equal("single_value", schema[4].ColumnName);
@@ -631,8 +665,10 @@ public sealed class ConnectionIntegrationTests
             .ExecuteReaderAsync(TestContext.Current.CancellationToken)
             .ConfigureAwait(true);
 
+        // Only a precision beyond System.Decimal materializes as DotRocksDecimal; a narrower
+        // column is a plain decimal, matching the Arrow Flight SQL transport.
         Assert.Equal(typeof(DotRocksDecimal), reader.GetFieldType(0));
-        Assert.Equal(typeof(DotRocksDecimal), reader.GetFieldType(1));
+        Assert.Equal(typeof(decimal), reader.GetFieldType(1));
         Assert.True(
             await reader.ReadAsync(TestContext.Current.CancellationToken).ConfigureAwait(true)
         );
@@ -647,6 +683,52 @@ public sealed class ConnectionIntegrationTests
         Assert.Equal("12.3400", exact.ToString());
         Assert.Throws<DotRocksPrecisionLossException>(() => reader.GetDecimal(0));
         Assert.Equal(12.3400m, reader.GetDecimal(1));
+    }
+
+    [Fact]
+    public async Task ExecuteReaderAsync_DecimalGetValueMaterializesByPrecision()
+    {
+        IntegrationTestEnvironment.SkipUnlessEnabled();
+
+        using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
+        await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        using DbCommand command = connection.CreateCommand();
+        // decimal(28,12) is the widest precision that always fits System.Decimal; decimal(38,4)
+        // does not. GetValue must box the type GetFieldType reports for both.
+        command.CommandText = """
+            SELECT
+                CAST('12.34' AS DECIMAL(28, 12)) AS narrow_decimal,
+                CAST('1234567890123456789012345678901234.5678' AS DECIMAL(38, 4)) AS wide_decimal
+            """;
+
+        using DbDataReader reader = await command
+            .ExecuteReaderAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+
+        Assert.Equal(typeof(decimal), reader.GetFieldType(0));
+        Assert.Equal(typeof(DotRocksDecimal), reader.GetFieldType(1));
+        Assert.True(
+            await reader.ReadAsync(TestContext.Current.CancellationToken).ConfigureAwait(true)
+        );
+
+        Assert.Equal(12.34m, Assert.IsType<decimal>(reader.GetValue(0)));
+        DotRocksDecimal wide = Assert.IsType<DotRocksDecimal>(reader.GetValue(1));
+        Assert.Equal("1234567890123456789012345678901234.5678", wide.ToString());
+
+        // Convert.ChangeType is what generic row mappers apply to GetValue results; the wide
+        // struct participates through IConvertible instead of failing with InvalidCastException.
+        Assert.Equal(
+            12.34m,
+            Convert.ChangeType(reader.GetValue(0), typeof(decimal), CultureInfo.InvariantCulture)
+        );
+        Assert.Throws<DotRocksPrecisionLossException>(() =>
+            Convert.ChangeType(wide, typeof(decimal), CultureInfo.InvariantCulture)
+        );
+        Assert.Equal(
+            1234567890123456789012345678901234.5678d,
+            Convert.ChangeType(wide, typeof(double), CultureInfo.InvariantCulture)
+        );
     }
 
     [Fact]

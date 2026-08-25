@@ -41,24 +41,34 @@ public sealed class DotRocksDataReaderTests
             QueryResult.FromRows(
                 [
                     Column("id", (byte)ColumnType.Long),
-                    Column("amount", (byte)ColumnType.NewDecimal),
+                    // decimal(28,12): wire length 32 (precision + 3 + point) fits System.Decimal.
+                    Column("amount", (byte)ColumnType.NewDecimal, columnLength: 32, decimals: 12),
+                    // decimal(38,4): wire length 42 exceeds System.Decimal precision.
+                    Column(
+                        "wide_amount",
+                        (byte)ColumnType.NewDecimal,
+                        columnLength: 42,
+                        decimals: 4
+                    ),
                     Column("bytes", (byte)ColumnType.Blob),
                     Column("name"),
                 ],
                 [
-                    [7, DotRocksDecimal.Parse("12.34"), new byte[] { 0x00, 0xFF }, "seven"],
+                    [7, 12.34m, DotRocksDecimal.Parse("12.34"), new byte[] { 0x00, 0xFF }, "seven"],
                 ]
             )
         );
 
         Assert.Equal(typeof(int), reader.GetFieldType(0));
         Assert.Equal("LONG", reader.GetDataTypeName(0));
-        Assert.Equal(typeof(DotRocksDecimal), reader.GetFieldType(1));
+        Assert.Equal(typeof(decimal), reader.GetFieldType(1));
         Assert.Equal("NEWDECIMAL", reader.GetDataTypeName(1));
-        Assert.Equal(typeof(byte[]), reader.GetFieldType(2));
-        Assert.Equal("BLOB", reader.GetDataTypeName(2));
-        Assert.Equal(typeof(string), reader.GetFieldType(3));
-        Assert.Equal("VAR_STRING", reader.GetDataTypeName(3));
+        Assert.Equal(typeof(DotRocksDecimal), reader.GetFieldType(2));
+        Assert.Equal("NEWDECIMAL", reader.GetDataTypeName(2));
+        Assert.Equal(typeof(byte[]), reader.GetFieldType(3));
+        Assert.Equal("BLOB", reader.GetDataTypeName(3));
+        Assert.Equal(typeof(string), reader.GetFieldType(4));
+        Assert.Equal("VAR_STRING", reader.GetDataTypeName(4));
     }
 
     [Fact]
@@ -68,12 +78,13 @@ public sealed class DotRocksDataReaderTests
             QueryResult.FromRows(
                 [
                     Column("id", (byte)ColumnType.Long, flags: 1, columnLength: 11),
-                    Column("amount", (byte)ColumnType.NewDecimal, columnLength: 18),
+                    // decimal(14,4): wire length 18 (precision + 3 + point) fits System.Decimal.
+                    Column("amount", (byte)ColumnType.NewDecimal, columnLength: 18, decimals: 4),
                     Column("bytes", (byte)ColumnType.Blob, columnLength: 16),
                     Column("name"),
                 ],
                 [
-                    [7, DotRocksDecimal.Parse("12.34"), new byte[] { 0x00, 0xFF }, "seven"],
+                    [7, 12.34m, new byte[] { 0x00, 0xFF }, "seven"],
                 ]
             )
         );
@@ -89,7 +100,7 @@ public sealed class DotRocksDataReaderTests
         Assert.Equal(11, schema[0].ColumnSize);
         Assert.Equal("amount", schema[1].ColumnName);
         Assert.Equal(1, schema[1].ColumnOrdinal);
-        Assert.Equal(typeof(DotRocksDecimal), schema[1].DataType);
+        Assert.Equal(typeof(decimal), schema[1].DataType);
         Assert.Equal("NEWDECIMAL", schema[1].DataTypeName);
         Assert.True(schema[1].AllowDBNull);
         Assert.Equal("bytes", schema[2].ColumnName);
@@ -168,6 +179,43 @@ public sealed class DotRocksDataReaderTests
         Assert.Equal(reader.GetDateTime(6), reader.GetFieldValue<DateTime>(6));
         Assert.Equal(reader.GetBoolean(7), reader.GetFieldValue<bool>(7));
         Assert.Same(bytes, reader.GetFieldValue<byte[]>(8));
+    }
+
+    [Fact]
+    public void GetValue_DecimalColumns_MaterializeByPrecisionAndSurviveChangeType()
+    {
+        using var reader = new DotRocksDataReader(
+            QueryResult.FromRows(
+                [
+                    // decimal(28,12): wire length 32 (precision + 3 + point) fits System.Decimal.
+                    Column("narrow", (byte)ColumnType.NewDecimal, columnLength: 32, decimals: 12),
+                    // decimal(38,4): wire length 42 exceeds System.Decimal precision.
+                    Column("wide", (byte)ColumnType.NewDecimal, columnLength: 42, decimals: 4),
+                ],
+                [
+                    [12.34m, DotRocksDecimal.Parse("99.5678")],
+                ]
+            )
+        );
+
+        Assert.True(reader.Read());
+        Assert.Equal(12.34m, Assert.IsType<decimal>(reader.GetValue(0)));
+        DotRocksDecimal wide = Assert.IsType<DotRocksDecimal>(reader.GetValue(1));
+
+        // Convert.ChangeType is what generic row mappers apply to GetValue results; the wide
+        // struct participates through IConvertible instead of failing with InvalidCastException.
+        Assert.Equal(
+            12.34m,
+            Convert.ChangeType(reader.GetValue(0), typeof(decimal), CultureInfo.InvariantCulture)
+        );
+        Assert.Equal(
+            99.5678m,
+            Convert.ChangeType(wide, typeof(decimal), CultureInfo.InvariantCulture)
+        );
+
+        // The typed accessors bridge both materialized forms in both directions.
+        Assert.Equal(DotRocksDecimal.FromDecimal(12.34m), reader.GetFieldValue<DotRocksDecimal>(0));
+        Assert.Equal(99.5678m, reader.GetDecimal(1));
     }
 
     [Fact]
@@ -795,7 +843,8 @@ public sealed class DotRocksDataReaderTests
         string name,
         byte columnType = (byte)ColumnType.VarString,
         ushort flags = 0,
-        uint columnLength = 1024
+        uint columnLength = 1024,
+        byte decimals = 0
     ) =>
         new(
             "def",
@@ -808,6 +857,6 @@ public sealed class DotRocksDataReaderTests
             columnLength,
             columnType,
             flags,
-            0
+            decimals
         );
 }

@@ -127,7 +127,10 @@ internal static class StarRocksPacketFactory
     public static byte[] ColumnDefinition(
         string name,
         byte columnType = (byte)ColumnType.VarString,
-        ulong fixedFieldsLength = ColumnDefinitionFixedFieldsLength
+        ulong fixedFieldsLength = ColumnDefinitionFixedFieldsLength,
+        uint columnLength = 1024,
+        ushort flags = 0,
+        byte decimals = 0
     )
     {
         using var writer = new ProtocolWriter();
@@ -139,10 +142,10 @@ internal static class StarRocksPacketFactory
         writer.WriteLengthEncodedString(name, Encoding.UTF8); // original name
         writer.WriteLengthEncodedInteger(fixedFieldsLength);
         writer.WriteFixedInteger(Utf8GeneralCiCollation, 2);
-        writer.WriteFixedInteger(1024, 4); // column length
+        writer.WriteFixedInteger(columnLength, 4);
         writer.WriteByte(columnType);
-        writer.WriteFixedInteger(0, 2); // flags
-        writer.WriteByte(0); // decimals
+        writer.WriteFixedInteger(flags, 2);
+        writer.WriteByte(decimals);
         writer.WriteFixedInteger(0, 2); // filler
         return writer.ToArray();
     }

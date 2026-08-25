@@ -141,6 +141,47 @@ public sealed class TextResultParserTests
     }
 
     [Fact]
+    public async Task ReadAsync_DecimalPrecisionSelectsMaterializedType()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        // StarRocks reports a DECIMAL's wire column length as precision + 3, plus one more when
+        // the scale is non-zero. decimal(28,12) → 32 fits System.Decimal exactly;
+        // decimal(38,4) → 42 does not.
+        using MemoryStream stream = StarRocksPacketFactory.PayloadStream(
+            firstSequenceId: 1,
+            StarRocksPacketFactory.ColumnDefinition(
+                "narrow",
+                (byte)ColumnType.NewDecimal,
+                columnLength: 32,
+                decimals: 12
+            ),
+            StarRocksPacketFactory.ColumnDefinition(
+                "wide",
+                (byte)ColumnType.NewDecimal,
+                columnLength: 42,
+                decimals: 4
+            ),
+            StarRocksPacketFactory.Eof(),
+            StarRocksPacketFactory.TextRow(
+                "-12.340000000000",
+                "1234567890123456789012345678901234.5678"
+            ),
+            StarRocksPacketFactory.Eof()
+        );
+        var packetReader = new PacketReader(stream);
+        packetReader.ResetSequence(1);
+
+        QueryResult result = await TextResultParser.ReadAsync([0x02], packetReader, null, ct);
+
+        object?[] row = result.Rows[0];
+        Assert.Equal(-12.340000000000m, Assert.IsType<decimal>(row[0]));
+        Assert.Equal(
+            DotRocksDecimal.Parse("1234567890123456789012345678901234.5678"),
+            Assert.IsType<DotRocksDecimal>(row[1])
+        );
+    }
+
+    [Fact]
     public async Task ReadAsync_PreservesBlobValuesAsBytes()
     {
         CancellationToken ct = TestContext.Current.CancellationToken;

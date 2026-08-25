@@ -291,8 +291,7 @@ public sealed class DotRocksDataReader
     public override Type GetFieldType(int ordinal)
     {
         ValidateOrdinal(ordinal);
-        ColumnDefinition column = _columns[ordinal];
-        return ColumnTypeMapper.GetFieldType(column.ColumnType, column.ColumnLength);
+        return ColumnTypeMapper.GetFieldType(_columns[ordinal]);
     }
 
     /// <inheritdoc />
@@ -1019,7 +1018,7 @@ public sealed class DotRocksDataReader
             columns[i] = new DotRocksDbColumn(
                 definition.Name,
                 i,
-                ColumnTypeMapper.GetFieldType(definition.ColumnType, definition.ColumnLength),
+                ColumnTypeMapper.GetFieldType(definition),
                 ColumnTypeMapper.GetDataTypeName(definition.ColumnType),
                 (definition.Flags & NotNullColumnFlag) == 0,
                 definition.Catalog.Length == 0 ? null : definition.Catalog,

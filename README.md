@@ -322,8 +322,14 @@ aggregate-state types `BITMAP`, `HLL`, and `PERCENTILE` are opaque — selecting
 `NULL` over the text protocol — so read them through their StarRocks accessor functions (for example
 `bitmap_to_string(...)`, `hll_cardinality(...)`).
 
-Projecting high-precision StarRocks decimals to `decimal` can throw
-`DotRocksPrecisionLossException`; use `DotRocksDecimal` for lossless values.
+**Reading decimals over ADO.NET.** On both transports a `DECIMAL` column materializes by its
+declared precision: `GetValue`/`GetFieldType` yield `decimal` when every value of the column
+converts exactly (precision ≤ 28) and `DotRocksDecimal` only for wider columns, so generic row
+mappers that pass `GetValue` results through `Convert.ChangeType` receive plain decimals for
+ordinary money columns. `DotRocksDecimal` implements `IConvertible`, so a wide value also
+survives `Convert.ChangeType`; converting one to `decimal` — through `GetDecimal`,
+`GetFieldValue<decimal>`, a cast, or `Convert` — throws `DotRocksPrecisionLossException`
+instead of rounding when the value does not fit. Use `DotRocksDecimal` for lossless access.
 ADO.NET verifies `VARBINARY` / `BLOB` result values as `byte[]`, including
 `GetBytes(...)`; EF Core byte-array mapping remains unsupported until the EF query
 surface is verified end to end.

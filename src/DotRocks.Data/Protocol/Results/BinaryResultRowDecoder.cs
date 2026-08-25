@@ -72,11 +72,7 @@ internal static class BinaryResultRowDecoder
             default:
                 // Decimal, varchar, string, JSON, blob, bit, etc. are length-encoded text.
                 ReadOnlySpan<byte> bytes = reader.ReadLengthEncodedBytes(out _);
-                return ColumnTypeMapper.ParseTextValue(
-                    column.ColumnType,
-                    column.ColumnLength,
-                    bytes
-                );
+                return ColumnTypeMapper.ParseTextValue(column, bytes);
         }
     }
 

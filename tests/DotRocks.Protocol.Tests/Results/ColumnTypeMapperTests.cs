@@ -1,4 +1,5 @@
 using System.Text;
+using DotRocks.Data;
 using DotRocks.Data.Protocol.Results;
 using DotRocks.Data.Protocol.Serialization;
 using Xunit;
@@ -17,7 +18,7 @@ public sealed class ColumnTypeMapperTests
         byte[] bytes = Encoding.UTF8.GetBytes("not-a-number");
 
         Assert.Throws<MalformedPacketException>(() =>
-            ColumnTypeMapper.ParseTextValue((byte)ColumnType.Long, 11, bytes)
+            ColumnTypeMapper.ParseTextValue(Column((byte)ColumnType.Long, 11), bytes)
         );
     }
 
@@ -27,7 +28,7 @@ public sealed class ColumnTypeMapperTests
         byte[] bytes = Encoding.UTF8.GetBytes("99999999999999999999999999");
 
         Assert.Throws<MalformedPacketException>(() =>
-            ColumnTypeMapper.ParseTextValue((byte)ColumnType.Long, 11, bytes)
+            ColumnTypeMapper.ParseTextValue(Column((byte)ColumnType.Long, 11), bytes)
         );
     }
 
@@ -36,7 +37,7 @@ public sealed class ColumnTypeMapperTests
     {
         byte[] bytes = [0x00, 0xFF, 0x10];
 
-        object value = ColumnTypeMapper.ParseTextValue((byte)ColumnType.Bit, 0, bytes);
+        object value = ColumnTypeMapper.ParseTextValue(Column((byte)ColumnType.Bit, 0), bytes);
 
         byte[] result = Assert.IsType<byte[]>(value);
         Assert.Equal(bytes, result);
@@ -45,7 +46,10 @@ public sealed class ColumnTypeMapperTests
     [Fact]
     public void GetFieldType_BitColumn_IsByteArray()
     {
-        Assert.Equal(typeof(byte[]), ColumnTypeMapper.GetFieldType((byte)ColumnType.Bit, 0));
+        Assert.Equal(
+            typeof(byte[]),
+            ColumnTypeMapper.GetFieldType(Column((byte)ColumnType.Bit, 0))
+        );
     }
 
     [Fact]
@@ -54,15 +58,92 @@ public sealed class ColumnTypeMapperTests
         // StarRocks sends BOOLEAN as TINYINT with display length 1, and a wider TINYINT with 4.
         Assert.Equal(
             typeof(bool),
-            ColumnTypeMapper.GetFieldType((byte)ColumnType.Tiny, BooleanLength)
+            ColumnTypeMapper.GetFieldType(Column((byte)ColumnType.Tiny, BooleanLength))
         );
         Assert.Equal(
             typeof(sbyte),
-            ColumnTypeMapper.GetFieldType((byte)ColumnType.Tiny, TinyIntLength)
+            ColumnTypeMapper.GetFieldType(Column((byte)ColumnType.Tiny, TinyIntLength))
         );
         Assert.Equal(
             typeof(short),
-            ColumnTypeMapper.GetFieldType((byte)ColumnType.Short, SmallIntLength)
+            ColumnTypeMapper.GetFieldType(Column((byte)ColumnType.Short, SmallIntLength))
+        );
+    }
+
+    // StarRocks reports a DECIMAL's wire column length as precision + 3, plus one more when the
+    // scale is non-zero (verified live; see FitsInSystemDecimal). Precisions up to 28 always
+    // convert to System.Decimal exactly, so they materialize as decimal; wider ones as
+    // DotRocksDecimal.
+    [Theory]
+    [InlineData(32u, (byte)12)] // decimal(28, 12)
+    [InlineData(14u, (byte)4)] // decimal(10, 4)
+    [InlineData(31u, (byte)0)] // decimal(28, 0)
+    [InlineData(22u, (byte)18)] // decimal(18, 18)
+    public void GetFieldType_DecimalWithinSystemDecimalPrecision_IsDecimal(
+        uint columnLength,
+        byte decimals
+    )
+    {
+        Assert.Equal(
+            typeof(decimal),
+            ColumnTypeMapper.GetFieldType(
+                Column((byte)ColumnType.NewDecimal, columnLength, decimals: decimals)
+            )
+        );
+    }
+
+    [Theory]
+    [InlineData(33u, (byte)2)] // decimal(29, 2)
+    [InlineData(42u, (byte)4)] // decimal(38, 4)
+    [InlineData(32u, (byte)0)] // decimal(29, 0)
+    public void GetFieldType_DecimalBeyondSystemDecimalPrecision_IsDotRocksDecimal(
+        uint columnLength,
+        byte decimals
+    )
+    {
+        Assert.Equal(
+            typeof(DotRocksDecimal),
+            ColumnTypeMapper.GetFieldType(
+                Column((byte)ColumnType.NewDecimal, columnLength, decimals: decimals)
+            )
+        );
+    }
+
+    [Fact]
+    public void ParseTextValue_DecimalWithinSystemDecimalPrecision_ReturnsDecimal()
+    {
+        object value = ColumnTypeMapper.ParseTextValue(
+            Column((byte)ColumnType.NewDecimal, 32, decimals: 12),
+            Encoding.UTF8.GetBytes("-12.340000000000")
+        );
+
+        Assert.Equal(-12.340000000000m, Assert.IsType<decimal>(value));
+    }
+
+    [Fact]
+    public void ParseTextValue_DecimalBeyondSystemDecimalPrecision_ReturnsDotRocksDecimal()
+    {
+        object value = ColumnTypeMapper.ParseTextValue(
+            Column((byte)ColumnType.NewDecimal, 42, decimals: 4),
+            Encoding.UTF8.GetBytes("1234567890123456789012345678901234.5678")
+        );
+
+        Assert.Equal(
+            DotRocksDecimal.Parse("1234567890123456789012345678901234.5678"),
+            Assert.IsType<DotRocksDecimal>(value)
+        );
+    }
+
+    [Fact]
+    public void ParseTextValue_MalformedNarrowDecimal_ThrowsMalformedPacketException()
+    {
+        byte[] bytes = Encoding.UTF8.GetBytes("not-a-decimal");
+
+        Assert.Throws<MalformedPacketException>(() =>
+            ColumnTypeMapper.ParseTextValue(
+                Column((byte)ColumnType.NewDecimal, 32, decimals: 12),
+                bytes
+            )
         );
     }
 
@@ -72,8 +153,7 @@ public sealed class ColumnTypeMapperTests
     public void ParseTextValue_BooleanColumn_ReturnsBool(string text, bool expected)
     {
         object value = ColumnTypeMapper.ParseTextValue(
-            (byte)ColumnType.Tiny,
-            BooleanLength,
+            Column((byte)ColumnType.Tiny, BooleanLength),
             Encoding.UTF8.GetBytes(text)
         );
 
@@ -84,8 +164,7 @@ public sealed class ColumnTypeMapperTests
     public void ParseTextValue_TinyintColumn_ReturnsSByte()
     {
         object value = ColumnTypeMapper.ParseTextValue(
-            (byte)ColumnType.Tiny,
-            TinyIntLength,
+            Column((byte)ColumnType.Tiny, TinyIntLength),
             Encoding.UTF8.GetBytes("-42")
         );
 
@@ -96,8 +175,7 @@ public sealed class ColumnTypeMapperTests
     public void ParseTextValue_SmallintColumn_ReturnsShort()
     {
         object value = ColumnTypeMapper.ParseTextValue(
-            (byte)ColumnType.Short,
-            SmallIntLength,
+            Column((byte)ColumnType.Short, SmallIntLength),
             Encoding.UTF8.GetBytes("1234")
         );
 
@@ -127,8 +205,7 @@ public sealed class ColumnTypeMapperTests
     public void ParseTextValue_TimeColumn_ParsesMySqlDurationText(string text, TimeSpan expected)
     {
         object value = ColumnTypeMapper.ParseTextValue(
-            (byte)ColumnType.Time,
-            0,
+            Column((byte)ColumnType.Time, 0),
             Encoding.UTF8.GetBytes(text)
         );
 
@@ -151,7 +228,27 @@ public sealed class ColumnTypeMapperTests
         byte[] bytes = Encoding.UTF8.GetBytes(text);
 
         Assert.Throws<MalformedPacketException>(() =>
-            ColumnTypeMapper.ParseTextValue((byte)ColumnType.Time, 0, bytes)
+            ColumnTypeMapper.ParseTextValue(Column((byte)ColumnType.Time, 0), bytes)
         );
     }
+
+    private static ColumnDefinition Column(
+        byte columnType,
+        uint columnLength,
+        ushort flags = 0,
+        byte decimals = 0
+    ) =>
+        new(
+            "def",
+            string.Empty,
+            string.Empty,
+            string.Empty,
+            "c",
+            "c",
+            CharacterSet: 33,
+            columnLength,
+            columnType,
+            flags,
+            decimals
+        );
 }

@@ -374,13 +374,7 @@ internal static class TextResultParser
         for (int i = 0; i < columns.Count; i++)
         {
             ReadOnlySpan<byte> bytes = reader.ReadLengthEncodedBytes(out bool isNull);
-            values[i] = isNull
-                ? null
-                : ColumnTypeMapper.ParseTextValue(
-                    columns[i].ColumnType,
-                    columns[i].ColumnLength,
-                    bytes
-                );
+            values[i] = isNull ? null : ColumnTypeMapper.ParseTextValue(columns[i], bytes);
         }
 
         if (!reader.IsAtEnd)

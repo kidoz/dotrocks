@@ -21,6 +21,8 @@ public class SerializationBenchmarks
 {
     private static readonly byte[] IntegerText = Encoding.UTF8.GetBytes("1234567");
     private static readonly byte[] StringText = Encoding.UTF8.GetBytes("the quick brown fox");
+    private static readonly ColumnDefinition IntegerColumn = Column((byte)ColumnType.Long, 11);
+    private static readonly ColumnDefinition StringColumn = Column((byte)ColumnType.VarString, 0);
 
     [Benchmark]
     [SuppressMessage(
@@ -59,7 +61,7 @@ public class SerializationBenchmarks
         Justification = "BenchmarkDotNet requires public instance benchmark methods."
     )]
     public object ParseIntegerValue() =>
-        ColumnTypeMapper.ParseTextValue((byte)ColumnType.Long, columnLength: 11, IntegerText);
+        ColumnTypeMapper.ParseTextValue(IntegerColumn, IntegerText);
 
     [Benchmark]
     [SuppressMessage(
@@ -67,8 +69,7 @@ public class SerializationBenchmarks
         "CA1822:Mark members as static",
         Justification = "BenchmarkDotNet requires public instance benchmark methods."
     )]
-    public object ParseStringValue() =>
-        ColumnTypeMapper.ParseTextValue((byte)ColumnType.VarString, columnLength: 0, StringText);
+    public object ParseStringValue() => ColumnTypeMapper.ParseTextValue(StringColumn, StringText);
 
     [Benchmark]
     [SuppressMessage(
@@ -77,4 +78,19 @@ public class SerializationBenchmarks
         Justification = "BenchmarkDotNet requires public instance benchmark methods."
     )]
     public string FormatSqlLiteral() => SqlLiteralFormatter.Format("O'Brien \\ \"value\"");
+
+    private static ColumnDefinition Column(byte columnType, uint columnLength) =>
+        new(
+            "def",
+            string.Empty,
+            string.Empty,
+            string.Empty,
+            "c",
+            "c",
+            CharacterSet: 33,
+            columnLength,
+            columnType,
+            Flags: 0,
+            Decimals: 0
+        );
 }

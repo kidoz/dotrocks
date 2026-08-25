@@ -9,6 +9,18 @@ version is derived from the release tag at publish time.
 ## [Unreleased]
 
 ### Fixed
+- The MySQL protocol materializes `DECIMAL` columns by their declared precision, matching the
+  Arrow Flight SQL transport and the documented mapping: `GetValue`, `GetFieldType`, and the
+  column schema report `decimal` when every value of the column converts exactly (precision
+  ≤ 28) and `DotRocksDecimal` only for wider columns. Previously every decimal — however
+  narrow — surfaced as `DotRocksDecimal` from the untyped reader surface, so generic row
+  mappers that pass `GetValue` results through `Convert.ChangeType` failed with
+  `InvalidCastException: Object must implement IConvertible` on ordinary money columns. The
+  precision derives from the StarRocks wire metadata (column length = precision + 3, plus one
+  when the scale is non-zero; verified live on StarRocks 3.5.5 and 4.0.7 for cast expressions,
+  table columns, and aggregate-widened results). Typed access is unchanged in both directions:
+  `GetDecimal`/`GetFieldValue<decimal>` unwrap a wide value when it fits, and
+  `GetFieldValue<DotRocksDecimal>` wraps a narrow one.
 - `DotRocksDecimal` implements `IConvertible`, so a wide `DECIMAL` read through `GetValue`
   also survives `Convert.ChangeType` and the `Convert.To*` family. Conversions stay lossless:
   `decimal` conversion throws `DotRocksPrecisionLossException` rather than rounding, integral

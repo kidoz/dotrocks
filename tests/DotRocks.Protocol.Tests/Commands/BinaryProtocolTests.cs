@@ -90,6 +90,36 @@ public sealed class BinaryProtocolTests
     }
 
     [Fact]
+    public void Decode_DecimalColumns_MaterializeByPrecisionMatchingGetFieldType()
+    {
+        // decimal(28,12): wire length 32 (precision + 3 + point) fits System.Decimal;
+        // decimal(38,4): wire length 42 does not. The binary protocol carries decimals as
+        // length-encoded text, so the decoder must apply the same precision rule as the
+        // text protocol.
+        ColumnDefinition narrowColumn = Column(0xF6, columnLength: 32, decimals: 12); // NEWDECIMAL
+        ColumnDefinition wideColumn = Column(0xF6, columnLength: 42, decimals: 4);
+
+        byte[] narrowText = Encoding.UTF8.GetBytes("-12.340000000000");
+        byte[] wideText = Encoding.UTF8.GetBytes("1234567890123456789012345678901234.5678");
+        var row = new List<byte> { 0x00, 0x00 }; // header + 2-column NULL bitmap (nothing null)
+        row.Add((byte)narrowText.Length);
+        row.AddRange(narrowText);
+        row.Add((byte)wideText.Length);
+        row.AddRange(wideText);
+
+        object?[] values = BinaryResultRowDecoder.Decode(row.ToArray(), [narrowColumn, wideColumn]);
+
+        // The boxed runtime types must match GetFieldType so consumers can unbox GetValue.
+        Assert.Equal(-12.340000000000m, Assert.IsType<decimal>(values[0]));
+        Assert.Equal(
+            DotRocksDecimal.Parse("1234567890123456789012345678901234.5678"),
+            Assert.IsType<DotRocksDecimal>(values[1])
+        );
+        Assert.Equal(typeof(decimal), ColumnTypeMapper.GetFieldType(narrowColumn));
+        Assert.Equal(typeof(DotRocksDecimal), ColumnTypeMapper.GetFieldType(wideColumn));
+    }
+
+    [Fact]
     public void Decode_YearColumn_BoxesIntMatchingGetFieldType()
     {
         ColumnDefinition yearColumn = Column(0x0D); // YEAR
@@ -102,7 +132,7 @@ public sealed class BinaryProtocolTests
         // The boxed runtime type must match GetFieldType (int) so consumers can unbox GetValue.
         int year = Assert.IsType<int>(values[0]);
         Assert.Equal(2024, year);
-        Assert.Equal(typeof(int), ColumnTypeMapper.GetFieldType(0x0D, 4));
+        Assert.Equal(typeof(int), ColumnTypeMapper.GetFieldType(yearColumn));
     }
 
     [Fact]
@@ -161,7 +191,7 @@ public sealed class BinaryProtocolTests
         );
     }
 
-    private static ColumnDefinition Column(byte type) =>
+    private static ColumnDefinition Column(byte type, uint columnLength = 255, byte decimals = 0) =>
         new(
             "def",
             "db",
@@ -170,9 +200,9 @@ public sealed class BinaryProtocolTests
             "c",
             "c",
             CharacterSet: 33,
-            ColumnLength: 255,
+            columnLength,
             type,
             Flags: 0,
-            Decimals: 0
+            decimals
         );
 }

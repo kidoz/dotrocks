@@ -51,14 +51,23 @@ internal static class ColumnTypeMapper
     // convention); a wider TINYINT uses length 4. This is how BOOLEAN is distinguished on the wire.
     private const uint BooleanColumnLength = 1;
 
-    public static Type GetFieldType(byte type, uint columnLength) =>
-        ToColumnType(type) switch
+    // The largest System.Decimal holds only part of the 29-digit range, so 28 digits of declared
+    // precision is the widest DECIMAL whose every value converts exactly. Mirrors the Arrow
+    // Flight SQL transport (ArrowValueConverter).
+    private const int MaxSystemDecimalPrecision = 28;
+
+    public static Type GetFieldType(ColumnDefinition column) =>
+        ToColumnType(column.ColumnType) switch
         {
-            ColumnType.Tiny => columnLength == BooleanColumnLength ? typeof(bool) : typeof(sbyte),
+            ColumnType.Tiny => column.ColumnLength == BooleanColumnLength
+                ? typeof(bool)
+                : typeof(sbyte),
             ColumnType.Short => typeof(short),
             ColumnType.Long or ColumnType.Int24 or ColumnType.Year => typeof(int),
             ColumnType.LongLong => typeof(long),
-            ColumnType.Decimal or ColumnType.NewDecimal => typeof(DotRocksDecimal),
+            ColumnType.Decimal or ColumnType.NewDecimal => FitsInSystemDecimal(column)
+                ? typeof(decimal)
+                : typeof(DotRocksDecimal),
             ColumnType.Float => typeof(float),
             ColumnType.Double => typeof(double),
             ColumnType.Date or ColumnType.NewDate or ColumnType.DateTime or ColumnType.Timestamp =>
@@ -77,12 +86,12 @@ internal static class ColumnTypeMapper
             or ColumnType.VarString
             or ColumnType.String
             or ColumnType.Geometry => typeof(string),
-            _ => throw CreateUnsupportedTypeException(type),
+            _ => throw CreateUnsupportedTypeException(column.ColumnType),
         };
 
-    public static object ParseTextValue(byte type, uint columnLength, ReadOnlySpan<byte> bytes)
+    public static object ParseTextValue(ColumnDefinition column, ReadOnlySpan<byte> bytes)
     {
-        ColumnType columnType = ToColumnType(type);
+        ColumnType columnType = ToColumnType(column.ColumnType);
 
         // Binary types (BLOB family and BIT) are raw bytes; decoding them as UTF-8 would corrupt
         // non-text byte sequences. Return them without touching the text decoder.
@@ -103,7 +112,9 @@ internal static class ColumnTypeMapper
             // that need culture/format-exact parsing or return text decode the bytes to a string.
             return columnType switch
             {
-                ColumnType.Tiny when columnLength == BooleanColumnLength => ParseBoolean(bytes),
+                ColumnType.Tiny when column.ColumnLength == BooleanColumnLength => ParseBoolean(
+                    bytes
+                ),
                 ColumnType.Tiny => sbyte.Parse(
                     bytes,
                     NumberStyles.Integer,
@@ -124,6 +135,12 @@ internal static class ColumnTypeMapper
                     NumberStyles.Integer,
                     CultureInfo.InvariantCulture
                 ),
+                ColumnType.Decimal or ColumnType.NewDecimal when FitsInSystemDecimal(column) =>
+                    decimal.Parse(
+                        bytes,
+                        NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint,
+                        CultureInfo.InvariantCulture
+                    ),
                 ColumnType.Decimal or ColumnType.NewDecimal => DotRocksDecimal.Parse(
                     Encoding.UTF8.GetString(bytes)
                 ),
@@ -158,17 +175,35 @@ internal static class ColumnTypeMapper
                 or ColumnType.VarString
                 or ColumnType.String
                 or ColumnType.Geometry => Encoding.UTF8.GetString(bytes),
-                _ => throw CreateUnsupportedTypeException(type),
+                _ => throw CreateUnsupportedTypeException(column.ColumnType),
             };
         }
         catch (Exception ex) when (ex is FormatException or OverflowException or ArgumentException)
         {
             // The server returned a value that does not match the column's declared type.
             throw new MalformedPacketException(
-                $"StarRocks returned a value that is not valid for column type {columnType} (0x{type:X2}).",
+                $"StarRocks returned a value that is not valid for column type {columnType} (0x{column.ColumnType:X2}).",
                 ex
             );
         }
+    }
+
+    // StarRocks reports a DECIMAL's wire column length as the declared precision plus 3, plus one
+    // more for the decimal point when the scale is non-zero — not the MySQL convention of
+    // precision plus sign plus point. Verified live against StarRocks (cast expressions, table
+    // columns, and aggregate-widened results all agree; the decimals byte carries the exact
+    // scale). Deriving the precision here keeps the MySQL protocol consistent with the Arrow
+    // Flight SQL transport: a column whose every value fits System.Decimal materializes as
+    // decimal, and only a wider one as DotRocksDecimal.
+    private static bool FitsInSystemDecimal(ColumnDefinition column)
+    {
+        long precision = column.ColumnLength - 3;
+        if (column.Decimals > 0)
+        {
+            precision--;
+        }
+
+        return precision <= MaxSystemDecimalPrecision;
     }
 
     // The MySQL TIME range is -838:59:59 to 838:59:59; a value outside it is not a legal wire value.

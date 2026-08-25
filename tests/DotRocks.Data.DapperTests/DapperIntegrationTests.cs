@@ -100,6 +100,33 @@ public sealed class DapperIntegrationTests
     }
 
     [Fact]
+    public async Task QuerySingleAsync_MapsDecimalColumnsToPocoDecimals()
+    {
+        IntegrationTestEnvironment.SkipUnlessEnabled();
+
+        using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
+        await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        // Dapper materializes through GetValue, so a DECIMAL within System.Decimal precision
+        // must box as a plain decimal for the POCO decimal properties to bind.
+        DecimalRow row = await connection
+            .QuerySingleAsync<DecimalRow>(
+                new CommandDefinition(
+                    """
+                    SELECT
+                        CAST('12.34' AS DECIMAL(28, 12)) AS Amount,
+                        CAST(NULL AS DECIMAL(28, 12)) AS OptionalAmount
+                    """,
+                    cancellationToken: TestContext.Current.CancellationToken
+                )
+            )
+            .ConfigureAwait(true);
+
+        Assert.Equal(12.34m, row.Amount);
+        Assert.Null(row.OptionalAmount);
+    }
+
+    [Fact]
     public async Task Transaction_Commit_MakesInsertedRowsVisible()
     {
         IntegrationTestEnvironment.SkipUnlessEnabled();
@@ -341,5 +368,17 @@ public sealed class DapperIntegrationTests
         public int Id { get; set; }
 
         public string Name { get; set; } = string.Empty;
+    }
+
+    [SuppressMessage(
+        "Performance",
+        "CA1812:Avoid uninstantiated internal classes",
+        Justification = "Dapper instantiates this test POCO through reflection."
+    )]
+    private sealed class DecimalRow
+    {
+        public decimal Amount { get; set; }
+
+        public decimal? OptionalAmount { get; set; }
     }
 }

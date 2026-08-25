@@ -133,7 +133,8 @@ A Flight transaction is marked completed only once the server confirms it, so a 
 StarRocks decimal columns declared with more precision than `System.Decimal` can represent (up to
 `DECIMAL(38, s)`) are reported and materialized as `DotRocks.Data.DotRocksDecimal`. `GetDecimal`
 still converts such a value when it fits, and throws `DotRocksPrecisionLossException` when it does
-not.
+not. The MySQL-protocol reader applies the same precision rule, so both transports materialize
+the same CLR type for a given column.
 
 Named `@parameter` values are validated and escaped with the same binder used by `DotRocks.Data`.
 They are sent as SQL literals because the current transport does not expose server-prepared bind
