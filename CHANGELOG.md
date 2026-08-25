@@ -8,6 +8,20 @@ version is derived from the release tag at publish time.
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-08-25
+
+### Changed
+- Dependencies moved to their latest stable versions. The EF Core provider packages now require
+  `Microsoft.EntityFrameworkCore.*` 10.0.11, and the Flight SQL transport requires
+  `Grpc.Net.Client`/`Grpc.Core.Api` 2.83.0. The analyzers and code fixes build against Roslyn
+  5.9.0, which raises the minimum compiler that loads them — older SDK bands skip the analyzers
+  with a compiler-version warning instead of running them.
+- The repository builds with the .NET SDK pinned at 10.0.400 (rolling forward across feature
+  bands instead of failing when only a newer band is installed), and `dotnet test` runs in the
+  Microsoft.Testing.Platform mode of the .NET 10 SDK — required by xunit.v3 4.x, which no longer
+  supports the classic VSTest target. Test projects are passed as `--project` and the solution as
+  `--solution`.
+
 ### Fixed
 - The MySQL protocol materializes `DECIMAL` columns by their declared precision, matching the
   Arrow Flight SQL transport and the documented mapping: `GetValue`, `GetFieldType`, and the
@@ -475,7 +489,8 @@ version is derived from the release tag at publish time.
 - Stream Load refuses to forward credentials over a downgraded (HTTPS→HTTP) redirect.
 - NuGet vulnerability auditing and CodeQL analysis in CI.
 
-[Unreleased]: https://github.com/kidoz/dotrocks/compare/v1.4.2...HEAD
+[Unreleased]: https://github.com/kidoz/dotrocks/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/kidoz/dotrocks/compare/v1.4.2...v1.5.0
 [1.4.2]: https://github.com/kidoz/dotrocks/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/kidoz/dotrocks/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/kidoz/dotrocks/compare/v1.3.5...v1.4.0
