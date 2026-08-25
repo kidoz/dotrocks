@@ -35,14 +35,14 @@ build:
 
 # Run the server-free unit and protocol tests.
 test:
-    dotnet test DotRocks.slnx --configuration {{config}} --no-build
+    dotnet test --solution DotRocks.slnx --configuration {{config}} --no-build
 
 # Run integration tests against an already-running StarRocks FE.
 integration-test:
-    DOTROCKS_RUN_INTEGRATION=1 DOTROCKS_FE_HTTP_PORT={{fe_http_port}} dotnet test tests/DotRocks.Data.IntegrationTests --configuration {{config}} --no-build
-    DOTROCKS_RUN_INTEGRATION=1 dotnet test tests/DotRocks.Data.DapperTests --configuration {{config}} --no-build
-    DOTROCKS_RUN_INTEGRATION=1 dotnet test tests/DotRocks.EntityFrameworkCore.IntegrationTests --configuration {{config}} --no-build
-    DOTROCKS_RUN_INTEGRATION=1 dotnet test tests/DotRocks.FlightSql.IntegrationTests --configuration {{config}} --no-build
+    DOTROCKS_RUN_INTEGRATION=1 DOTROCKS_FE_HTTP_PORT={{fe_http_port}} dotnet test --project tests/DotRocks.Data.IntegrationTests --configuration {{config}} --no-build
+    DOTROCKS_RUN_INTEGRATION=1 dotnet test --project tests/DotRocks.Data.DapperTests --configuration {{config}} --no-build
+    DOTROCKS_RUN_INTEGRATION=1 dotnet test --project tests/DotRocks.EntityFrameworkCore.IntegrationTests --configuration {{config}} --no-build
+    DOTROCKS_RUN_INTEGRATION=1 dotnet test --project tests/DotRocks.FlightSql.IntegrationTests --configuration {{config}} --no-build
 
 # Produce NuGet packages.
 pack:

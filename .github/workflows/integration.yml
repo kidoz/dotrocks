@@ -120,16 +120,16 @@ jobs:
           done
 
       - name: Run ADO.NET integration tests
-        run: dotnet test tests/DotRocks.Data.IntegrationTests --configuration Release --no-build
+        run: dotnet test --project tests/DotRocks.Data.IntegrationTests --configuration Release --no-build
 
       - name: Run Dapper integration tests
-        run: dotnet test tests/DotRocks.Data.DapperTests --configuration Release --no-build
+        run: dotnet test --project tests/DotRocks.Data.DapperTests --configuration Release --no-build
 
       - name: Run EF Core integration tests
-        run: dotnet test tests/DotRocks.EntityFrameworkCore.IntegrationTests --configuration Release --no-build
+        run: dotnet test --project tests/DotRocks.EntityFrameworkCore.IntegrationTests --configuration Release --no-build
 
       - name: Run Flight SQL integration tests
-        run: dotnet test tests/DotRocks.FlightSql.IntegrationTests --configuration Release --no-build
+        run: dotnet test --project tests/DotRocks.FlightSql.IntegrationTests --configuration Release --no-build
 
       - name: Collect StarRocks logs
         if: always()

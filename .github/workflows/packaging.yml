@@ -41,7 +41,7 @@ jobs:
         run: dotnet build DotRocks.slnx --configuration Release --no-restore
 
       - name: Run package tests
-        run: dotnet test tests/DotRocks.PackageTests/DotRocks.PackageTests.csproj --configuration Release --no-build
+        run: dotnet test --project tests/DotRocks.PackageTests/DotRocks.PackageTests.csproj --configuration Release --no-build
 
       - name: Pack
         run: dotnet pack DotRocks.slnx --configuration Release --no-build --output artifacts/packages

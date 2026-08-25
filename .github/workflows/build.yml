@@ -51,11 +51,11 @@ jobs:
       # unit/protocol/analyzer/packaging suites here.
       - name: Test
         run: |
-          dotnet test tests/DotRocks.Protocol.Tests --configuration Release --no-build
-          dotnet test tests/DotRocks.EntityFrameworkCore.Tests --configuration Release --no-build
-          dotnet test tests/DotRocks.Analyzers.Tests --configuration Release --no-build
-          dotnet test tests/DotRocks.Benchmarks.Tests --configuration Release --no-build
-          dotnet test tests/DotRocks.PackageTests --configuration Release --no-build
+          dotnet test --project tests/DotRocks.Protocol.Tests --configuration Release --no-build
+          dotnet test --project tests/DotRocks.EntityFrameworkCore.Tests --configuration Release --no-build
+          dotnet test --project tests/DotRocks.Analyzers.Tests --configuration Release --no-build
+          dotnet test --project tests/DotRocks.Benchmarks.Tests --configuration Release --no-build
+          dotnet test --project tests/DotRocks.PackageTests --configuration Release --no-build
 
   # The budget-gated benchmarks are server-free but take minutes, so they run beside the build
   # job rather than extending it. Without this the catalog in PerformanceBudget.cs is only ever
