@@ -1,7 +1,7 @@
 # DotRocks
 
 [![Language](https://img.shields.io/badge/language-C%23-512BD4)](https://learn.microsoft.com/dotnet/csharp/)
-[![.NET SDK](https://img.shields.io/badge/.NET%20SDK-10.0.301-512BD4)](https://github.com/kidoz/dotrocks/blob/main/global.json)
+[![.NET SDK](https://img.shields.io/badge/.NET%20SDK-10.0.400-512BD4)](https://github.com/kidoz/dotrocks/blob/main/global.json)
 [![License](https://img.shields.io/badge/license-MIT-blue)](https://github.com/kidoz/dotrocks/blob/main/LICENSE)
 
 **DotRocks for StarRocks** — a native .NET driver, Entity Framework Core provider, and
@@ -23,7 +23,7 @@ Roslyn analyzer suite built specifically for [StarRocks](https://www.starrocks.i
 
 ## Status
 
-The latest tagged release is DotRocks 1.4.2. The `main` branch is post-1.4.2; this
+The latest tagged release is DotRocks 1.5.0. The `main` branch is post-1.5.0; this
 README tracks `main`, and unreleased changes are listed in
 [CHANGELOG.md](https://github.com/kidoz/dotrocks/blob/main/CHANGELOG.md).
 The ADO.NET driver (`DotRocks.Data`), EF Core provider (`DotRocks.EntityFrameworkCore`),
@@ -345,13 +345,13 @@ output.
 Package consumption:
 
 ```xml
-<PackageReference Include="DotRocks.Data" Version="1.4.2" />
-<PackageReference Include="DotRocks.EntityFrameworkCore" Version="1.4.2" />
-<PackageReference Include="DotRocks.EntityFrameworkCore.Design" Version="1.4.2" PrivateAssets="all" />
+<PackageReference Include="DotRocks.Data" Version="1.5.0" />
+<PackageReference Include="DotRocks.EntityFrameworkCore" Version="1.5.0" />
+<PackageReference Include="DotRocks.EntityFrameworkCore.Design" Version="1.5.0" PrivateAssets="all" />
 <!-- Optional, experimental Arrow Flight SQL transport. -->
-<PackageReference Include="DotRocks.FlightSql" Version="1.4.2" />
-<PackageReference Include="DotRocks.Analyzers" Version="1.4.2" PrivateAssets="all" />
-<PackageReference Include="DotRocks.Analyzers.CodeFixes" Version="1.4.2" PrivateAssets="all" />
+<PackageReference Include="DotRocks.FlightSql" Version="1.5.0" />
+<PackageReference Include="DotRocks.Analyzers" Version="1.5.0" PrivateAssets="all" />
+<PackageReference Include="DotRocks.Analyzers.CodeFixes" Version="1.5.0" PrivateAssets="all" />
 ```
 
 The test suite validates these packages through a local NuGet-source consumer project
