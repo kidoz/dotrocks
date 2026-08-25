@@ -35,7 +35,28 @@ public sealed class StarRocksIntegrationDatabaseFixture : IAsyncLifetime
     public static string TransactionDatabaseName { get; } =
         "dotrocks_tx_" + Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture)[..12];
 
-    public ValueTask InitializeAsync() => ValueTask.CompletedTask;
+    [SuppressMessage(
+        "Security",
+        "CA2100:Review SQL queries for security vulnerabilities",
+        Justification = "The database name is generated internally and never uses user input."
+    )]
+    public async ValueTask InitializeAsync()
+    {
+        if (!IntegrationTestEnvironment.IsEnabled)
+        {
+            return;
+        }
+
+        // Some tests put this database in their connection string without creating it (for
+        // example a plain open/close), so it must exist before the first test in the collection
+        // runs — test execution order is not guaranteed. The per-test
+        // CREATE DATABASE IF NOT EXISTS calls stay as harmless no-ops.
+        using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
+        await connection.OpenAsync(CancellationToken.None).ConfigureAwait(false);
+        using DbCommand command = connection.CreateCommand();
+        command.CommandText = $"CREATE DATABASE IF NOT EXISTS {TransactionDatabaseName}";
+        await command.ExecuteNonQueryAsync(CancellationToken.None).ConfigureAwait(false);
+    }
 
     [SuppressMessage(
         "Security",
