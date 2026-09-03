@@ -1,7 +1,8 @@
 # StarRocks 4.x Driver Developer Notes
 
 Source snapshot: 2026-06-25. Live validation: 2026-06-25 against
-`starrocks/allin1-ubuntu:4.0.7` and compatibility checks against `3.5.5`.
+`starrocks/allin1-ubuntu:4.0.7` and compatibility checks against `3.5.5`; re-validated
+2026-09-03 against `4.1.4` and `3.5.21`, which is the current CI matrix.
 
 This document summarizes StarRocks 4.x behavior that matters when building and
 maintaining DotRocks. It is research guidance, not a replacement for live
@@ -303,7 +304,7 @@ Minimum useful matrix:
 | --- | --- |
 | 4.0.7+ | Primary supported test baseline. |
 | 4.0 latest patch | Run compatibility smoke and protocol characterization before release. |
-| 4.1.x | Track separately after 4.0 surface is stable. Beware downgrade and container-image notes in 4.1 release notes. |
+| 4.1.4 | In the live CI matrix. Over the MySQL protocol, 4.1 types `ARRAY`/`MAP`/`STRUCT` results as `STRING` where 4.0 sends `VAR_STRING`; the JSON text is unchanged. Beware downgrade and container-image notes in 4.1 release notes. |
 | 3.5.x | Secondary/back-compat target only after 4.0 behavior is explicit. |
 
 For each StarRocks minor/patch line, verify:

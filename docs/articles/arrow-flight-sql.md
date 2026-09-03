@@ -205,5 +205,5 @@ supported.
 The package has in-process protocol tests for reads, standard update `DoPut`, authorization,
 parameter binding, transactions, ADO.NET materialization, and EF Core queries. The live CI matrix
 enables FE and BE Flight endpoints and runs Flight reads, EF Core queries, and explicitly routed
-MySQL writes against StarRocks 3.5.5 and 4.0.7. Comparative server-backed benchmarks cover MySQL
+MySQL writes against StarRocks 3.5.21 and 4.1.4. Comparative server-backed benchmarks cover MySQL
 rows, Flight rows, and direct Arrow batches.

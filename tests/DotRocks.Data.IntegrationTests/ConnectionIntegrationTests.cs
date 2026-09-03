@@ -10,6 +10,9 @@ namespace DotRocks.Data.IntegrationTests;
 [Collection("StarRocks integration")]
 public sealed class ConnectionIntegrationTests
 {
+    /// <summary>The wire types StarRocks uses for JSON-formatted complex values, by version.</summary>
+    private static readonly string[] JsonTextWireTypes = ["VAR_STRING", "STRING"];
+
     // Per-run Guid-suffixed database owned (and dropped) by StarRocksIntegrationDatabaseFixture.
     private static readonly string TransactionDatabaseName =
         StarRocksIntegrationDatabaseFixture.TransactionDatabaseName;
@@ -346,9 +349,14 @@ public sealed class ConnectionIntegrationTests
             await reader.ReadAsync(TestContext.Current.CancellationToken).ConfigureAwait(true)
         );
 
-        // ARRAY/MAP/STRUCT return over the text protocol typed as VAR_STRING (JSON returns as
-        // STRING) and are serialized as JSON-formatted text, so DotRocksJson reads them losslessly.
-        Assert.Equal("VAR_STRING", reader.GetDataTypeName(0), StringComparer.OrdinalIgnoreCase);
+        // ARRAY/MAP/STRUCT return over the text protocol as JSON-formatted text, so DotRocksJson
+        // reads them losslessly. StarRocks 3.5 and 4.0 type them VAR_STRING (JSON returns as
+        // STRING); 4.1 types all of them STRING. Neither is distinguishable from a plain string.
+        Assert.Contains(
+            reader.GetDataTypeName(0),
+            JsonTextWireTypes,
+            StringComparer.OrdinalIgnoreCase
+        );
         DotRocksJson value = await reader
             .GetFieldValueAsync<DotRocksJson>(0, TestContext.Current.CancellationToken)
             .ConfigureAwait(true);

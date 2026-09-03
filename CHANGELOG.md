@@ -9,6 +9,11 @@ version is derived from the release tag at publish time.
 ## [Unreleased]
 
 ### Changed
+- The live integration matrix — CI and the local `just starrocks-up` default — moves from
+  StarRocks 3.5.5 and 4.0.7 to 3.5.21 and 4.1.4, the latest 3.x and 4.x images. Every driver,
+  Dapper, EF Core, and Flight SQL integration suite passes on both. One characterization changed:
+  over the MySQL protocol, 4.1 types `ARRAY`/`MAP`/`STRUCT` results as `STRING` where 3.5 and 4.0
+  send `VAR_STRING` (the JSON-formatted text is identical, and `DotRocksJson` reads both).
 - EF Core models that declare an alternate key, a check constraint, or a foreign key (with or
   without navigation properties) are rejected at model validation, and migrations refuse a
   `CREATE TABLE` that carries a unique, check, or foreign-key constraint as well as the standalone

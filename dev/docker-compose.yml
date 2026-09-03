@@ -7,8 +7,8 @@ services:
       context: .
       dockerfile: Dockerfile.starrocks-flight
       args:
-        STARROCKS_VERSION: "${STARROCKS_VERSION:-4.0.7}"
-    image: dotrocks/starrocks-flight:${STARROCKS_VERSION:-4.0.7}
+        STARROCKS_VERSION: "${STARROCKS_VERSION:-4.1.4}"
+    image: dotrocks/starrocks-flight:${STARROCKS_VERSION:-4.1.4}
     container_name: dotrocks-starrocks
     ports:
       # FE MySQL-protocol query port (DotRocks.Data connects here).

@@ -28,7 +28,7 @@ README tracks `main`, and unreleased changes are listed in
 [CHANGELOG.md](https://github.com/kidoz/dotrocks/blob/main/CHANGELOG.md).
 The ADO.NET driver (`DotRocks.Data`), EF Core provider (`DotRocks.EntityFrameworkCore`),
 Flight SQL transport (`DotRocks.FlightSql`), and analyzer suite (`DotRocks.Analyzers`) are
-validated against live StarRocks 3.5.5 and 4.0.7 in CI. Supported features are implemented and
+validated against live StarRocks 3.5.21 and 4.1.4 in CI. Supported features are implemented and
 tested; unsupported behavior fails explicitly.
 
 DotRocks implements **its own** managed StarRocks client protocol. It takes no runtime
@@ -315,8 +315,9 @@ and `DotRocksJson` (below) is an ADO.NET reader feature, not an EF type mapping.
 
 **Reading JSON and complex types over ADO.NET.** The `DotRocksDataReader` returns `JSON`, `ARRAY`,
 `MAP`, and `STRUCT` values as a raw `string` by default. For the cases exercised by the integration
-suite, StarRocks 4.0.7 sends `JSON` typed as `STRING` and `ARRAY` / `MAP` / `STRUCT` typed as
-`VAR_STRING`, each serialized as JSON-formatted text (for example `[1,2,3]`, `{"k1":1}`,
+suite, StarRocks 3.5 and 4.0 send `JSON` typed as `STRING` and `ARRAY` / `MAP` / `STRUCT` typed as
+`VAR_STRING`, while 4.1 types all four as `STRING`; each is serialized as JSON-formatted text (for
+example `[1,2,3]`, `{"k1":1}`,
 `{"x":1,"y":"two"}`, including nested values, `null` elements, escaped strings, and decimal/date
 values). None are distinguishable from a plain string by wire type. For lossless, opt-in typed
 access call `reader.GetFieldValue<DotRocksJson>(ordinal)`: `DotRocksJson` preserves the server's
