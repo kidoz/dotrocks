@@ -18,6 +18,10 @@ version is derived from the release tag at publish time.
   matching what the same failure produces during command submission. Previously the row loop
   rethrew the raw `IOException`, or an internal parser exception type callers could not name, and
   `IsTransient` was unavailable for retry decisions.
+- Cancelling the token passed to `ExecuteReaderAsync` after the result set has been fully read no
+  longer aborts the connection. The abort hook stayed registered until the reader was disposed, so
+  a request-abort token firing between the last `ReadAsync` and disposal discarded a healthy
+  pooled socket and left the `DotRocksConnection` closed.
 
 ## [1.5.0] - 2026-08-25
 

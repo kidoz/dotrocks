@@ -1247,6 +1247,12 @@ public sealed class DotRocksDataReader
 
         _connectionCompletionReported = true;
         _connection?.CompleteActiveReader(this, reusable);
+
+        // The result set is done with the connection, so the caller's token must no longer be
+        // able to abort it: a cancellation that lands between the last row and disposal would
+        // otherwise discard a healthy pooled socket and close the logical connection.
+        _operationAbortRegistration.Unregister();
+        _operationAbortRegistration = default;
     }
 
     private void ValidateReadableRow()

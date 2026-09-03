@@ -182,4 +182,50 @@ public sealed class DotRocksDataReaderCancellationTests
             release.TrySetResult();
         }
     }
+
+    [Fact]
+    public async Task CancelAfterResultSetIsConsumed_LeavesTheConnectionOpenAndReusable()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using var server = FakeStarRocksServer.Start(async stream =>
+        {
+            await FakeStarRocksServer.CompleteAuthenticationAsync(stream).ConfigureAwait(true);
+            await FakeStarRocksServer
+                .ReadCommandAndReplyResultSetAsync(stream, "1", "2")
+                .ConfigureAwait(true);
+            await FakeStarRocksServer.ReadCommandAndReplyOkAsync(stream).ConfigureAwait(true);
+        });
+
+        using var connection = new DotRocksConnection(server.ConnectionString);
+        await connection.OpenAsync(ct).ConfigureAwait(true);
+        using DbCommand command = connection.CreateCommand();
+        command.CommandText = "SELECT value FROM finished";
+
+        using var requestAborted = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        int rows = 0;
+        using (
+            DbDataReader reader = await command
+                .ExecuteReaderAsync(requestAborted.Token)
+                .ConfigureAwait(true)
+        )
+        {
+            while (await reader.ReadAsync(requestAborted.Token).ConfigureAwait(true))
+            {
+                rows++;
+            }
+
+            // The caller's token fires after the last row but before the reader is disposed — a
+            // request torn down once its response is complete. No I/O is in flight, so the
+            // healthy pooled connection must survive it.
+            await requestAborted.CancelAsync().ConfigureAwait(true);
+        }
+
+        Assert.Equal(2, rows);
+        Assert.Equal(ConnectionState.Open, connection.State);
+
+        using DbCommand followUp = connection.CreateCommand();
+        followUp.CommandText = "SELECT 1";
+        await followUp.ExecuteNonQueryAsync(ct).ConfigureAwait(true);
+        Assert.Equal(1, server.ConnectionCount);
+    }
 }
