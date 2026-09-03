@@ -784,6 +784,44 @@ public sealed class DotRocksDataReaderTests
         Assert.False(reader.NextResult());
     }
 
+    [Fact]
+    public void NextResult_RebuildsNameLookupForTheNextResultSet()
+    {
+        using var reader = new DotRocksDataReader(
+            new[]
+            {
+                QueryResult.FromRows(
+                    [Column("a"), Column("b")],
+                    [
+                        ["a1", "b1"],
+                    ]
+                ),
+                QueryResult.FromRows(
+                    [Column("b"), Column("a")],
+                    [
+                        ["b2", "a2"],
+                    ]
+                ),
+            },
+            connection: null,
+            behavior: CommandBehavior.Default
+        );
+
+        Assert.True(reader.Read());
+        Assert.Equal(0, reader.GetOrdinal("a"));
+        Assert.Equal("a1", reader["a"]);
+
+        Assert.True(reader.NextResult());
+        Assert.True(reader.Read());
+
+        // The second result set swaps the column order; the by-name lookup must follow it rather
+        // than serve the first result set's cached positions.
+        Assert.Equal(1, reader.GetOrdinal("a"));
+        Assert.Equal("a2", reader["a"]);
+        Assert.Equal("b2", reader["b"]);
+        Assert.Throws<IndexOutOfRangeException>(() => reader.GetOrdinal("missing"));
+    }
+
     private sealed class AsyncReadOnlyStream(byte[] bytes) : Stream
     {
         private readonly MemoryStream _inner = new(bytes, writable: false);

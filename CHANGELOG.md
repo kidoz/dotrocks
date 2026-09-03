@@ -8,6 +8,12 @@ version is derived from the release tag at publish time.
 
 ## [Unreleased]
 
+### Fixed
+- `DotRocksDataReader.NextResult()` rebuilds the name-to-ordinal lookup for the next result set.
+  Previously the lookup built for the first result set was reused, so `reader["a"]` on a batch's
+  second result returned the value at the first result's position for `a` — silently the wrong
+  column when the column order differed — or an out-of-range error instead of "column not found".
+
 ## [1.5.0] - 2026-08-25
 
 ### Changed

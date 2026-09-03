@@ -472,6 +472,9 @@ public sealed class DotRocksDataReader
         _bufferedIndex++;
         _columns = _bufferedResults[_bufferedIndex].Columns;
         _columnSchema = null;
+        // The name lookup is built lazily per result set; keeping the previous one would silently
+        // serve the old column positions against the new columns.
+        _ordinalsByName = null;
         _currentRow = null;
         _rowIndex = -1;
         _isConsumed = false;
