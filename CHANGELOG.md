@@ -8,6 +8,8 @@ version is derived from the release tag at publish time.
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-09-03
+
 ### Changed
 - The live integration matrix — CI and the local `just starrocks-up` default — moves from
   StarRocks 3.5.5 and 4.0.7 to 3.5.21 and 4.1.4, the latest 3.x and 4.x images. Every driver,
@@ -541,7 +543,8 @@ version is derived from the release tag at publish time.
 - Stream Load refuses to forward credentials over a downgraded (HTTPS→HTTP) redirect.
 - NuGet vulnerability auditing and CodeQL analysis in CI.
 
-[Unreleased]: https://github.com/kidoz/dotrocks/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/kidoz/dotrocks/compare/v1.5.1...HEAD
+[1.5.1]: https://github.com/kidoz/dotrocks/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/kidoz/dotrocks/compare/v1.4.2...v1.5.0
 [1.4.2]: https://github.com/kidoz/dotrocks/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/kidoz/dotrocks/compare/v1.4.0...v1.4.1
