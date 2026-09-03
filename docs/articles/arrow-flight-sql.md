@@ -55,7 +55,9 @@ await foreach (Apache.Arrow.RecordBatch batch in result.ReadRecordBatchesAsync()
 The data source reuses gRPC channels per validated endpoint. A result is single-use and processes
 Flight endpoints sequentially, preserving endpoint order without buffering the complete result.
 When an endpoint advertises several locations, the trusted alternatives are tried in the order the
-server supplied them. Dispose each record batch after consuming it.
+server supplied them; a location DotRocks cannot use (an untrusted address, an unsupported scheme
+such as a Unix socket, a path, or a missing host) is skipped rather than failing the read, and the
+read fails only when no trusted location remains. Dispose each record batch after consuming it.
 
 ## Sessions and disposal
 

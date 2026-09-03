@@ -45,7 +45,24 @@ internal sealed class FlightSqlEndpointPolicy
             );
         }
 
-        Uri normalized = NormalizeAddress(endpoint, _allowInsecureTransport);
+        Uri normalized;
+        try
+        {
+            normalized = NormalizeAddress(endpoint, _allowInsecureTransport);
+        }
+        catch (ArgumentException exception)
+        {
+            // A server-supplied location is untrusted input, not a caller argument: an unsupported
+            // scheme, a missing host, or a path must read as a rejected endpoint so the data
+            // source can skip it in favor of the trusted alternatives. The address is deliberately
+            // not echoed.
+            throw new InvalidOperationException(
+                "The Flight SQL server returned an endpoint location that is not a supported "
+                    + "Flight SQL address.",
+                exception
+            );
+        }
+
         if (!_allowedAddresses.Contains(normalized.AbsoluteUri))
         {
             // The server-supplied address is deliberately not echoed here; the tests pin that

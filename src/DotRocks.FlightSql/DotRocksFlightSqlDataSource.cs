@@ -334,6 +334,12 @@ public sealed class DotRocksFlightSqlDataSource : IDisposable, IAsyncDisposable
                 // A backend that does not answer must not hide the remaining trusted locations.
                 call?.Dispose();
             }
+            catch
+            {
+                // Any other failure ends the read; the opened call must not outlive it.
+                call?.Dispose();
+                throw;
+            }
         }
     }
 

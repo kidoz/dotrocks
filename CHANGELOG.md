@@ -41,6 +41,10 @@ version is derived from the release tag at publish time.
   ("Column 'TIMESTAMP' cannot be resolved"). The provider now emits the StarRocks `DATETIME '…'`
   literal with microsecond precision, and `TimeOnly` constants as a quoted string rather than the
   unsupported `TIME '…'` form. `DateOnly` already used the valid `DATE '…'` literal.
+- Flight SQL: an advertised endpoint location with an unsupported scheme (for example a Unix
+  socket), a path, or no host no longer fails the whole read; it is skipped in favor of the
+  remaining trusted locations, exactly like an untrusted address. A failure while opening an
+  endpoint stream now disposes the opened call instead of leaking it.
 
 ## [1.5.0] - 2026-08-25
 

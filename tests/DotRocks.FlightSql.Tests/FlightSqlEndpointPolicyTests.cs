@@ -53,6 +53,31 @@ public sealed class FlightSqlEndpointPolicyTests
         Assert.DoesNotContain("attacker.example", exception.Message, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("grpc+unix:///tmp/backend.sock")]
+    [InlineData("grpc://backend.internal:9419/tickets")]
+    [InlineData("ftp://backend.internal:9419")]
+    public void Resolve_RejectsUnsupportedServerLocationAsUntrusted(string location)
+    {
+        var options = new DotRocksFlightSqlOptions(
+            new Uri("grpc://frontend.internal:9408"),
+            "root",
+            ""
+        )
+        {
+            AllowInsecureTransport = true,
+        };
+        var policy = new FlightSqlEndpointPolicy(options);
+
+        // A server-supplied location is untrusted input, so a malformed one must read as a
+        // rejected endpoint that the data source can skip, not as a caller argument error.
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            policy.Resolve(location)
+        );
+
+        Assert.DoesNotContain("backend", exception.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Resolve_AllowsExplicitBackendHost()
     {

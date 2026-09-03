@@ -81,6 +81,54 @@ public sealed class FlightSqlTransportTests
     }
 
     [Fact]
+    public async Task ExecuteQueryAsync_SkipsUnsupportedEndpointLocationForTrustedAlternative()
+    {
+        using IHost host = CreateHost();
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        await host.StartAsync(cancellationToken).ConfigureAwait(true);
+
+        try
+        {
+            Uri address = GetServerAddress(host);
+            GetQueryCapture(host).SelfAddress = address.AbsoluteUri;
+            var options = new DotRocksFlightSqlOptions(address, "root", "secret")
+            {
+                AllowInsecureTransport = true,
+            };
+            using var dataSource = new DotRocksFlightSqlDataSource(options);
+
+            DotRocksFlightSqlResult result = await dataSource
+                .ExecuteQueryAsync("SELECT value FROM multi_location", cancellationToken)
+                .ConfigureAwait(true);
+
+            // The unusable first location must be skipped, not fail the whole read.
+            var values = new List<int>();
+            await foreach (
+                RecordBatch batch in result
+                    .ReadRecordBatchesAsync(cancellationToken)
+                    .ConfigureAwait(true)
+            )
+            {
+                using (batch)
+                {
+                    var array = Assert.IsType<Int32Array>(batch.Column(0));
+                    values.AddRange(
+                        Enumerable
+                            .Range(0, array.Length)
+                            .Select(index => array.GetValue(index)!.Value)
+                    );
+                }
+            }
+
+            Assert.Equal([1, 2], values);
+        }
+        finally
+        {
+            await host.StopAsync(cancellationToken).ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
     public async Task DbCommand_BindsParametersAndMaterializesRows()
     {
         using IHost host = CreateHost();
@@ -665,7 +713,21 @@ public sealed class FlightSqlTransportTests
                 : empty ? "empty"
                 : "result";
             Schema schema = widgets ? WidgetSchema : ResultSchema;
-            var endpoint = new FlightEndpoint(new FlightTicket(ticket), []);
+
+            // A multi-location endpoint advertises an address DotRocks cannot use (a Unix socket)
+            // ahead of this server's own trusted address, as a StarRocks FE with mixed backends
+            // might.
+            FlightLocation[] locations = query.Contains(
+                "multi_location",
+                StringComparison.OrdinalIgnoreCase
+            )
+                ?
+                [
+                    new FlightLocation("grpc+unix:///tmp/backend.sock"),
+                    new FlightLocation(_capture.SelfAddress),
+                ]
+                : [];
+            var endpoint = new FlightEndpoint(new FlightTicket(ticket), locations);
 
             // StarRocks does not declare a record count, so -1 stands in for "unknown".
             return Task.FromResult(new FlightInfo(schema, request, [endpoint], empty ? -1 : 2, -1));
@@ -834,6 +896,9 @@ public sealed class FlightSqlTransportTests
             new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public string LastQuery { get; set; } = string.Empty;
+
+        /// <summary>This server's own address, advertised as an endpoint location on request.</summary>
+        public string SelfAddress { get; set; } = string.Empty;
 
         public string LastUpdate { get; set; } = string.Empty;
 
