@@ -45,6 +45,10 @@ version is derived from the release tag at publish time.
   socket), a path, or no host no longer fails the whole read; it is skipped in favor of the
   remaining trusted locations, exactly like an untrusted address. A failure while opening an
   endpoint stream now disposes the opened call instead of leaking it.
+- Flight SQL: the opt-in MySQL-protocol read fallback applies only when statement discovery
+  (`GetFlightInfo`, where StarRocks executes the statement) fails. A failure while fetching the
+  result (`DoGet`) now surfaces the Flight error instead of re-executing the statement text over
+  MySQL, which for anything but a pure read would have run it twice.
 
 ## [1.5.0] - 2026-08-25
 

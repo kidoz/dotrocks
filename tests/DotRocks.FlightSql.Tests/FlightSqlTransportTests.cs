@@ -7,6 +7,7 @@ using Apache.Arrow.Flight.Server;
 using Apache.Arrow.Flight.Sql;
 using Apache.Arrow.Types;
 using Arrow.Flight.Protocol.Sql;
+using DotRocks.Data;
 using DotRocks.FlightSql;
 using Google.Protobuf;
 using Grpc.Core;
@@ -126,6 +127,71 @@ public sealed class FlightSqlTransportTests
         {
             await host.StopAsync(cancellationToken).ConfigureAwait(true);
         }
+    }
+
+    [Fact]
+    public async Task DbCommand_FallsBackToMySqlOnlyWhenStatementDiscoveryFails()
+    {
+        using IHost host = CreateHost();
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        await host.StartAsync(cancellationToken).ConfigureAwait(true);
+
+        try
+        {
+            Uri address = GetServerAddress(host);
+            var options = new DotRocksFlightSqlOptions(address, "root", "secret")
+            {
+                AllowInsecureTransport = true,
+            };
+
+            // The fallback target is a closed port, so an attempted fallback fails with the
+            // driver's connect error — distinguishable from the Flight failure it would replace.
+            await using var connection = new DotRocksFlightSqlDbConnection(
+                options,
+                "Server=127.0.0.1;Port=1;User ID=root;Connection Timeout=1",
+                DotRocksFlightSqlFallbackMode.ReadQueries
+            );
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(true);
+
+            // GetFlightInfo is where StarRocks runs the statement: a failure there means it never
+            // executed, so retrying over MySQL is safe and expected.
+            await using DotRocksFlightSqlCommand discovery = connection.CreateCommand();
+            discovery.CommandText = "SELECT value FROM unavailable_discovery";
+            DotRocksException fallbackFailure = await Assert
+                .ThrowsAsync<DotRocksException>(() =>
+                    discovery.ExecuteReaderAsync(cancellationToken)
+                )
+                .ConfigureAwait(true);
+            Assert.Contains("connect", fallbackFailure.Message, StringComparison.OrdinalIgnoreCase);
+
+            // A failure fetching the result (DoGet) comes after the statement ran; re-running the
+            // text over MySQL would execute it twice, so the Flight error must surface unchanged.
+            await using DotRocksFlightSqlCommand fetch = connection.CreateCommand();
+            fetch.CommandText = "SELECT value FROM unavailable_fetch";
+            Exception fetchFailure = await Assert
+                .ThrowsAnyAsync<Exception>(() => fetch.ExecuteReaderAsync(cancellationToken))
+                .ConfigureAwait(true);
+            RpcException rpc = Assert.IsType<RpcException>(FindInChain<RpcException>(fetchFailure));
+            Assert.Equal(StatusCode.Unavailable, rpc.StatusCode);
+        }
+        finally
+        {
+            await host.StopAsync(cancellationToken).ConfigureAwait(true);
+        }
+    }
+
+    private static TException? FindInChain<TException>(Exception exception)
+        where TException : Exception
+    {
+        for (Exception? current = exception; current is not null; current = current.InnerException)
+        {
+            if (current is TException match)
+            {
+                return match;
+            }
+        }
+
+        return null;
     }
 
     [Fact]
@@ -704,13 +770,23 @@ public sealed class FlightSqlTransportTests
                 ? command.Query
                 : string.Empty;
             _capture.LastQuery = query;
+            if (query.Contains("unavailable_discovery", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new RpcException(new Status(StatusCode.Unavailable, "Frontend unavailable."));
+            }
+
             bool widgets = query.Contains("widgets", StringComparison.OrdinalIgnoreCase);
             bool blocking = query.Contains("blocking", StringComparison.OrdinalIgnoreCase);
             bool empty = query.Contains("empty", StringComparison.OrdinalIgnoreCase);
+            bool unavailableFetch = query.Contains(
+                "unavailable_fetch",
+                StringComparison.OrdinalIgnoreCase
+            );
             string ticket =
                 widgets ? "widgets"
                 : blocking ? "blocking"
                 : empty ? "empty"
+                : unavailableFetch ? "unavailable"
                 : "result";
             Schema schema = widgets ? WidgetSchema : ResultSchema;
 
@@ -741,6 +817,11 @@ public sealed class FlightSqlTransportTests
         {
             RequireAuthorization(context);
             string ticketValue = ticket.Ticket.ToStringUtf8();
+            if (ticketValue == "unavailable")
+            {
+                throw new RpcException(new Status(StatusCode.Unavailable, "Backend unavailable."));
+            }
+
             if (ticketValue == "blocking")
             {
                 _capture.DoGetStarted.SetResult();

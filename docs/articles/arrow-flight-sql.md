@@ -176,9 +176,11 @@ await using var connection = new DotRocksFlightSqlDbConnection(
         DotRocksFlightSqlFallbackMode.WriteCommands);
 ```
 
-- `ReadQueries` retries only when Flight query discovery fails with `Unavailable`,
-  `Unimplemented`, or an HTTP transport failure. SQL errors, timeouts, cancellation, and result
-  streaming failures are not replayed.
+- `ReadQueries` retries only when Flight query discovery (`GetFlightInfo`, where StarRocks
+  executes the statement) fails with `Unavailable`, `Unimplemented`, or an HTTP transport
+  failure. SQL errors, timeouts, cancellation, and result fetching (`DoGet`) failures are not
+  replayed: by then the statement has run, and replaying anything but a pure read would execute
+  it twice.
 - `WriteCommands` routes writes to `DotRocks.Data` before contacting Flight. A write is never
   retried after an ambiguous Flight failure.
 - Fallback never participates in a Flight transaction and does not attempt to copy session state.

@@ -275,9 +275,15 @@ public sealed class DotRocksFlightSqlCommand : DbCommand
         DotRocksFlightSqlDbConnection connection = EnsureExecutable();
         string commandText = BindCommandText();
         ExecutionScope operation = BeginExecution(cancellationToken);
+
+        // Only the discovery call (GetFlightInfo) may fall back to the MySQL protocol: it is where
+        // StarRocks runs the statement, so a transport failure there means the statement never
+        // executed. A failure while fetching the result afterwards (DoGet) must not re-run the
+        // text over MySQL — for anything but a pure read, that would execute it twice.
+        DotRocksFlightSqlResult result;
         try
         {
-            DotRocksFlightSqlResult result = _transaction is null
+            result = _transaction is null
                 ? await connection
                     .FlightDataSource.ExecuteQueryAsync(
                         commandText,
@@ -294,14 +300,6 @@ public sealed class DotRocksFlightSqlCommand : DbCommand
                         operation.Token
                     )
                     .ConfigureAwait(false);
-            return await DotRocksFlightSqlDataReader
-                .CreateAsync(
-                    result,
-                    behavior.HasFlag(CommandBehavior.CloseConnection) ? connection : null,
-                    operation,
-                    operation.Token
-                )
-                .ConfigureAwait(false);
         }
         catch (Exception ex)
             when (_transaction is null
@@ -341,6 +339,23 @@ public sealed class DotRocksFlightSqlCommand : DbCommand
                 operation.Dispose();
                 throw;
             }
+        }
+        catch
+        {
+            operation.Dispose();
+            throw;
+        }
+
+        try
+        {
+            return await DotRocksFlightSqlDataReader
+                .CreateAsync(
+                    result,
+                    behavior.HasFlag(CommandBehavior.CloseConnection) ? connection : null,
+                    operation,
+                    operation.Token
+                )
+                .ConfigureAwait(false);
         }
         catch
         {
