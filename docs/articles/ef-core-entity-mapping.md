@@ -112,6 +112,7 @@ validator enforces. Violating any one throws at model-build time.
 | Explicit primary key — single-column or composite | The key columns drive `UPDATE`/`DELETE` conditions (one condition per key column) and must match the StarRocks `PRIMARY KEY` columns | `FindPrimaryKey()` (keyed = writable) |
 | `ValueGeneratedNever()` on every property | DotRocks does not materialize server-generated values; keys are client-generated | `ValueGenerated != Never` |
 | Scalar properties only — no navigations | No FK/JOIN/cascade semantics are modeled | `GetNavigations()/GetSkipNavigations()` |
+| No alternate keys, foreign keys, or check constraints | StarRocks enforces none of them, so a migration could only drop them silently | `GetKeys()`, `GetForeignKeys()`, `GetCheckConstraints()` |
 | No complex/owned types | Not supported by the write pipeline | `GetComplexProperties()`, `IsOwned()` |
 | No concurrency tokens / row versions | OLTP-style concurrency is not emulated | `IsConcurrencyToken` |
 | No default/computed SQL | DotRocks does not emit generated DDL/values | `GetDefaultValueSql()/GetComputedColumnSql()` |
@@ -235,6 +236,7 @@ Every message below is thrown by `DotRocksModelValidator` at model-build time. T
 | `does not support owned entity type` | `OwnsOne/OwnsMany` mapping | Flatten owned data into scalar columns, or don't map it |
 | `must contain scalar properties only; navigations are not supported` | A reference/collection navigation on a keyed entity | Remove the navigation; model relationships by querying with explicit keys |
 | `must contain scalar properties only; complex properties are not supported` | `ComplexProperty(...)` | Flatten into scalar columns |
+| `does not support alternate keys` / `foreign keys` / `check constraints` | `HasAlternateKey`, a relationship without navigations (`HasOne<T>().WithMany()`), or `HasCheckConstraint` | Remove it; StarRocks cannot enforce it, so enforce the rule in application code |
 | `does not support concurrency token property` | `IsConcurrencyToken()` / `IsRowVersion()` | Remove it; DotRocks does not emulate OLTP concurrency |
 | `requires explicit non-generated values; configure ... ValueGeneratedNever()` | A property left as DB-generated (default for keys) | Call `.ValueGeneratedNever()` on the property |
 | `does not support generated/default SQL` | `HasDefaultValueSql()` / `HasComputedColumnSql()` | Remove it; set values in code |

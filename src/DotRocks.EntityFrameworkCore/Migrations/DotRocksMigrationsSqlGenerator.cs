@@ -31,6 +31,7 @@ internal sealed class DotRocksMigrationsSqlGenerator(
             );
         }
 
+        RejectUnsupportedConstraints(operation);
         TableShape shape = TableShape.FromOperation(operation);
         ValidateTableShape(operation, shape);
 
@@ -261,6 +262,95 @@ internal sealed class DotRocksMigrationsSqlGenerator(
     {
         throw CreateUnsupportedMigrationOperationException("ADD FOREIGN KEY");
     }
+
+    protected override void Generate(
+        DropForeignKeyOperation operation,
+        IModel? model,
+        MigrationCommandListBuilder builder,
+        bool terminate = true
+    )
+    {
+        throw CreateUnsupportedMigrationOperationException("DROP FOREIGN KEY");
+    }
+
+    protected override void Generate(
+        AddUniqueConstraintOperation operation,
+        IModel? model,
+        MigrationCommandListBuilder builder
+    )
+    {
+        throw CreateUnsupportedMigrationOperationException("ADD UNIQUE CONSTRAINT");
+    }
+
+    protected override void Generate(
+        DropUniqueConstraintOperation operation,
+        IModel? model,
+        MigrationCommandListBuilder builder
+    )
+    {
+        throw CreateUnsupportedMigrationOperationException("DROP UNIQUE CONSTRAINT");
+    }
+
+    protected override void Generate(
+        AddCheckConstraintOperation operation,
+        IModel? model,
+        MigrationCommandListBuilder builder
+    )
+    {
+        throw CreateUnsupportedMigrationOperationException("ADD CHECK CONSTRAINT");
+    }
+
+    protected override void Generate(
+        DropCheckConstraintOperation operation,
+        IModel? model,
+        MigrationCommandListBuilder builder
+    )
+    {
+        throw CreateUnsupportedMigrationOperationException("DROP CHECK CONSTRAINT");
+    }
+
+    /// <summary>
+    /// StarRocks enforces no unique, check, or foreign-key constraints. A CREATE TABLE that carries
+    /// one must fail rather than emit a table that silently lacks it.
+    /// </summary>
+    private static void RejectUnsupportedConstraints(CreateTableOperation operation)
+    {
+        if (operation.UniqueConstraints.Count > 0)
+        {
+            throw CreateUnsupportedTableConstraintException(
+                operation,
+                "unique constraint",
+                operation.UniqueConstraints[0].Name
+            );
+        }
+
+        if (operation.CheckConstraints.Count > 0)
+        {
+            throw CreateUnsupportedTableConstraintException(
+                operation,
+                "check constraint",
+                operation.CheckConstraints[0].Name
+            );
+        }
+
+        if (operation.ForeignKeys.Count > 0)
+        {
+            throw CreateUnsupportedTableConstraintException(
+                operation,
+                "foreign key",
+                operation.ForeignKeys[0].Name
+            );
+        }
+    }
+
+    private static NotSupportedException CreateUnsupportedTableConstraintException(
+        CreateTableOperation operation,
+        string kind,
+        string name
+    ) =>
+        new(
+            $"DotRocks EF Core migrations cannot create table '{operation.Name}' with {kind} '{name}'; StarRocks does not enforce unique, check, or foreign-key constraints, so it would be silently dropped."
+        );
 
     /// <summary>
     /// The parsed StarRocks table shape of one CREATE TABLE operation. Annotation reading,

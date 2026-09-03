@@ -67,11 +67,36 @@ internal sealed class DotRocksModelValidator(
             );
         }
 
+        // StarRocks enforces none of these, and the migration generator would otherwise have to
+        // drop them from CREATE TABLE silently; reject them at model build time instead.
+        if (entityType.GetKeys().Any(key => !key.IsPrimaryKey()))
+        {
+            throw CreateUnsupportedConstraintException(entityType, "alternate keys");
+        }
+
+        if (entityType.GetForeignKeys().Any())
+        {
+            throw CreateUnsupportedConstraintException(entityType, "foreign keys");
+        }
+
+        if (entityType.GetCheckConstraints().Any())
+        {
+            throw CreateUnsupportedConstraintException(entityType, "check constraints");
+        }
+
         foreach (IProperty property in entityType.GetProperties())
         {
             ValidateProperty(entityType, property);
         }
     }
+
+    private static NotSupportedException CreateUnsupportedConstraintException(
+        IEntityType entityType,
+        string kind
+    ) =>
+        new(
+            $"DotRocks EF Core does not support {kind} on entity type '{entityType.DisplayName()}'; StarRocks does not enforce unique, check, or foreign-key constraints."
+        );
 
     private static void ValidateProperty(IEntityType entityType, IProperty property)
     {

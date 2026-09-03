@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using DotRocks.EntityFrameworkCore.Design;
 using DotRocks.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore;
@@ -678,6 +679,136 @@ public sealed class DotRocksMigrationsTests
     // Compares full DDL with line endings normalized so the golden strings are platform-stable.
     private static void AssertEqualDdl(string expected, string actual) =>
         Assert.Equal(expected.ReplaceLineEndings("\n"), actual.ReplaceLineEndings("\n"));
+
+    [Fact]
+    public void Generate_CreateTableWithUniqueConstraint_Throws()
+    {
+        using var context = CreateContext();
+        var generator = context.GetService<IMigrationsSqlGenerator>();
+        CreateTableOperation operation = CreateWidgetsTable();
+        operation.UniqueConstraints.Add(
+            new AddUniqueConstraintOperation
+            {
+                Name = "AK_widgets_name",
+                Table = operation.Name,
+                Schema = operation.Schema,
+                Columns = ["name"],
+            }
+        );
+
+        // StarRocks has no unique constraints; the table must not be created without it silently.
+        NotSupportedException exception = Assert.Throws<NotSupportedException>(() =>
+            GenerateSql(generator, operation)
+        );
+
+        Assert.Contains(
+            "unique constraint 'AK_widgets_name'",
+            exception.Message,
+            StringComparison.Ordinal
+        );
+    }
+
+    [Fact]
+    public void Generate_CreateTableWithCheckConstraint_Throws()
+    {
+        using var context = CreateContext();
+        var generator = context.GetService<IMigrationsSqlGenerator>();
+        CreateTableOperation operation = CreateWidgetsTable();
+        operation.CheckConstraints.Add(
+            new AddCheckConstraintOperation
+            {
+                Name = "CK_widgets_id",
+                Table = operation.Name,
+                Schema = operation.Schema,
+                Sql = "`id` > 0",
+            }
+        );
+
+        NotSupportedException exception = Assert.Throws<NotSupportedException>(() =>
+            GenerateSql(generator, operation)
+        );
+
+        Assert.Contains(
+            "check constraint 'CK_widgets_id'",
+            exception.Message,
+            StringComparison.Ordinal
+        );
+    }
+
+    [Fact]
+    public void Generate_CreateTableWithInlineForeignKey_Throws()
+    {
+        using var context = CreateContext();
+        var generator = context.GetService<IMigrationsSqlGenerator>();
+        CreateTableOperation operation = CreateWidgetsTable();
+        operation.ForeignKeys.Add(
+            new AddForeignKeyOperation
+            {
+                Name = "FK_widgets_owners",
+                Table = operation.Name,
+                Schema = operation.Schema,
+                Columns = ["id"],
+                PrincipalTable = "owners",
+                PrincipalColumns = ["id"],
+            }
+        );
+
+        NotSupportedException exception = Assert.Throws<NotSupportedException>(() =>
+            GenerateSql(generator, operation)
+        );
+
+        Assert.Contains(
+            "foreign key 'FK_widgets_owners'",
+            exception.Message,
+            StringComparison.Ordinal
+        );
+    }
+
+    [Theory]
+    [InlineData("AddUniqueConstraint")]
+    [InlineData("DropUniqueConstraint")]
+    [InlineData("AddCheckConstraint")]
+    [InlineData("DropCheckConstraint")]
+    [InlineData("DropForeignKey")]
+    public void Generate_StandaloneConstraintOperation_ThrowsNotSupportedException(string kind)
+    {
+        using var context = CreateContext();
+        var generator = context.GetService<IMigrationsSqlGenerator>();
+        MigrationOperation operation = kind switch
+        {
+            "AddUniqueConstraint" => new AddUniqueConstraintOperation
+            {
+                Name = "AK_widgets_name",
+                Table = "widgets",
+                Columns = ["name"],
+            },
+            "DropUniqueConstraint" => new DropUniqueConstraintOperation
+            {
+                Name = "AK_widgets_name",
+                Table = "widgets",
+            },
+            "AddCheckConstraint" => new AddCheckConstraintOperation
+            {
+                Name = "CK_widgets_id",
+                Table = "widgets",
+                Sql = "`id` > 0",
+            },
+            "DropCheckConstraint" => new DropCheckConstraintOperation
+            {
+                Name = "CK_widgets_id",
+                Table = "widgets",
+            },
+            _ => new DropForeignKeyOperation { Name = "FK_widgets_owners", Table = "widgets" },
+        };
+
+        // The base generator would emit ALTER TABLE … CONSTRAINT SQL that StarRocks rejects at
+        // runtime; the provider refuses up front with its usual message.
+        NotSupportedException exception = Assert.Throws<NotSupportedException>(() =>
+            GenerateSql(generator, operation)
+        );
+
+        Assert.Contains("do not support", exception.Message, StringComparison.Ordinal);
+    }
 
     private static string GenerateSql(
         IMigrationsSqlGenerator generator,

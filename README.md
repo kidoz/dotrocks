@@ -234,7 +234,9 @@ Unsupported EF Core behavior is explicit:
 - `EnsureCreated` and schema deletion.
 - migration schema mutations beyond conservative database creation and table
   creation/drop, including `DROP DATABASE`, `TRUNCATE TABLE`, add/drop/alter/rename column,
-  rename table, indexes, add/drop primary key, foreign keys, defaults, and computed columns.
+  rename table, indexes, add/drop primary key, foreign keys, unique and check constraints,
+  defaults, and computed columns. A `CREATE TABLE` that carries a unique, check, or
+  foreign-key constraint is refused rather than emitted without it.
 - idempotent migration scripts.
 - owned entity types (`OwnsOne`/`OwnsMany`) — rejected for every mapped entity, keyed or
   keyless.
@@ -247,8 +249,9 @@ Unsupported EF Core behavior is explicit:
 
 These constraints are enforced at **model validation**, when the model is first built.
 DotRocks requires the whole mapped model to be write-safe: any keyed entity with a
-navigation, complex property, concurrency token, generated/default/computed
-value, or binary property is rejected up front, even for a query-only `DbContext`.
+navigation, foreign key, alternate key, check constraint, complex property, concurrency
+token, generated/default/computed value, or binary property is rejected up front, even for
+a query-only `DbContext`.
 Configure mapped properties accordingly, for example `ValueGeneratedNever()` on keys.
 
 A compilable EF Core sample lives at

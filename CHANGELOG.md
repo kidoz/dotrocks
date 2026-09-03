@@ -8,6 +8,14 @@ version is derived from the release tag at publish time.
 
 ## [Unreleased]
 
+### Changed
+- EF Core models that declare an alternate key, a check constraint, or a foreign key (with or
+  without navigation properties) are rejected at model validation, and migrations refuse a
+  `CREATE TABLE` that carries a unique, check, or foreign-key constraint as well as the standalone
+  add/drop unique, check, and foreign-key operations. StarRocks enforces none of these; previously
+  the generated `CREATE TABLE` dropped them silently, leaving EF's uniqueness and referential
+  assumptions unenforced without any error.
+
 ### Fixed
 - `DotRocksDataReader.NextResult()` rebuilds the name-to-ordinal lookup for the next result set.
   Previously the lookup built for the first result set was reused, so `reader["a"]` on a batch's

@@ -68,6 +68,38 @@ public sealed class DotRocksModelValidationTests
     }
 
     [Fact]
+    public void AlternateKey_ThrowsNotSupportedException()
+    {
+        using var context = CreateContext<AlternateKeyContext>();
+
+        // StarRocks has no unique constraints, so the key could only be dropped from CREATE TABLE
+        // silently; the model must be refused instead.
+        NotSupportedException exception = Assert.Throws<NotSupportedException>(() => context.Model);
+
+        Assert.Contains("alternate keys", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ForeignKeyWithoutNavigation_ThrowsNotSupportedException()
+    {
+        using var context = CreateContext<ForeignKeyContext>();
+
+        NotSupportedException exception = Assert.Throws<NotSupportedException>(() => context.Model);
+
+        Assert.Contains("foreign keys", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CheckConstraint_ThrowsNotSupportedException()
+    {
+        using var context = CreateContext<CheckConstraintContext>();
+
+        NotSupportedException exception = Assert.Throws<NotSupportedException>(() => context.Model);
+
+        Assert.Contains("check constraints", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void CompositeKey_ValidatesAndKeepsAllKeyProperties()
     {
         using var context = CreateContext<CompositeKeyContext>();
@@ -684,4 +716,94 @@ public sealed class DotRocksModelValidationTests
         Justification = "EF Core uses this entity type through DbSet metadata."
     )]
     private sealed class SharedTableDerived : SharedTableBase;
+
+    [SuppressMessage(
+        "Performance",
+        "CA1812:Avoid uninstantiated internal classes",
+        Justification = "The test methods instantiate this nested context through reflection."
+    )]
+    private sealed class AlternateKeyContext(DbContextOptions<AlternateKeyContext> options)
+        : DbContext(options)
+    {
+        public DbSet<CodedEntity> Entities => Set<CodedEntity>();
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<CodedEntity>().HasKey(entity => entity.Id);
+            modelBuilder.Entity<CodedEntity>().Property(entity => entity.Id).ValueGeneratedNever();
+            modelBuilder.Entity<CodedEntity>().HasAlternateKey(entity => entity.Code);
+        }
+    }
+
+    [SuppressMessage(
+        "Performance",
+        "CA1812:Avoid uninstantiated internal classes",
+        Justification = "The test methods instantiate this nested context through reflection."
+    )]
+    private sealed class ForeignKeyContext(DbContextOptions<ForeignKeyContext> options)
+        : DbContext(options)
+    {
+        public DbSet<CodedEntity> Entities => Set<CodedEntity>();
+
+        public DbSet<ChildEntity> Children => Set<ChildEntity>();
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<CodedEntity>().HasKey(entity => entity.Id);
+            modelBuilder.Entity<CodedEntity>().Property(entity => entity.Id).ValueGeneratedNever();
+            modelBuilder.Entity<ChildEntity>().HasKey(child => child.Id);
+            modelBuilder.Entity<ChildEntity>().Property(child => child.Id).ValueGeneratedNever();
+
+            // A relationship without navigation properties still declares a foreign key.
+            modelBuilder
+                .Entity<ChildEntity>()
+                .HasOne<CodedEntity>()
+                .WithMany()
+                .HasForeignKey(child => child.ParentId);
+        }
+    }
+
+    [SuppressMessage(
+        "Performance",
+        "CA1812:Avoid uninstantiated internal classes",
+        Justification = "The test methods instantiate this nested context through reflection."
+    )]
+    private sealed class CheckConstraintContext(DbContextOptions<CheckConstraintContext> options)
+        : DbContext(options)
+    {
+        public DbSet<CodedEntity> Entities => Set<CodedEntity>();
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<CodedEntity>().HasKey(entity => entity.Id);
+            modelBuilder.Entity<CodedEntity>().Property(entity => entity.Id).ValueGeneratedNever();
+            modelBuilder
+                .Entity<CodedEntity>()
+                .ToTable(table => table.HasCheckConstraint("CK_code", "`Code` <> ''"));
+        }
+    }
+
+    [SuppressMessage(
+        "Performance",
+        "CA1812:Avoid uninstantiated internal classes",
+        Justification = "EF Core uses this entity type through DbSet metadata."
+    )]
+    private sealed class CodedEntity
+    {
+        public int Id { get; set; }
+
+        public string Code { get; set; } = string.Empty;
+    }
+
+    [SuppressMessage(
+        "Performance",
+        "CA1812:Avoid uninstantiated internal classes",
+        Justification = "EF Core uses this entity type through DbSet metadata."
+    )]
+    private sealed class ChildEntity
+    {
+        public int Id { get; set; }
+
+        public int ParentId { get; set; }
+    }
 }
