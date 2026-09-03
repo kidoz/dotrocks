@@ -144,6 +144,119 @@ public sealed class FlightSqlIntegrationTests
         );
     }
 
+    [Fact]
+    [SuppressMessage(
+        "Security",
+        "CA2100:Review SQL queries for security vulnerabilities",
+        Justification = "The database identifier is generated internally and the values are fixed."
+    )]
+    public async Task FlightDateTimeValues_MatchTheMySqlProtocolUnderANonUtcSessionTimeZone()
+    {
+        FlightSqlIntegrationEnvironment.SkipUnlessEnabled();
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        string database =
+            "dotrocks_flight_" + Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture)[..12];
+        await using var mysql = new DotRocksConnection(
+            FlightSqlIntegrationEnvironment.MySqlConnectionString
+        );
+        await mysql.OpenAsync(cancellationToken).ConfigureAwait(true);
+        string originalTimeZone = await ScalarStringAsync(
+                mysql,
+                "SELECT @@GLOBAL.time_zone",
+                cancellationToken
+            )
+            .ConfigureAwait(true);
+
+        try
+        {
+            await ExecuteMySqlAsync(mysql, $"CREATE DATABASE `{database}`", cancellationToken)
+                .ConfigureAwait(true);
+            await ExecuteMySqlAsync(
+                    mysql,
+                    $"CREATE TABLE `{database}`.`events` (id INT NOT NULL, occurred_at DATETIME NOT NULL) "
+                        + "PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 "
+                        + "PROPERTIES('replication_num'='1')",
+                    cancellationToken
+                )
+                .ConfigureAwait(true);
+            await ExecuteMySqlAsync(
+                    mysql,
+                    $"INSERT INTO `{database}`.`events` VALUES (1, '2026-06-19 12:34:56.123456')",
+                    cancellationToken
+                )
+                .ConfigureAwait(true);
+
+            // A DATETIME carries no zone: whatever the session zone, both transports must hand
+            // back the stored wall-clock value. The zone is changed globally so the fresh Flight
+            // session below inherits it, and restored afterwards.
+            await ExecuteMySqlAsync(
+                    mysql,
+                    "SET GLOBAL time_zone = 'Asia/Shanghai'",
+                    cancellationToken
+                )
+                .ConfigureAwait(true);
+            var expected = new DateTime(2026, 6, 19, 12, 34, 56, 123).AddTicks(4560);
+            string query = $"SELECT occurred_at FROM `{database}`.`events` WHERE id = 1";
+
+            await using var mysqlSession = new DotRocksConnection(
+                FlightSqlIntegrationEnvironment.MySqlConnectionString
+            );
+            await mysqlSession.OpenAsync(cancellationToken).ConfigureAwait(true);
+            await using DbCommand mysqlQuery = mysqlSession.CreateCommand();
+            mysqlQuery.CommandText = query;
+            await using DbDataReader mysqlReader = await mysqlQuery
+                .ExecuteReaderAsync(cancellationToken)
+                .ConfigureAwait(true);
+            Assert.True(await mysqlReader.ReadAsync(cancellationToken).ConfigureAwait(true));
+            Assert.Equal(expected, mysqlReader.GetDateTime(0));
+
+            await using var flight = new DotRocksFlightSqlDbConnection(
+                FlightSqlIntegrationEnvironment.FlightOptions
+            );
+            await flight.OpenAsync(cancellationToken).ConfigureAwait(true);
+            await using DotRocksFlightSqlCommand flightQuery = flight.CreateCommand();
+            flightQuery.CommandText = query;
+            await using DbDataReader flightReader = await flightQuery
+                .ExecuteReaderAsync(cancellationToken)
+                .ConfigureAwait(true);
+            Assert.True(await flightReader.ReadAsync(cancellationToken).ConfigureAwait(true));
+            Assert.Equal(typeof(DateTime), flightReader.GetFieldType(0));
+            Assert.Equal(expected, flightReader.GetDateTime(0));
+        }
+        finally
+        {
+            await ExecuteMySqlAsync(
+                    mysql,
+                    $"SET GLOBAL time_zone = '{originalTimeZone}'",
+                    CancellationToken.None
+                )
+                .ConfigureAwait(true);
+            await ExecuteMySqlAsync(
+                    mysql,
+                    $"DROP DATABASE IF EXISTS `{database}`",
+                    CancellationToken.None
+                )
+                .ConfigureAwait(true);
+        }
+    }
+
+    [SuppressMessage(
+        "Security",
+        "CA2100:Review SQL queries for security vulnerabilities",
+        Justification = "The caller supplies only fixed SQL."
+    )]
+    private static async Task<string> ScalarStringAsync(
+        DotRocksConnection connection,
+        string sql,
+        CancellationToken cancellationToken
+    )
+    {
+        await using DbCommand command = connection.CreateCommand();
+        command.CommandText = sql;
+        object? value = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+        return Assert.IsType<string>(value);
+    }
+
     private static async Task<int> CountSessionsAsync(
         DotRocksConnection connection,
         CancellationToken cancellationToken
