@@ -253,6 +253,32 @@ public sealed class DotRocksEfCoreIntegrationTests
                     )
                     .ConfigureAwait(true)
             );
+
+            // An int variable reaches StarRocks as a double parameter behind the assert_true
+            // guard; a whole number passes through it unchanged.
+            int wholeDays = 1;
+            Assert.Equal(
+                3,
+                await context
+                    .Widgets.CountAsync(
+                        widget => widget.CreatedAt.AddDays(wholeDays).Day == 20,
+                        TestContext.Current.CancellationToken
+                    )
+                    .ConfigureAwait(true)
+            );
+
+            // A fractional count must fail the query with the translator's message rather than
+            // silently truncate to a whole hour.
+            double fractionalHours = 1.5;
+            DotRocksException fractional = await Assert
+                .ThrowsAsync<DotRocksException>(() =>
+                    context.Widgets.CountAsync(
+                        widget => widget.CreatedAt.AddHours(fractionalHours).Hour == 11,
+                        TestContext.Current.CancellationToken
+                    )
+                )
+                .ConfigureAwait(true);
+            Assert.Contains("whole-number count", fractional.Message, StringComparison.Ordinal);
         }
         finally
         {

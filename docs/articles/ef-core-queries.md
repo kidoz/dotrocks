@@ -32,8 +32,11 @@ For mapping entities to tables, see [EF Core entity mapping](ef-core-entity-mapp
 
 Two translations fall back to EF's normal "could not be translated" failure rather than emit
 wrong SQL: `Math.Round(value, MidpointRounding)` (StarRocks has no equivalent) and the
-`AddX(double)` overloads with a fractional argument (the StarRocks `*_add` functions take a
-whole-number count).
+`AddX(double)` overloads with a fractional constant (the StarRocks `*_add` functions take a
+whole-number count). A count that is only known at execution time — a parameter, including an
+`int` variable, which EF passes as a `double` parameter, or a column — is guarded with
+`assert_true`, so a fractional value fails the query on the server with a clear message instead
+of being truncated to a whole count.
 
 ### `LIMIT` before `OFFSET`
 

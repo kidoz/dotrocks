@@ -48,6 +48,50 @@ public sealed class DotRocksTranslatorTests
         Assert.Contains("days_add(", sql, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void DateTimeAddDays_WithWholeConstant_EmitsIntegerCount()
+    {
+        using var context = CreateContext();
+
+        string sql = context
+            .Events.Where(e => e.OccurredAt.AddDays(2) > e.OccurredAt)
+            .ToQueryString();
+
+        Assert.Contains("days_add(`e`.`OccurredAt`, 2)", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DateTimeAddHours_WithFractionalConstant_IsNotTranslated()
+    {
+        using var context = CreateContext();
+
+        // hours_add takes a whole-number count; silently truncating 1.5 to 1 would return the
+        // wrong rows, so the expression must be refused at translation time.
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            context.Events.Where(e => e.OccurredAt.AddHours(1.5) > e.OccurredAt).ToQueryString()
+        );
+
+        Assert.Contains("translated", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DateTimeAddDays_WithParameter_GuardsAgainstFractionalCountAtExecution()
+    {
+        using var context = CreateContext();
+        int days = 2;
+
+        // The int variable reaches the translator as a double parameter, so the SQL carries an
+        // assert_true guard that fails the query for a fractional value instead of truncating.
+        string sql = context
+            .Events.Where(e => e.OccurredAt.AddDays(days) > e.OccurredAt)
+            .ToQueryString();
+
+        Assert.Contains("days_add(", sql, StringComparison.Ordinal);
+        Assert.Contains("assert_true(", sql, StringComparison.Ordinal);
+        Assert.Contains("floor(", sql, StringComparison.Ordinal);
+        Assert.Contains("whole-number count", sql, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("Abs", "abs(")]
     [InlineData("Ceiling", "ceil(")]

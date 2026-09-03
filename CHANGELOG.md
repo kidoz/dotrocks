@@ -15,6 +15,12 @@ version is derived from the release tag at publish time.
   add/drop unique, check, and foreign-key operations. StarRocks enforces none of these; previously
   the generated `CREATE TABLE` dropped them silently, leaving EF's uniqueness and referential
   assumptions unenforced without any error.
+- `DateTime.AddDays`/`AddHours`/`AddMinutes`/`AddSeconds` with a fractional constant are no longer
+  translated — EF reports the expression as untranslatable, as the documentation already stated —
+  and a fractional parameter or column value now fails the query on the server with a clear
+  `assert_true` message. Previously the count was cast to an integer, so `AddHours(1.5)` silently
+  became one hour and returned the wrong rows. Whole-number values, including `int` variables
+  (which EF passes as `double` parameters), translate as before.
 
 ### Fixed
 - `DotRocksDataReader.NextResult()` rebuilds the name-to-ordinal lookup for the next result set.

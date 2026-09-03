@@ -10,7 +10,7 @@ namespace DotRocks.EntityFrameworkCore.Query;
 /// <summary>
 /// Translates <see cref="DateTime"/> and <see cref="DateOnly"/> "Add…" methods to the StarRocks
 /// plain-argument date-arithmetic functions (<c>days_add</c>, <c>months_add</c>, …), which avoid the
-/// <c>INTERVAL</c> syntax. Verified against StarRocks 4.0.7.
+/// <c>INTERVAL</c> syntax. Verified against StarRocks 3.5.21 and 4.1.4.
 /// </summary>
 internal sealed class DotRocksDateMethodTranslator(ISqlExpressionFactory sqlExpressionFactory)
     : IMethodCallTranslator
@@ -64,12 +64,10 @@ internal sealed class DotRocksDateMethodTranslator(ISqlExpressionFactory sqlExpr
             return null;
         }
 
-        // StarRocks date-add functions take a whole-number count; the AddX(double) overloads with a
-        // fractional argument are not representable, so EF falls back to its normal failure.
-        SqlExpression count = arguments[0];
-        if (count.Type != typeof(int) && count.Type != typeof(long))
+        SqlExpression? count = TranslateCount(arguments[0], method);
+        if (count is null)
         {
-            count = sqlExpressionFactory.Convert(count, typeof(long));
+            return null;
         }
 
         return sqlExpressionFactory.Function(
@@ -78,6 +76,61 @@ internal sealed class DotRocksDateMethodTranslator(ISqlExpressionFactory sqlExpr
             nullable: true,
             argumentsPropagateNullability: [true, true],
             method.ReturnType
+        );
+    }
+
+    /// <summary>
+    /// The StarRocks <c>*_add</c> functions take a whole-number count, while the
+    /// <c>AddDays</c>…<c>AddSeconds</c> overloads take a <see cref="double"/>. A fractional count
+    /// must never be truncated silently: a constant is refused here, so EF reports the expression
+    /// as untranslatable, and a parameter or column is guarded at execution time with
+    /// <c>assert_true</c>, which fails the query with a clear message instead.
+    /// </summary>
+    private SqlExpression? TranslateCount(SqlExpression count, MethodInfo method)
+    {
+        if (count.Type == typeof(int) || count.Type == typeof(long))
+        {
+            return count;
+        }
+
+        if (count is SqlConstantExpression { Value: double value })
+        {
+            return value == Math.Truncate(value) && value is >= int.MinValue and <= int.MaxValue
+                ? sqlExpressionFactory.Constant((int)value)
+                : null;
+        }
+
+        // Even an int variable arrives here as a double parameter (EF evaluates the implicit
+        // conversion before parameterizing), so refusing every non-constant double would break
+        // the common AddDays(days) shape. Guard the value instead.
+        SqlExpression wholeNumber = sqlExpressionFactory.OrElse(
+            sqlExpressionFactory.IsNull(count),
+            sqlExpressionFactory.Equal(
+                count,
+                sqlExpressionFactory.Function(
+                    "floor",
+                    [count],
+                    nullable: true,
+                    argumentsPropagateNullability: [true],
+                    typeof(double)
+                )
+            )
+        );
+        SqlExpression guard = sqlExpressionFactory.Function(
+            "assert_true",
+            [
+                wholeNumber,
+                sqlExpressionFactory.Constant(
+                    $"{method.DeclaringType!.Name}.{method.Name} requires a whole-number count; StarRocks date arithmetic takes an integer."
+                ),
+            ],
+            nullable: false,
+            argumentsPropagateNullability: [false, false],
+            typeof(bool)
+        );
+        return sqlExpressionFactory.Case(
+            [new CaseWhenClause(guard, sqlExpressionFactory.Convert(count, typeof(long)))],
+            elseResult: null
         );
     }
 }
