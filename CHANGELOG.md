@@ -13,6 +13,11 @@ version is derived from the release tag at publish time.
   Previously the lookup built for the first result set was reused, so `reader["a"]` on a batch's
   second result returned the value at the first result's position for `a` — silently the wrong
   column when the column order differed — or an out-of-range error instead of "column not found".
+- A socket that drops or a packet that is cut short while rows are streaming now surfaces from
+  `Read`/`ReadAsync` as a `DotRocksException` (transient when the server closed the connection),
+  matching what the same failure produces during command submission. Previously the row loop
+  rethrew the raw `IOException`, or an internal parser exception type callers could not name, and
+  `IsTransient` was unavailable for retry decisions.
 
 ## [1.5.0] - 2026-08-25
 

@@ -365,34 +365,10 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
             MarkBroken();
             throw;
         }
-        catch (MalformedPacketException ex)
+        catch (Exception ex) when (IsTransportFailure(ex))
         {
             MarkBroken();
-            throw new DotRocksException(DescribeMalformedPacket(ex), ex);
-        }
-        catch (IOException ex)
-        {
-            MarkBroken();
-            throw new DotRocksException(
-                ioFailureMessage,
-                serverErrorCode: null,
-                sqlState: null,
-                isTransient: true,
-                connectionId: null,
-                innerException: ex
-            );
-        }
-        catch (ObjectDisposedException ex)
-        {
-            MarkBroken();
-            throw new DotRocksException(
-                "The StarRocks connection was closed while executing a command.",
-                serverErrorCode: null,
-                sqlState: null,
-                isTransient: true,
-                connectionId: null,
-                innerException: ex
-            );
+            throw TranslateTransportFailure(ex, ioFailureMessage);
         }
     }
 
@@ -418,34 +394,10 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
             byte[] firstPayload = reader.ReadPayload();
             return parseResponse(firstPayload, reader);
         }
-        catch (MalformedPacketException ex)
+        catch (Exception ex) when (IsTransportFailure(ex))
         {
             MarkBroken();
-            throw new DotRocksException(DescribeMalformedPacket(ex), ex);
-        }
-        catch (IOException ex)
-        {
-            MarkBroken();
-            throw new DotRocksException(
-                ioFailureMessage,
-                serverErrorCode: null,
-                sqlState: null,
-                isTransient: true,
-                connectionId: null,
-                innerException: ex
-            );
-        }
-        catch (ObjectDisposedException ex)
-        {
-            MarkBroken();
-            throw new DotRocksException(
-                "The StarRocks connection was closed while executing a command.",
-                serverErrorCode: null,
-                sqlState: null,
-                isTransient: true,
-                connectionId: null,
-                innerException: ex
-            );
+            throw TranslateTransportFailure(ex, ioFailureMessage);
         }
     }
 
@@ -792,6 +744,59 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
     }
 
     public void MarkBroken() => _isBroken = true;
+
+    /// <summary>
+    /// Whether <paramref name="exception"/> is a transport-level failure — malformed wire bytes,
+    /// a broken socket, or a closed stream — after which the connection cannot be reused.
+    /// </summary>
+    internal static bool IsTransportFailure(Exception exception) =>
+        exception is MalformedPacketException or IOException or ObjectDisposedException;
+
+    /// <summary>
+    /// Wraps a transport-level failure in the public exception model. The command execute path
+    /// and the reader's row loop share this translation, so a socket that dies while rows are
+    /// streaming surfaces exactly like one that dies while the command is being submitted.
+    /// </summary>
+    /// <param name="exception">A failure for which <see cref="IsTransportFailure"/> is true.</param>
+    /// <param name="ioFailureMessage">The message describing the interrupted operation.</param>
+    internal static DotRocksException TranslateTransportFailure(
+        Exception exception,
+        string ioFailureMessage
+    ) =>
+        exception switch
+        {
+            MalformedPacketException malformed => new DotRocksException(
+                DescribeMalformedPacket(malformed),
+                serverErrorCode: null,
+                sqlState: null,
+                // A peer that drops the socket mid-packet surfaces as end-of-stream wrapped in a
+                // malformed-packet error. That is a transient outage (a restarting FE), unlike
+                // genuinely malformed bytes, which stay non-transient.
+                isTransient: malformed.InnerException is EndOfStreamException or IOException,
+                connectionId: null,
+                innerException: malformed
+            ),
+            IOException io => new DotRocksException(
+                ioFailureMessage,
+                serverErrorCode: null,
+                sqlState: null,
+                isTransient: true,
+                connectionId: null,
+                innerException: io
+            ),
+            ObjectDisposedException disposed => new DotRocksException(
+                "The StarRocks connection was closed while executing a command.",
+                serverErrorCode: null,
+                sqlState: null,
+                isTransient: true,
+                connectionId: null,
+                innerException: disposed
+            ),
+            _ => throw new ArgumentException(
+                "The exception is not a transport failure.",
+                nameof(exception)
+            ),
+        };
 
     // An oversized payload is a client-side limit, not corrupt wire bytes. Reporting both as
     // "malformed protocol bytes" sends the caller looking for a protocol bug when the actual

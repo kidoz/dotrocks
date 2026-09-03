@@ -4,6 +4,7 @@ using System.Data;
 using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using DotRocks.Data.Pooling;
 using DotRocks.Data.Protocol.Results;
 using DotRocks.Data.Protocol.Serialization;
 
@@ -699,6 +700,17 @@ public sealed class DotRocksDataReader
                 _operationScope.OperationToken
             );
         }
+        catch (Exception ex) when (DotRocksPhysicalConnection.IsTransportFailure(ex))
+        {
+            // A socket that dies or a packet that is cut short mid-result must surface through
+            // the public exception model, exactly as it does during command submission.
+            _isConsumed = true;
+            ReportConnectionCompletion(reusable: false);
+            throw DotRocksPhysicalConnection.TranslateTransportFailure(
+                ex,
+                "I/O failed while reading the StarRocks result set."
+            );
+        }
         catch (DotRocksException) when (_rowReader.IsConsumed)
         {
             _isConsumed = true;
@@ -761,6 +773,17 @@ public sealed class DotRocksDataReader
                 "The DotRocks command was canceled.",
                 ex,
                 _operationScope.OperationToken
+            );
+        }
+        catch (Exception ex) when (DotRocksPhysicalConnection.IsTransportFailure(ex))
+        {
+            // A socket that dies or a packet that is cut short mid-result must surface through
+            // the public exception model, exactly as it does during command submission.
+            _isConsumed = true;
+            ReportConnectionCompletion(reusable: false);
+            throw DotRocksPhysicalConnection.TranslateTransportFailure(
+                ex,
+                "I/O failed while reading the StarRocks result set."
             );
         }
         catch (DotRocksException) when (_rowReader.IsConsumed)
