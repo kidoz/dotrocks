@@ -36,6 +36,11 @@ version is derived from the release tag at publish time.
   longer aborts the connection. The abort hook stayed registered until the reader was disposed, so
   a request-abort token firing between the last `ReadAsync` and disposal discarded a healthy
   pooled socket and left the `DotRocksConnection` closed.
+- EF Core inlined `DateTime` constants — `EF.Constant(...)`, or a `Contains` over a date
+  collection — as `TIMESTAMP '…'` with seven fractional digits, which StarRocks does not parse
+  ("Column 'TIMESTAMP' cannot be resolved"). The provider now emits the StarRocks `DATETIME '…'`
+  literal with microsecond precision, and `TimeOnly` constants as a quoted string rather than the
+  unsupported `TIME '…'` form. `DateOnly` already used the valid `DATE '…'` literal.
 
 ## [1.5.0] - 2026-08-25
 

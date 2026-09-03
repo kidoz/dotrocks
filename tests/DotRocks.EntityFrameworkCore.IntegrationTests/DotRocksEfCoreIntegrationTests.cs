@@ -279,6 +279,18 @@ public sealed class DotRocksEfCoreIntegrationTests
                 )
                 .ConfigureAwait(true);
             Assert.Contains("whole-number count", fractional.Message, StringComparison.Ordinal);
+
+            // An inlined DateTime constant reaches StarRocks as a DATETIME literal it can parse.
+            Assert.Equal(
+                2,
+                await context
+                    .Widgets.CountAsync(
+                        widget =>
+                            widget.CreatedAt >= EF.Constant(new DateTime(2026, 6, 19, 11, 0, 0)),
+                        TestContext.Current.CancellationToken
+                    )
+                    .ConfigureAwait(true)
+            );
         }
         finally
         {

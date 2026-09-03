@@ -92,6 +92,38 @@ public sealed class DotRocksTranslatorTests
         Assert.Contains("whole-number count", sql, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void DateTimeConstant_InlinesAsStarRocksDateTimeLiteral()
+    {
+        using var context = CreateContext();
+
+        string sql = context
+            .Events.Where(e => e.OccurredAt > EF.Constant(new DateTime(2026, 1, 2, 3, 4, 5, 678)))
+            .ToQueryString();
+
+        // EF's base mapping emits TIMESTAMP '…' with seven fractional digits, which StarRocks
+        // rejects; the provider must emit the DATETIME '…' literal with microsecond precision.
+        Assert.Contains("DATETIME '2026-01-02 03:04:05.678000'", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("TIMESTAMP", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DateTimeCollectionContains_InlinesStarRocksDateTimeLiterals()
+    {
+        using var context = CreateContext();
+        DateTime[] dates = [new DateTime(2026, 1, 2), new DateTime(2026, 1, 3, 4, 5, 6)];
+
+        // A constant collection expands to IN (...) with inlined literals; a captured collection
+        // would bind as individual parameters and never hit the literal path.
+        string sql = context
+            .Events.Where(e => EF.Constant(dates).Contains(e.OccurredAt))
+            .ToQueryString();
+
+        Assert.Contains("DATETIME '2026-01-02 00:00:00.000000'", sql, StringComparison.Ordinal);
+        Assert.Contains("DATETIME '2026-01-03 04:05:06.000000'", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("TIMESTAMP", sql, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("Abs", "abs(")]
     [InlineData("Ceiling", "ceil(")]

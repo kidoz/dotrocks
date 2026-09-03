@@ -46,9 +46,11 @@ internal sealed class DotRocksTypeMappingSource(
                 unicode: true,
                 size: null
             ),
-            [typeof(DateTime)] = new DateTimeTypeMapping("datetime", DbType.DateTime),
+            // DATETIME and TIME literals need the StarRocks forms; DATE '…' from EF's base
+            // mapping is already valid StarRocks syntax.
+            [typeof(DateTime)] = new DotRocksDateTimeTypeMapping(),
             [typeof(DateOnly)] = new DateOnlyTypeMapping("date", DbType.Date),
-            [typeof(TimeOnly)] = new TimeOnlyTypeMapping("time", DbType.Time),
+            [typeof(TimeOnly)] = new DotRocksTimeOnlyTypeMapping(),
             [typeof(Guid)] = new DotRocksGuidTypeMapping(),
         }.ToFrozenDictionary();
 

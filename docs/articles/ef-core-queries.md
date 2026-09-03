@@ -38,6 +38,11 @@ whole-number count). A count that is only known at execution time — a paramete
 `assert_true`, so a fractional value fails the query on the server with a clear message instead
 of being truncated to a whole count.
 
+Constants that EF inlines into SQL (`EF.Constant(...)`, or an inline array in `Contains`) use the
+StarRocks literal forms: `DATE '…'`, `DATETIME '…'` with microsecond precision, and a plain
+quoted string for `TimeOnly`. EF's default `TIMESTAMP '…'` and `TIME '…'` forms are not StarRocks
+syntax. Parameters bind through the ADO.NET path and are unaffected.
+
 ### `LIMIT` before `OFFSET`
 
 StarRocks rejects a bare `OFFSET`. A `Skip` without a `Take` therefore emits a synthetic

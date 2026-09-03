@@ -179,6 +179,46 @@ public sealed class DotRocksTypeMappingTests
         Assert.Null(mapping.Converter);
     }
 
+    [Fact]
+    public void GenerateSqlLiteral_DateTime_UsesStarRocksDateTimeLiteralWithMicroseconds()
+    {
+        IRelationalTypeMappingSource source = CreateMappingSource();
+        RelationalTypeMapping? mapping = source.FindMapping(typeof(DateTime));
+        Assert.NotNull(mapping);
+
+        // .NET carries seven fractional digits; StarRocks DATETIME carries six, exactly like the
+        // ADO.NET parameter path binds. StarRocks has no TIMESTAMP literal at all.
+        string literal = mapping.GenerateSqlLiteral(
+            new DateTime(2026, 1, 2, 3, 4, 5, 678).AddTicks(9012)
+        );
+
+        Assert.Equal("DATETIME '2026-01-02 03:04:05.678901'", literal);
+    }
+
+    [Fact]
+    public void GenerateSqlLiteral_TimeOnly_UsesQuotedStringWithoutTimeKeyword()
+    {
+        IRelationalTypeMappingSource source = CreateMappingSource();
+        RelationalTypeMapping? mapping = source.FindMapping(typeof(TimeOnly));
+        Assert.NotNull(mapping);
+
+        string literal = mapping.GenerateSqlLiteral(new TimeOnly(3, 4, 5, 678));
+
+        Assert.Equal("'03:04:05.678000'", literal);
+    }
+
+    [Fact]
+    public void GenerateSqlLiteral_DateOnly_UsesDateLiteral()
+    {
+        IRelationalTypeMappingSource source = CreateMappingSource();
+        RelationalTypeMapping? mapping = source.FindMapping(typeof(DateOnly));
+        Assert.NotNull(mapping);
+
+        string literal = mapping.GenerateSqlLiteral(new DateOnly(2026, 1, 2));
+
+        Assert.Equal("DATE '2026-01-02'", literal);
+    }
+
     private static IRelationalTypeMappingSource CreateMappingSource()
     {
         using var context = CreateContext();
