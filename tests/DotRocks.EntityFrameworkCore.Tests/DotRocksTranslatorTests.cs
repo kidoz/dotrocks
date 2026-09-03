@@ -61,6 +61,22 @@ public sealed class DotRocksTranslatorTests
     }
 
     [Fact]
+    public void DateTimeAddSeconds_WithWholeConstantAboveInt32_DecomposesIntoDaysAndSeconds()
+    {
+        using var context = CreateContext();
+
+        string sql = context
+            .Events.Where(e => e.OccurredAt.AddSeconds(3_000_000_000d) > e.OccurredAt)
+            .ToQueryString();
+
+        Assert.Contains(
+            "seconds_add(days_add(`e`.`OccurredAt`, 34722), 19200)",
+            sql,
+            StringComparison.Ordinal
+        );
+    }
+
+    [Fact]
     public void DateTimeAddHours_WithFractionalConstant_IsNotTranslated()
     {
         using var context = CreateContext();

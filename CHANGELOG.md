@@ -25,7 +25,9 @@ version is derived from the release tag at publish time.
   and a fractional parameter or column value now fails the query on the server with a clear
   `assert_true` message. Previously the count was cast to an integer, so `AddHours(1.5)` silently
   became one hour and returned the wrong rows. Whole-number values, including `int` variables
-  (which EF passes as `double` parameters), translate as before.
+  (which EF passes as `double` parameters), translate as before. Runtime values outside the
+  StarRocks `INT` count range now also fail explicitly instead of producing `NULL`; large inlined
+  `AddMinutes` and `AddSeconds` constants are decomposed into days plus an in-range remainder.
 
 ### Fixed
 - `DotRocksDataReader.NextResult()` rebuilds the name-to-ordinal lookup for the next result set.

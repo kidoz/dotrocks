@@ -35,8 +35,10 @@ wrong SQL: `Math.Round(value, MidpointRounding)` (StarRocks has no equivalent) a
 `AddX(double)` overloads with a fractional constant (the StarRocks `*_add` functions take a
 whole-number count). A count that is only known at execution time — a parameter, including an
 `int` variable, which EF passes as a `double` parameter, or a column — is guarded with
-`assert_true`, so a fractional value fails the query on the server with a clear message instead
-of being truncated to a whole count.
+`assert_true`, so a fractional value or one outside StarRocks's `INT` count range fails the query
+on the server with a clear message instead of being truncated or producing `NULL`. Whole-number
+`AddMinutes` and `AddSeconds` constants outside that range are decomposed into a `days_add` plus
+an in-range remainder, preserving valid large operations such as `AddSeconds(3_000_000_000d)`.
 
 Constants that EF inlines into SQL (`EF.Constant(...)`, or an inline array in `Contains`) use the
 StarRocks literal forms: `DATE '…'`, `DATETIME '…'` with microsecond precision, and a plain

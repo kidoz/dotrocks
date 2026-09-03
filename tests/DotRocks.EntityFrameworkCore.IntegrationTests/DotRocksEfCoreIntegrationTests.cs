@@ -254,6 +254,18 @@ public sealed class DotRocksEfCoreIntegrationTests
                     .ConfigureAwait(true)
             );
 
+            // StarRocks returns NULL for a date-arithmetic count above INT even when it is cast
+            // to BIGINT, so the translator decomposes a large constant into days and seconds.
+            Assert.Equal(
+                3,
+                await context
+                    .Widgets.CountAsync(
+                        widget => widget.CreatedAt.AddSeconds(3_000_000_000d) > widget.CreatedAt,
+                        TestContext.Current.CancellationToken
+                    )
+                    .ConfigureAwait(true)
+            );
+
             // An int variable reaches StarRocks as a double parameter behind the assert_true
             // guard; a whole number passes through it unchanged.
             int wholeDays = 1;

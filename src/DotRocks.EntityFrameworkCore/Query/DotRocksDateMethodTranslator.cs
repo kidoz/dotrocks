@@ -64,27 +64,98 @@ internal sealed class DotRocksDateMethodTranslator(ISqlExpressionFactory sqlExpr
             return null;
         }
 
+        if (arguments[0] is SqlConstantExpression { Value: double constant })
+        {
+            return TranslateConstantDoubleCount(instance, constant, method, function);
+        }
+
         SqlExpression? count = TranslateCount(arguments[0], method);
         if (count is null)
         {
             return null;
         }
 
+        return CreateDateAdd(function, instance, count, method.ReturnType);
+    }
+
+    private SqlExpression? TranslateConstantDoubleCount(
+        SqlExpression instance,
+        double count,
+        MethodInfo method,
+        string function
+    )
+    {
+        if (!TryConvertWholeNumber(count, out long wholeCount))
+        {
+            return null;
+        }
+
+        if (wholeCount is >= int.MinValue and <= int.MaxValue)
+        {
+            return CreateDateAdd(
+                function,
+                instance,
+                sqlExpressionFactory.Constant((int)wholeCount),
+                method.ReturnType
+            );
+        }
+
+        int unitsPerDay = method.Name switch
+        {
+            nameof(DateTime.AddMinutes) => 1_440,
+            nameof(DateTime.AddSeconds) => 86_400,
+            _ => 0,
+        };
+        if (unitsPerDay == 0)
+        {
+            return null;
+        }
+
+        long days = wholeCount / unitsPerDay;
+        long remainder = wholeCount % unitsPerDay;
+        if (days is < int.MinValue or > int.MaxValue)
+        {
+            return null;
+        }
+
+        SqlExpression date = CreateDateAdd(
+            "days_add",
+            instance,
+            sqlExpressionFactory.Constant((int)days),
+            method.ReturnType
+        );
+        return remainder == 0
+            ? date
+            : CreateDateAdd(
+                function,
+                date,
+                sqlExpressionFactory.Constant((int)remainder),
+                method.ReturnType
+            );
+    }
+
+    private SqlExpression CreateDateAdd(
+        string function,
+        SqlExpression instance,
+        SqlExpression count,
+        Type returnType
+    )
+    {
         return sqlExpressionFactory.Function(
             function,
             [instance, count],
             nullable: true,
             argumentsPropagateNullability: [true, true],
-            method.ReturnType
+            returnType
         );
     }
 
     /// <summary>
     /// The StarRocks <c>*_add</c> functions take a whole-number count, while the
     /// <c>AddDays</c>…<c>AddSeconds</c> overloads take a <see cref="double"/>. A fractional count
-    /// must never be truncated silently: a constant is refused here, so EF reports the expression
-    /// as untranslatable, and a parameter or column is guarded at execution time with
-    /// <c>assert_true</c>, which fails the query with a clear message instead.
+    /// must never be truncated silently. A parameter or column is guarded at execution time with
+    /// <c>assert_true</c>, which also enforces the StarRocks <c>INT</c> count range and fails the
+    /// query with a clear message instead.
     /// </summary>
     private SqlExpression? TranslateCount(SqlExpression count, MethodInfo method)
     {
@@ -93,35 +164,40 @@ internal sealed class DotRocksDateMethodTranslator(ISqlExpressionFactory sqlExpr
             return count;
         }
 
-        if (count is SqlConstantExpression { Value: double value })
-        {
-            return value == Math.Truncate(value) && value is >= int.MinValue and <= int.MaxValue
-                ? sqlExpressionFactory.Constant((int)value)
-                : null;
-        }
-
         // Even an int variable arrives here as a double parameter (EF evaluates the implicit
         // conversion before parameterizing), so refusing every non-constant double would break
-        // the common AddDays(days) shape. Guard the value instead.
-        SqlExpression wholeNumber = sqlExpressionFactory.OrElse(
+        // the common AddDays(days) shape. Guard both the value and StarRocks' INT range instead.
+        SqlExpression validCount = sqlExpressionFactory.OrElse(
             sqlExpressionFactory.IsNull(count),
-            sqlExpressionFactory.Equal(
-                count,
-                sqlExpressionFactory.Function(
-                    "floor",
-                    [count],
-                    nullable: true,
-                    argumentsPropagateNullability: [true],
-                    typeof(double)
+            sqlExpressionFactory.AndAlso(
+                sqlExpressionFactory.Equal(
+                    count,
+                    sqlExpressionFactory.Function(
+                        "floor",
+                        [count],
+                        nullable: true,
+                        argumentsPropagateNullability: [true],
+                        typeof(double)
+                    )
+                ),
+                sqlExpressionFactory.AndAlso(
+                    sqlExpressionFactory.GreaterThanOrEqual(
+                        count,
+                        sqlExpressionFactory.Constant((double)int.MinValue)
+                    ),
+                    sqlExpressionFactory.LessThanOrEqual(
+                        count,
+                        sqlExpressionFactory.Constant((double)int.MaxValue)
+                    )
                 )
             )
         );
         SqlExpression guard = sqlExpressionFactory.Function(
             "assert_true",
             [
-                wholeNumber,
+                validCount,
                 sqlExpressionFactory.Constant(
-                    $"{method.DeclaringType!.Name}.{method.Name} requires a whole-number count; StarRocks date arithmetic takes an integer."
+                    $"{method.DeclaringType!.Name}.{method.Name} requires a whole-number count within the StarRocks INT range."
                 ),
             ],
             nullable: false,
@@ -129,8 +205,25 @@ internal sealed class DotRocksDateMethodTranslator(ISqlExpressionFactory sqlExpr
             typeof(bool)
         );
         return sqlExpressionFactory.Case(
-            [new CaseWhenClause(guard, sqlExpressionFactory.Convert(count, typeof(long)))],
+            [new CaseWhenClause(guard, sqlExpressionFactory.Convert(count, typeof(int)))],
             elseResult: null
         );
+    }
+
+    private static bool TryConvertWholeNumber(double value, out long result)
+    {
+        const double Int64UpperBoundExclusive = 9_223_372_036_854_775_808d;
+        if (
+            value != Math.Truncate(value)
+            || value < long.MinValue
+            || value >= Int64UpperBoundExclusive
+        )
+        {
+            result = default;
+            return false;
+        }
+
+        result = (long)value;
+        return true;
     }
 }
