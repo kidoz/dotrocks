@@ -700,6 +700,19 @@ public sealed class DotRocksDataReader
                 _operationScope.OperationToken
             );
         }
+        catch (Exception ex) when (_operationScope?.IsCanceledByExternalToken == true)
+        {
+            // The ExecuteReaderAsync token remains active for the reader's lifetime. Its abort
+            // closes the socket, so classify the resulting EOF/I/O failure as caller cancellation
+            // even when this particular ReadAsync call was given a different token.
+            _isConsumed = true;
+            ReportConnectionCompletion(reusable: false);
+            throw new OperationCanceledException(
+                "The DotRocks command was canceled by the caller.",
+                ex,
+                _operationScope.ExternalToken
+            );
+        }
         catch (Exception ex) when (DotRocksPhysicalConnection.IsTransportFailure(ex))
         {
             // A socket that dies or a packet that is cut short mid-result must surface through

@@ -142,6 +142,50 @@ public sealed class DotRocksDataReaderCancellationTests
     }
 
     [Fact]
+    public async Task ExecuteReaderToken_DuringRowIteration_CancelsReadUsingAnotherToken()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var server = FakeStarRocksServer.Start(async stream =>
+        {
+            await FakeStarRocksServer.CompleteAuthenticationAsync(stream).ConfigureAwait(true);
+            await FakeStarRocksServer
+                .ReadCommandAndStallMidResultSetAsync(stream, release.Task, "1")
+                .ConfigureAwait(true);
+        });
+
+        try
+        {
+            using var connection = new DotRocksConnection(server.ConnectionString);
+            await connection.OpenAsync(ct).ConfigureAwait(true);
+            using DbCommand command = connection.CreateCommand();
+            command.CommandText = "SELECT value FROM stalled";
+            command.CommandTimeout = 0;
+            using var executeCancellation = CancellationTokenSource.CreateLinkedTokenSource(ct);
+
+            using DbDataReader reader = await command
+                .ExecuteReaderAsync(executeCancellation.Token)
+                .ConfigureAwait(true);
+            Assert.True(await reader.ReadAsync(ct).ConfigureAwait(true));
+
+            // The token supplied to ExecuteReaderAsync owns the reader operation. It must retain
+            // cancellation semantics even when a later read uses an independent token.
+            Task<bool> stalledRead = reader.ReadAsync(CancellationToken.None);
+            await executeCancellation.CancelAsync().ConfigureAwait(true);
+
+            OperationCanceledException exception = await Assert
+                .ThrowsAnyAsync<OperationCanceledException>(() => stalledRead)
+                .ConfigureAwait(true);
+            Assert.Equal(executeCancellation.Token, exception.CancellationToken);
+            Assert.Equal(ConnectionState.Closed, connection.State);
+        }
+        finally
+        {
+            release.TrySetResult();
+        }
+    }
+
+    [Fact]
     public async Task DisposeAsync_WhenServerStallsMidResultSet_DoesNotDrainIndefinitely()
     {
         CancellationToken ct = TestContext.Current.CancellationToken;

@@ -40,7 +40,10 @@ version is derived from the release tag at publish time.
 - Cancelling the token passed to `ExecuteReaderAsync` after the result set has been fully read no
   longer aborts the connection. The abort hook stayed registered until the reader was disposed, so
   a request-abort token firing between the last `ReadAsync` and disposal discarded a healthy
-  pooled socket and left the `DotRocksConnection` closed.
+  pooled socket and left the `DotRocksConnection` closed. When that token fires during row
+  iteration, the read now consistently throws `OperationCanceledException` carrying the original
+  token even if the individual `ReadAsync` call used a different token; previously the socket
+  abort could be misreported as a transport-level `DotRocksException`.
 - EF Core inlined `DateTime` constants — `EF.Constant(...)`, or a `Contains` over a date
   collection — as `TIMESTAMP '…'` with seven fractional digits, which StarRocks does not parse
   ("Column 'TIMESTAMP' cannot be resolved"). The provider now emits the StarRocks `DATETIME '…'`

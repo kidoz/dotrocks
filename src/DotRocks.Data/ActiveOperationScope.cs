@@ -131,6 +131,12 @@ internal sealed class ActiveOperationScope : IDisposable
     /// </summary>
     public CancellationToken OperationToken => _operationToken;
 
+    /// <summary>
+    /// The caller-supplied cancellation token, retained so a reader can preserve cancellation
+    /// semantics when aborting the connection turns an in-flight row read into a transport error.
+    /// </summary>
+    public CancellationToken ExternalToken => _externalToken;
+
     // The failure is attributable to the timeout: it fired while neither the caller's token nor
     // Cancel() did.
     public bool IsTimeout =>
@@ -142,6 +148,9 @@ internal sealed class ActiveOperationScope : IDisposable
     // did not.
     public bool IsCanceledByCancelMethod =>
         _operationCancellation.IsCancellationRequested && !_externalToken.IsCancellationRequested;
+
+    /// <summary>Whether the caller-supplied token canceled the operation.</summary>
+    public bool IsCanceledByExternalToken => _externalToken.IsCancellationRequested;
 
     /// <summary>
     /// Suspends the timeout. A scope handed to a data reader must not cap the reader's total
