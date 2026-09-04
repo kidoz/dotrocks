@@ -17,6 +17,7 @@ version is derived from the release tag at publish time.
   result values no longer leak through parsing exceptions.
 - Preserve `DBNull.Value` for SQL NULL scalar results in both transports; an empty result still
   returns `null`.
+- Run Flight SQL unit tests in both build and release workflows.
 
 ## [1.5.1] - 2026-09-03
 
