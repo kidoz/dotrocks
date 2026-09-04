@@ -17,6 +17,11 @@ namespace DotRocks.Benchmarks;
 [BenchmarkCategory(BenchmarkCategories.ServerBacked)]
 [SuppressMessage(
     "Design",
+    "CA1001:Types that own disposable fields should be disposable",
+    Justification = "BenchmarkDotNet calls GlobalCleanup to dispose the owned connections and data source."
+)]
+[SuppressMessage(
+    "Design",
     "CA1515:Consider making public types internal",
     Justification = "BenchmarkDotNet requires public benchmark types."
 )]
