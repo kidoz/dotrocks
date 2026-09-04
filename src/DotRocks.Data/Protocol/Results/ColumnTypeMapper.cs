@@ -180,10 +180,10 @@ internal static class ColumnTypeMapper
         }
         catch (Exception ex) when (ex is FormatException or OverflowException or ArgumentException)
         {
-            // The server returned a value that does not match the column's declared type.
+            // Parsing exception messages may include the raw value. Keep only the safe column
+            // type description so Exception.ToString() cannot disclose result data via an inner.
             throw new MalformedPacketException(
-                $"StarRocks returned a value that is not valid for column type {columnType} (0x{column.ColumnType:X2}).",
-                ex
+                $"StarRocks returned a value that is not valid for column type {columnType} (0x{column.ColumnType:X2})."
             );
         }
     }

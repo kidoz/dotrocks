@@ -13,7 +13,8 @@ version is derived from the release tag at publish time.
   submitted through reader/scalar APIs use an enabled write fallback before contacting Flight,
   preventing duplicate execution after an ambiguous discovery failure.
 - Sanitize Flight SQL RPC details, trailers, and inner exceptions across authentication, queries,
-  updates, transactions, and result streaming while retaining status codes.
+  updates, transactions, and result streaming while retaining status codes. Malformed native
+  result values no longer leak through parsing exceptions.
 - Preserve `DBNull.Value` for SQL NULL scalar results in both transports; an empty result still
   returns `null`.
 

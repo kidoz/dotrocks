@@ -46,6 +46,28 @@ public sealed class ScalarCommandTests
         }
     }
 
+    [Fact]
+    public async Task MalformedResult_DoesNotExposeValueInPublicException()
+    {
+        const string secret = "synthetic-private-value";
+        using var server = FakeStarRocksServer.Start(stream =>
+            ReplyAsync(stream, StarRocksPacketFactory.TextRow(secret))
+        );
+        using var connection = new DotRocksConnection(server.ConnectionString);
+        await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT value FROM t";
+
+        DotRocksException exception = await Assert
+            .ThrowsAsync<DotRocksException>(() =>
+                command.ExecuteScalarAsync(TestContext.Current.CancellationToken)
+            )
+            .ConfigureAwait(true);
+
+        Assert.DoesNotContain(secret, exception.ToString(), StringComparison.Ordinal);
+        Assert.False(exception.IsTransient);
+    }
+
     private static async Task ReplyAsync(NetworkStream stream, byte[]? row)
     {
         CancellationToken token = TestContext.Current.CancellationToken;
