@@ -187,6 +187,10 @@ await using var connection = new DotRocksFlightSqlDbConnection(
 
 These constraints avoid duplicate writes and cross-transport transaction illusions.
 
+Flight RPC errors preserve `RpcException.StatusCode`, but replace server details with a generic
+message and omit trailers and inner exceptions. This also applies to authentication, updates,
+transactions, and streamed results, since server diagnostics can include SQL or private values.
+
 ## Endpoint trust and validation
 
 The exact FE scheme, host, and port are trusted automatically. Any different BE/CN address must be

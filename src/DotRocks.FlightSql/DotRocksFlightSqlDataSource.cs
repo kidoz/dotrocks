@@ -114,40 +114,55 @@ public sealed class DotRocksFlightSqlDataSource : IDisposable, IAsyncDisposable
         CancellationToken cancellationToken = default
     )
     {
-        ThrowIfDisposed();
-        FlightSqlConnection connection = GetConnection(_endpointPolicy.PrimaryAddress);
-        using CancellationTokenSource timeout = CreateTimeout(_commandTimeout, cancellationToken);
-        Metadata headers = await connection.CreateHeadersAsync(timeout.Token).ConfigureAwait(false);
-        var request = new ActionBeginTransactionRequest();
-        var action = new FlightAction(BeginTransactionAction, Any.Pack(request).ToByteArray());
-        using AsyncServerStreamingCall<FlightResult> call = connection.Client.DoAction(
-            action,
-            headers,
-            DateTime.UtcNow.Add(_commandTimeout),
-            timeout.Token
-        );
-        await foreach (
-            FlightResult result in call
-                .ResponseStream.ReadAllAsync(timeout.Token)
-                .ConfigureAwait(false)
-        )
+        try
         {
-            ActionBeginTransactionResult response = Any
-                .Parser.ParseFrom(result.Body)
-                .Unpack<ActionBeginTransactionResult>();
-            if (response.TransactionId.Length == 0)
+            ThrowIfDisposed();
+            FlightSqlConnection connection = GetConnection(_endpointPolicy.PrimaryAddress);
+            using CancellationTokenSource timeout = CreateTimeout(
+                _commandTimeout,
+                cancellationToken
+            );
+            Metadata headers = await connection
+                .CreateHeadersAsync(timeout.Token)
+                .ConfigureAwait(false);
+            var request = new ActionBeginTransactionRequest();
+            var action = new FlightAction(BeginTransactionAction, Any.Pack(request).ToByteArray());
+            using AsyncServerStreamingCall<FlightResult> call = connection.Client.DoAction(
+                action,
+                headers,
+                DateTime.UtcNow.Add(_commandTimeout),
+                timeout.Token
+            );
+            await foreach (
+                FlightResult result in call
+                    .ResponseStream.ReadAllAsync(timeout.Token)
+                    .ConfigureAwait(false)
+            )
             {
-                throw new InvalidOperationException(
-                    "The Flight SQL server returned an empty transaction handle."
+                ActionBeginTransactionResult response = Any
+                    .Parser.ParseFrom(result.Body)
+                    .Unpack<ActionBeginTransactionResult>();
+                if (response.TransactionId.Length == 0)
+                {
+                    throw new InvalidOperationException(
+                        "The Flight SQL server returned an empty transaction handle."
+                    );
+                }
+
+                return new DotRocksFlightSqlTransaction(
+                    this,
+                    new Transaction(response.TransactionId)
                 );
             }
 
-            return new DotRocksFlightSqlTransaction(this, new Transaction(response.TransactionId));
+            throw new InvalidOperationException(
+                "The Flight SQL server did not return a transaction handle."
+            );
         }
-
-        throw new InvalidOperationException(
-            "The Flight SQL server did not return a transaction handle."
-        );
+        catch (Exception exception) when (FlightSqlErrors.IsRemoteFailure(exception))
+        {
+            throw FlightSqlErrors.Sanitize(exception);
+        }
     }
 
     internal async Task<DotRocksFlightSqlResult> ExecuteQueryAsync(
@@ -157,32 +172,42 @@ public sealed class DotRocksFlightSqlDataSource : IDisposable, IAsyncDisposable
         CancellationToken cancellationToken
     )
     {
-        ThrowIfDisposed();
-        ArgumentException.ThrowIfNullOrWhiteSpace(sql);
-
-        FlightSqlConnection connection = GetConnection(_endpointPolicy.PrimaryAddress);
-        TimeSpan effectiveTimeout = commandTimeout ?? _commandTimeout;
-        using CancellationTokenSource timeout = CreateTimeout(effectiveTimeout, cancellationToken);
-        var callOptions = new FlightCallOptions
+        try
         {
-            Headers = await connection.CreateHeadersAsync(timeout.Token).ConfigureAwait(false),
-        };
-        FlightInfo info = await connection
-            .SqlClient.ExecuteAsync(
-                sql,
-                transaction,
-                options: callOptions,
-                cancellationToken: timeout.Token
-            )
-            .ConfigureAwait(false);
+            ThrowIfDisposed();
+            ArgumentException.ThrowIfNullOrWhiteSpace(sql);
 
-        return new DotRocksFlightSqlResult(
-            info.Schema,
-            info.TotalRecords,
-            info.TotalBytes,
-            info.Ordered,
-            token => ReadBatchesAsync(info.Endpoints, effectiveTimeout, token)
-        );
+            FlightSqlConnection connection = GetConnection(_endpointPolicy.PrimaryAddress);
+            TimeSpan effectiveTimeout = commandTimeout ?? _commandTimeout;
+            using CancellationTokenSource timeout = CreateTimeout(
+                effectiveTimeout,
+                cancellationToken
+            );
+            var callOptions = new FlightCallOptions
+            {
+                Headers = await connection.CreateHeadersAsync(timeout.Token).ConfigureAwait(false),
+            };
+            FlightInfo info = await connection
+                .SqlClient.ExecuteAsync(
+                    sql,
+                    transaction,
+                    options: callOptions,
+                    cancellationToken: timeout.Token
+                )
+                .ConfigureAwait(false);
+
+            return new DotRocksFlightSqlResult(
+                info.Schema,
+                info.TotalRecords,
+                info.TotalBytes,
+                info.Ordered,
+                token => ReadBatchesAsync(info.Endpoints, effectiveTimeout, token)
+            );
+        }
+        catch (Exception exception) when (FlightSqlErrors.IsRemoteFailure(exception))
+        {
+            throw FlightSqlErrors.Sanitize(exception);
+        }
     }
 
     internal async Task<long> ExecuteUpdateAsync(
@@ -192,42 +217,54 @@ public sealed class DotRocksFlightSqlDataSource : IDisposable, IAsyncDisposable
         CancellationToken cancellationToken
     )
     {
-        ThrowIfDisposed();
-        ArgumentException.ThrowIfNullOrWhiteSpace(sql);
-        FlightSqlConnection connection = GetConnection(_endpointPolicy.PrimaryAddress);
-        TimeSpan effectiveTimeout = commandTimeout ?? _commandTimeout;
-        using CancellationTokenSource timeout = CreateTimeout(effectiveTimeout, cancellationToken);
-        var update = new CommandStatementUpdate { Query = sql };
-        if (transaction.IsValid)
+        try
         {
-            update.TransactionId = transaction.TransactionId;
-        }
-
-        FlightDescriptor descriptor = FlightDescriptor.CreateCommandDescriptor(
-            Any.Pack(update).ToByteArray()
-        );
-        Metadata headers = await connection.CreateHeadersAsync(timeout.Token).ConfigureAwait(false);
-        using var call = await connection
-            .Client.StartPut(
-                descriptor,
-                EmptySchema,
-                headers,
-                CreateDeadline(effectiveTimeout),
-                timeout.Token
-            )
-            .ConfigureAwait(false);
-        await call.RequestStream.CompleteAsync().ConfigureAwait(false);
-        if (!await call.ResponseStream.MoveNext(timeout.Token).ConfigureAwait(false))
-        {
-            throw new InvalidOperationException(
-                "The Flight SQL server did not return an update result."
+            ThrowIfDisposed();
+            ArgumentException.ThrowIfNullOrWhiteSpace(sql);
+            FlightSqlConnection connection = GetConnection(_endpointPolicy.PrimaryAddress);
+            TimeSpan effectiveTimeout = commandTimeout ?? _commandTimeout;
+            using CancellationTokenSource timeout = CreateTimeout(
+                effectiveTimeout,
+                cancellationToken
             );
-        }
+            var update = new CommandStatementUpdate { Query = sql };
+            if (transaction.IsValid)
+            {
+                update.TransactionId = transaction.TransactionId;
+            }
 
-        DoPutUpdateResult result = DoPutUpdateResult.Parser.ParseFrom(
-            call.ResponseStream.Current.ApplicationMetadata
-        );
-        return result.RecordCount;
+            FlightDescriptor descriptor = FlightDescriptor.CreateCommandDescriptor(
+                Any.Pack(update).ToByteArray()
+            );
+            Metadata headers = await connection
+                .CreateHeadersAsync(timeout.Token)
+                .ConfigureAwait(false);
+            using var call = await connection
+                .Client.StartPut(
+                    descriptor,
+                    EmptySchema,
+                    headers,
+                    CreateDeadline(effectiveTimeout),
+                    timeout.Token
+                )
+                .ConfigureAwait(false);
+            await call.RequestStream.CompleteAsync().ConfigureAwait(false);
+            if (!await call.ResponseStream.MoveNext(timeout.Token).ConfigureAwait(false))
+            {
+                throw new InvalidOperationException(
+                    "The Flight SQL server did not return an update result."
+                );
+            }
+
+            DoPutUpdateResult result = DoPutUpdateResult.Parser.ParseFrom(
+                call.ResponseStream.Current.ApplicationMetadata
+            );
+            return result.RecordCount;
+        }
+        catch (Exception exception) when (FlightSqlErrors.IsRemoteFailure(exception))
+        {
+            throw FlightSqlErrors.Sanitize(exception);
+        }
     }
 
     internal Task<long> ExecuteUpdateAsync(
@@ -292,7 +329,9 @@ public sealed class DotRocksFlightSqlDataSource : IDisposable, IAsyncDisposable
             while (hasBatch)
             {
                 yield return call.ResponseStream.Current;
-                hasBatch = await call.ResponseStream.MoveNext(timeout.Token).ConfigureAwait(false);
+                hasBatch = await FlightSqlErrors
+                    .ReadNextAsync(call.ResponseStream, timeout.Token)
+                    .ConfigureAwait(false);
             }
         }
     }
@@ -333,6 +372,11 @@ public sealed class DotRocksFlightSqlDataSource : IDisposable, IAsyncDisposable
             {
                 // A backend that does not answer must not hide the remaining trusted locations.
                 call?.Dispose();
+            }
+            catch (Exception exception) when (FlightSqlErrors.IsRemoteFailure(exception))
+            {
+                call?.Dispose();
+                throw FlightSqlErrors.Sanitize(exception);
             }
             catch
             {
@@ -420,25 +464,39 @@ public sealed class DotRocksFlightSqlDataSource : IDisposable, IAsyncDisposable
         CancellationToken cancellationToken
     )
     {
-        ThrowIfDisposed();
-        FlightSqlConnection connection = GetConnection(_endpointPolicy.PrimaryAddress);
-        using CancellationTokenSource timeout = CreateTimeout(_commandTimeout, cancellationToken);
-        Metadata headers = await connection.CreateHeadersAsync(timeout.Token).ConfigureAwait(false);
-        var request = new ActionEndTransactionRequest
+        try
         {
-            TransactionId = transaction.TransactionId,
-            Action = (ActionEndTransactionRequest.Types.EndTransaction)(commit ? 1 : 2),
-        };
-        var action = new FlightAction(EndTransactionAction, Any.Pack(request).ToByteArray());
-        using AsyncServerStreamingCall<FlightResult> call = connection.Client.DoAction(
-            action,
-            headers,
-            DateTime.UtcNow.Add(_commandTimeout),
-            timeout.Token
-        );
-        await foreach (
-            FlightResult _ in call.ResponseStream.ReadAllAsync(timeout.Token).ConfigureAwait(false)
-        ) { }
+            ThrowIfDisposed();
+            FlightSqlConnection connection = GetConnection(_endpointPolicy.PrimaryAddress);
+            using CancellationTokenSource timeout = CreateTimeout(
+                _commandTimeout,
+                cancellationToken
+            );
+            Metadata headers = await connection
+                .CreateHeadersAsync(timeout.Token)
+                .ConfigureAwait(false);
+            var request = new ActionEndTransactionRequest
+            {
+                TransactionId = transaction.TransactionId,
+                Action = (ActionEndTransactionRequest.Types.EndTransaction)(commit ? 1 : 2),
+            };
+            var action = new FlightAction(EndTransactionAction, Any.Pack(request).ToByteArray());
+            using AsyncServerStreamingCall<FlightResult> call = connection.Client.DoAction(
+                action,
+                headers,
+                DateTime.UtcNow.Add(_commandTimeout),
+                timeout.Token
+            );
+            await foreach (
+                FlightResult _ in call
+                    .ResponseStream.ReadAllAsync(timeout.Token)
+                    .ConfigureAwait(false)
+            ) { }
+        }
+        catch (Exception exception) when (FlightSqlErrors.IsRemoteFailure(exception))
+        {
+            throw FlightSqlErrors.Sanitize(exception);
+        }
     }
 
     private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_disposed != 0, this);

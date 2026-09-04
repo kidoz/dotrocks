@@ -29,7 +29,7 @@ namespace DotRocks.FlightSql.Tests;
     "CA2007:Consider calling ConfigureAwait on the awaited task",
     Justification = "Await-using declarations in xUnit tests intentionally retain the test context."
 )]
-public sealed class FlightSqlTransportTests
+public sealed partial class FlightSqlTransportTests
 {
     [Fact]
     public async Task ExecuteQueryAsync_StreamsRecordBatchesWithAuthorization()
@@ -741,6 +741,7 @@ public sealed class FlightSqlTransportTests
             ServerCallContext context
         )
         {
+            ThrowIfSensitiveFailure("handshake");
             string? authorization = ReadAuthorization(context);
             if (authorization != ExpectedBasicAuthorization)
             {
@@ -770,6 +771,7 @@ public sealed class FlightSqlTransportTests
                 ? command.Query
                 : string.Empty;
             _capture.LastQuery = query;
+            ThrowIfSensitiveFailure("query");
             if (query.Contains("unavailable_discovery", StringComparison.OrdinalIgnoreCase))
             {
                 throw new RpcException(new Status(StatusCode.Unavailable, "Frontend unavailable."));
@@ -816,6 +818,7 @@ public sealed class FlightSqlTransportTests
         )
         {
             RequireAuthorization(context);
+            ThrowIfSensitiveFailure("first-batch");
             string ticketValue = ticket.Ticket.ToStringUtf8();
             if (ticketValue == "unavailable")
             {
@@ -856,6 +859,7 @@ public sealed class FlightSqlTransportTests
             using var values = new Int32Array.Builder().Append(1).Append(2).Build();
             using var batch = new RecordBatch(ResultSchema, [values], 2);
             await responseStream.WriteAsync(batch).ConfigureAwait(false);
+            ThrowIfSensitiveFailure("later-batch");
         }
 
         public override async Task DoPut(
@@ -876,6 +880,7 @@ public sealed class FlightSqlTransportTests
             }
 
             _capture.LastUpdate = update.Query;
+            ThrowIfSensitiveFailure("update");
             _capture.LastUpdateTransactionId = update.HasTransactionId
                 ? update.TransactionId.ToStringUtf8()
                 : null;
@@ -895,6 +900,7 @@ public sealed class FlightSqlTransportTests
             _capture.LastAction = request.Type;
             if (request.Type == "BeginTransaction")
             {
+                ThrowIfSensitiveFailure("begin");
                 _ = Any.Parser.ParseFrom(request.Body).Unpack<ActionBeginTransactionRequest>();
                 var result = new ActionBeginTransactionResult
                 {
@@ -906,6 +912,7 @@ public sealed class FlightSqlTransportTests
             }
             else if (request.Type == "EndTransaction")
             {
+                ThrowIfSensitiveFailure("end");
                 ActionEndTransactionRequest end = Any
                     .Parser.ParseFrom(request.Body)
                     .Unpack<ActionEndTransactionRequest>();
@@ -923,6 +930,17 @@ public sealed class FlightSqlTransportTests
                 await responseStream
                     .WriteAsync(new FlightResult(ByteString.Empty))
                     .ConfigureAwait(false);
+            }
+        }
+
+        private void ThrowIfSensitiveFailure(string phase)
+        {
+            if (_capture.FailurePhase == phase)
+            {
+                throw new RpcException(
+                    new Status(StatusCode.InvalidArgument, "Server echoed " + SensitiveValue),
+                    new Metadata { { "private-data", SensitiveValue } }
+                );
             }
         }
 
@@ -975,6 +993,8 @@ public sealed class FlightSqlTransportTests
 
         public TaskCompletionSource DoGetStarted { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public string? FailurePhase { get; set; }
 
         public string LastQuery { get; set; } = string.Empty;
 

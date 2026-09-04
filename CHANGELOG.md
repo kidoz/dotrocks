@@ -8,6 +8,10 @@ version is derived from the release tag at publish time.
 
 ## [Unreleased]
 
+### Fixed
+- Sanitize Flight SQL RPC details, trailers, and inner exceptions across authentication, queries,
+  updates, transactions, and result streaming while retaining status codes.
+
 ## [1.5.1] - 2026-09-03
 
 ### Changed
