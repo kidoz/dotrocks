@@ -8,6 +8,8 @@ version is derived from the release tag at publish time.
 
 ## [Unreleased]
 
+## [1.5.2] - 2026-09-05
+
 ### Fixed
 - Restrict Flight SQL read fallback to conservatively recognized read-only statements. Writes
   submitted through reader/scalar APIs use an enabled write fallback before contacting Flight,
@@ -554,7 +556,8 @@ version is derived from the release tag at publish time.
 - Stream Load refuses to forward credentials over a downgraded (HTTPS→HTTP) redirect.
 - NuGet vulnerability auditing and CodeQL analysis in CI.
 
-[Unreleased]: https://github.com/kidoz/dotrocks/compare/v1.5.1...HEAD
+[Unreleased]: https://github.com/kidoz/dotrocks/compare/v1.5.2...HEAD
+[1.5.2]: https://github.com/kidoz/dotrocks/compare/v1.5.1...v1.5.2
 [1.5.1]: https://github.com/kidoz/dotrocks/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/kidoz/dotrocks/compare/v1.4.2...v1.5.0
 [1.4.2]: https://github.com/kidoz/dotrocks/compare/v1.4.1...v1.4.2
