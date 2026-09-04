@@ -794,6 +794,7 @@ public sealed partial class FlightSqlTransportTests
                 widgets ? "widgets"
                 : blocking ? "blocking"
                 : empty ? "empty"
+                : query.Contains("null_value", StringComparison.Ordinal) ? "null"
                 : unavailableFetch ? "unavailable"
                 : "result";
             Schema schema = widgets ? WidgetSchema : ResultSchema;
@@ -826,6 +827,13 @@ public sealed partial class FlightSqlTransportTests
             RequireAuthorization(context);
             ThrowIfSensitiveFailure("first-batch");
             string ticketValue = ticket.Ticket.ToStringUtf8();
+            if (ticketValue == "null")
+            {
+                using var nullValues = new Int32Array.Builder().AppendNull().Build();
+                using var nullBatch = new RecordBatch(ResultSchema, [nullValues], 1);
+                await responseStream.WriteAsync(nullBatch).ConfigureAwait(false);
+                return;
+            }
             if (ticketValue == "unavailable")
             {
                 throw new RpcException(new Status(StatusCode.Unavailable, "Backend unavailable."));

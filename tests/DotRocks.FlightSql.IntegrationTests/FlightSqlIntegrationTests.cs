@@ -3,6 +3,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using DotRocks.Data;
 using DotRocks.FlightSql;
+using Grpc.Core;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -15,6 +16,32 @@ namespace DotRocks.FlightSql.IntegrationTests;
 )]
 public sealed class FlightSqlIntegrationTests
 {
+    [Fact]
+    public async Task ScalarNullAndSqlErrors_PreserveContractsAgainstStarRocks()
+    {
+        FlightSqlIntegrationEnvironment.SkipUnlessEnabled();
+        CancellationToken token = TestContext.Current.CancellationToken;
+        await using var connection = new DotRocksFlightSqlDbConnection(
+            FlightSqlIntegrationEnvironment.FlightOptions
+        );
+        await connection.OpenAsync(token).ConfigureAwait(true);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT CAST(NULL AS INT)";
+        Assert.Same(DBNull.Value, await command.ExecuteScalarAsync(token).ConfigureAwait(true));
+        command.CommandText = "SELECT CAST(NULL AS INT) WHERE FALSE";
+        Assert.Null(await command.ExecuteScalarAsync(token).ConfigureAwait(true));
+
+        const string secret = "synthetic-private-value";
+        command.CommandText = "SELECT @value + FROM";
+        command.Parameters.Add(new DotRocksParameter { ParameterName = "value", Value = secret });
+        RpcException exception = await Assert
+            .ThrowsAsync<RpcException>(() => command.ExecuteScalarAsync(token))
+            .ConfigureAwait(true);
+        Assert.DoesNotContain(secret, exception.ToString(), StringComparison.Ordinal);
+        Assert.Empty(exception.Trailers);
+        Assert.Null(exception.InnerException);
+    }
+
     [Fact]
     [SuppressMessage(
         "Security",

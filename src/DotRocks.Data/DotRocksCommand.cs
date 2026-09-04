@@ -174,7 +174,7 @@ public sealed class DotRocksCommand : DbCommand
         }
 
         object? value = reader.FieldCount == 0 ? null : reader.GetValue(0);
-        return value == DBNull.Value ? null : value;
+        return value;
     }
 
     /// <inheritdoc />
@@ -228,7 +228,7 @@ public sealed class DotRocksCommand : DbCommand
             }
 
             object? value = reader.FieldCount == 0 ? null : reader.GetValue(0);
-            return value == DBNull.Value ? null : value;
+            return value;
         }
     }
 

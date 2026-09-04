@@ -1168,7 +1168,7 @@ public sealed class ConnectionIntegrationTests
     }
 
     [Fact]
-    public async Task ExecuteScalarAsync_ReturnsNullForSqlNull()
+    public async Task ExecuteScalarAsync_DistinguishesSqlNullFromNoRows()
     {
         IntegrationTestEnvironment.SkipUnlessEnabled();
 
@@ -1182,7 +1182,13 @@ public sealed class ConnectionIntegrationTests
             .ExecuteScalarAsync(TestContext.Current.CancellationToken)
             .ConfigureAwait(true);
 
-        Assert.Null(value);
+        Assert.Same(DBNull.Value, value);
+        command.CommandText = "SELECT NULL WHERE FALSE";
+        Assert.Null(
+            await command
+                .ExecuteScalarAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true)
+        );
     }
 
     [Fact]

@@ -187,6 +187,47 @@ public sealed partial class FlightSqlTransportTests
         }
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    [SuppressMessage(
+        "Security",
+        "CA2100:Review SQL queries for security vulnerabilities",
+        Justification = "Both conditional command texts are fixed test literals."
+    )]
+    public async Task ExecuteScalarAsync_DistinguishesNullFromNoRows(bool hasRow)
+    {
+        using IHost host = CreateHost();
+        CancellationToken token = TestContext.Current.CancellationToken;
+        await host.StartAsync(token).ConfigureAwait(true);
+        try
+        {
+            var options = new DotRocksFlightSqlOptions(GetServerAddress(host), "root", "secret")
+            {
+                AllowInsecureTransport = true,
+            };
+            await using var connection = new DotRocksFlightSqlDbConnection(options);
+            await connection.OpenAsync(token).ConfigureAwait(true);
+            await using var command = connection.CreateCommand();
+            command.CommandText = hasRow ? "SELECT null_value" : "SELECT value FROM empty";
+
+            object? value = await command.ExecuteScalarAsync(token).ConfigureAwait(true);
+
+            if (hasRow)
+            {
+                Assert.Same(DBNull.Value, value);
+            }
+            else
+            {
+                Assert.Null(value);
+            }
+        }
+        finally
+        {
+            await host.StopAsync(token).ConfigureAwait(true);
+        }
+    }
+
     private static DotRocksFlightSqlDbConnection CreateFallbackConnection(
         IHost host,
         DotRocksFlightSqlFallbackMode mode

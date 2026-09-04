@@ -14,6 +14,8 @@ version is derived from the release tag at publish time.
   preventing duplicate execution after an ambiguous discovery failure.
 - Sanitize Flight SQL RPC details, trailers, and inner exceptions across authentication, queries,
   updates, transactions, and result streaming while retaining status codes.
+- Preserve `DBNull.Value` for SQL NULL scalar results in both transports; an empty result still
+  returns `null`.
 
 ## [1.5.1] - 2026-09-03
 
