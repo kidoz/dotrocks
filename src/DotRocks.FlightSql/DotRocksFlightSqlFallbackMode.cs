@@ -10,12 +10,14 @@ public enum DotRocksFlightSqlFallbackMode
     None = 0,
 
     /// <summary>
-    /// Retry query discovery over <c>DotRocks.Data</c> when Flight is unavailable or unimplemented.
+    /// Retry conservatively recognized read-only query discovery over <c>DotRocks.Data</c>
+    /// when Flight is unavailable or unimplemented. Ambiguous and multi-statement SQL is excluded.
     /// </summary>
     ReadQueries = 1,
 
     /// <summary>
-    /// Route write commands through <c>DotRocks.Data</c> without first attempting Flight.
+    /// Route write commands and reader commands not recognized as read-only through
+    /// <c>DotRocks.Data</c> without first attempting Flight.
     /// </summary>
     WriteCommands = 2,
 }

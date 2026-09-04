@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Apache.Arrow;
 using DotRocks.Data;
 using DotRocks.FlightSql;
@@ -10,6 +11,85 @@ namespace DotRocks.FlightSql.Tests;
 public sealed partial class FlightSqlTransportTests
 {
     private const string SensitiveValue = "synthetic-private-value";
+
+    [Theory]
+    [InlineData("INSERT INTO unavailable_discovery VALUES (1)")]
+    [InlineData("UPDATE unavailable_discovery SET value = 1")]
+    [InlineData("SELECT 1; INSERT INTO unavailable_discovery VALUES (1)")]
+    [InlineData("SELECT 1 INTO OUTFILE 'unavailable_discovery'")]
+    [SuppressMessage(
+        "Security",
+        "CA2100:Review SQL queries for security vulnerabilities",
+        Justification = "SQL is supplied exclusively by fixed InlineData cases."
+    )]
+    public async Task ReadFallback_DoesNotReplayWritesAfterDiscoveryFailure(string sql)
+    {
+        ArgumentNullException.ThrowIfNull(sql);
+        using IHost host = CreateHost();
+        CancellationToken token = TestContext.Current.CancellationToken;
+        await host.StartAsync(token).ConfigureAwait(true);
+        try
+        {
+            await using var connection = CreateFallbackConnection(
+                host,
+                DotRocksFlightSqlFallbackMode.ReadQueries
+            );
+            await connection.OpenAsync(token).ConfigureAwait(true);
+            await using var command = connection.CreateCommand();
+            command.CommandText = sql;
+
+            // A replay would attempt the closed MySQL port and replace this RPC error with a
+            // DotRocks connection error. An INSERT has already committed in the scripted server.
+            RpcException exception = await Assert
+                .ThrowsAsync<RpcException>(() => command.ExecuteReaderAsync(token))
+                .ConfigureAwait(true);
+
+            Assert.Equal(StatusCode.Unavailable, exception.StatusCode);
+            Assert.Equal(sql, GetQueryCapture(host).LastQuery);
+            Assert.Equal(
+                sql.StartsWith("INSERT", StringComparison.Ordinal) ? 1 : 0,
+                GetQueryCapture(host).CommittedWrites
+            );
+        }
+        finally
+        {
+            await host.StopAsync(token).ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
+    public async Task WriteFallback_RoutesReaderWritesBeforeContactingFlight()
+    {
+        using IHost host = CreateHost();
+        CancellationToken token = TestContext.Current.CancellationToken;
+        await host.StartAsync(token).ConfigureAwait(true);
+        try
+        {
+            await using var connection = CreateFallbackConnection(
+                host,
+                DotRocksFlightSqlFallbackMode.WriteCommands
+            );
+            await connection.OpenAsync(token).ConfigureAwait(true);
+            await using var command = connection.CreateCommand();
+            command.CommandText = "INSERT INTO unavailable_discovery VALUES (1)";
+
+            for (int attempt = 0; attempt < 2; attempt++)
+            {
+                // Repeat to verify that a failed pre-routed execution releases its operation gate.
+                await Assert
+                    .ThrowsAsync<DotRocksException>(() => command.ExecuteReaderAsync(token))
+                    .ConfigureAwait(true);
+            }
+
+            Assert.Empty(GetQueryCapture(host).LastQuery);
+            Assert.Equal(0, GetQueryCapture(host).Handshakes);
+            Assert.Equal(0, GetQueryCapture(host).CommittedWrites);
+        }
+        finally
+        {
+            await host.StopAsync(token).ConfigureAwait(true);
+        }
+    }
 
     [Theory]
     [InlineData("handshake")]
@@ -106,4 +186,17 @@ public sealed partial class FlightSqlTransportTests
             await host.StopAsync(token).ConfigureAwait(true);
         }
     }
+
+    private static DotRocksFlightSqlDbConnection CreateFallbackConnection(
+        IHost host,
+        DotRocksFlightSqlFallbackMode mode
+    ) =>
+        new(
+            new DotRocksFlightSqlOptions(GetServerAddress(host), "root", "secret")
+            {
+                AllowInsecureTransport = true,
+            },
+            "Server=127.0.0.1;Port=1;User ID=root;Connection Timeout=1",
+            mode
+        );
 }

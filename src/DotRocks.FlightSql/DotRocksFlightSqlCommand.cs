@@ -276,10 +276,19 @@ public sealed class DotRocksFlightSqlCommand : DbCommand
         string commandText = BindCommandText();
         ExecutionScope operation = BeginExecution(cancellationToken);
 
-        // Only the discovery call (GetFlightInfo) may fall back to the MySQL protocol: it is where
-        // StarRocks runs the statement, so a transport failure there means the statement never
-        // executed. A failure while fetching the result afterwards (DoGet) must not re-run the
-        // text over MySQL — for anything but a pure read, that would execute it twice.
+        bool readOnly = SqlStatementClassifier.IsReadOnlyQuery(commandText);
+        if (
+            _transaction is null
+            && connection.FallbackMode.HasFlag(DotRocksFlightSqlFallbackMode.WriteCommands)
+            && !readOnly
+        )
+        {
+            return await ExecuteFallbackReaderAsync(connection, commandText, behavior, operation)
+                .ConfigureAwait(false);
+        }
+
+        // Discovery executes SQL and can fail after a write has committed. Only statements
+        // positively classified as reads may be replayed, and only before result fetching starts.
         DotRocksFlightSqlResult result;
         try
         {
@@ -303,42 +312,13 @@ public sealed class DotRocksFlightSqlCommand : DbCommand
         }
         catch (Exception ex)
             when (_transaction is null
+                && readOnly
                 && connection.FallbackMode.HasFlag(DotRocksFlightSqlFallbackMode.ReadQueries)
                 && IsSafeReadFallbackFailure(ex)
             )
         {
-            try
-            {
-                DotRocksConnection fallback = await connection
-                    .GetFallbackConnectionAsync(operation.Token)
-                    .ConfigureAwait(false);
-                DbCommand fallbackCommand = CreateFallbackCommand(fallback, commandText);
-                try
-                {
-                    CommandBehavior fallbackBehavior = behavior & ~CommandBehavior.CloseConnection;
-                    DbDataReader reader = await fallbackCommand
-                        .ExecuteReaderAsync(fallbackBehavior, operation.Token)
-                        .ConfigureAwait(false);
-                    return new OwnedFallbackDataReader(
-                        reader,
-                        fallbackCommand,
-                        operation,
-                        behavior.HasFlag(CommandBehavior.CloseConnection) ? connection : null,
-                        ClearFallbackCommand
-                    );
-                }
-                catch
-                {
-                    ClearFallbackCommand(fallbackCommand);
-                    await fallbackCommand.DisposeAsync().ConfigureAwait(false);
-                    throw;
-                }
-            }
-            catch
-            {
-                operation.Dispose();
-                throw;
-            }
+            return await ExecuteFallbackReaderAsync(connection, commandText, behavior, operation)
+                .ConfigureAwait(false);
         }
         catch
         {
@@ -356,6 +336,47 @@ public sealed class DotRocksFlightSqlCommand : DbCommand
                     operation.Token
                 )
                 .ConfigureAwait(false);
+        }
+        catch
+        {
+            operation.Dispose();
+            throw;
+        }
+    }
+
+    private async Task<DbDataReader> ExecuteFallbackReaderAsync(
+        DotRocksFlightSqlDbConnection connection,
+        string commandText,
+        CommandBehavior behavior,
+        ExecutionScope operation
+    )
+    {
+        try
+        {
+            DotRocksConnection fallback = await connection
+                .GetFallbackConnectionAsync(operation.Token)
+                .ConfigureAwait(false);
+            DbCommand fallbackCommand = CreateFallbackCommand(fallback, commandText);
+            try
+            {
+                CommandBehavior fallbackBehavior = behavior & ~CommandBehavior.CloseConnection;
+                DbDataReader reader = await fallbackCommand
+                    .ExecuteReaderAsync(fallbackBehavior, operation.Token)
+                    .ConfigureAwait(false);
+                return new OwnedFallbackDataReader(
+                    reader,
+                    fallbackCommand,
+                    operation,
+                    behavior.HasFlag(CommandBehavior.CloseConnection) ? connection : null,
+                    ClearFallbackCommand
+                );
+            }
+            catch
+            {
+                ClearFallbackCommand(fallbackCommand);
+                await fallbackCommand.DisposeAsync().ConfigureAwait(false);
+                throw;
+            }
         }
         catch
         {

@@ -60,7 +60,14 @@ public sealed class FlightSqlIntegrationTests
             await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(true);
             idParameter.Value = 3;
             nameParameter.Value = "fallback-reuse";
-            await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(true);
+            await using (
+                var writeReader = await insert
+                    .ExecuteReaderAsync(cancellationToken)
+                    .ConfigureAwait(true)
+            )
+            {
+                Assert.Equal(1, writeReader.RecordsAffected);
+            }
 
             await using DotRocksFlightSqlCommand query = flight.CreateCommand();
             query.CommandText = $"SELECT id, name FROM `{database}`.`widgets` ORDER BY id";

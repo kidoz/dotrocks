@@ -1,12 +1,55 @@
 namespace DotRocks.Data.Protocol.Commands;
 
 /// <summary>
-/// Classifies SQL statement text for connection-management decisions. Currently detects
-/// session-mutating statements (USE / SET) so the pool can retire connections whose session state
-/// may have changed.
+/// Classifies SQL for session retirement and conservative read-only fallback decisions.
 /// </summary>
 internal static class SqlStatementClassifier
 {
+    // A conservative retry allowlist, not a SQL parser. Reject ambiguous forms (including CTEs)
+    // and inspect the raw text for separators/assignments/INTO even inside literals or comments:
+    // a false negative only disables fallback; a false positive could replay a write.
+    public static bool IsReadOnlyQuery(string commandText)
+    {
+        ReadOnlySpan<char> sql = commandText.AsSpan().Trim();
+        if (!sql.IsEmpty && sql[^1] == ';')
+        {
+            sql = sql[..^1];
+        }
+
+        if (
+            sql.Contains(';')
+            || sql.Contains(":=", StringComparison.Ordinal)
+            || sql.Contains("/*!", StringComparison.Ordinal)
+        )
+        {
+            return false;
+        }
+
+        int start = SkipLeadingTrivia(sql);
+        if (
+            !MatchesKeyword(sql, start, "SELECT")
+            && !MatchesKeyword(sql, start, "SHOW")
+            && !MatchesKeyword(sql, start, "DESCRIBE")
+            && !MatchesKeyword(sql, start, "DESC")
+        )
+        {
+            return false;
+        }
+
+        for (int index = start; index < sql.Length; index++)
+        {
+            if (
+                (index == 0 || !IsIdentifierPart(sql[index - 1]))
+                && MatchesKeyword(sql, index, "INTO")
+            )
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     // Detection is intentionally conservative (it errs toward discarding): it skips leading
     // whitespace and SQL comments, then flags a statement whose leading keyword is USE or SET.
     // It also flags any statement that assigns a user variable with ":=" (for example

@@ -153,8 +153,8 @@ public sealed partial class FlightSqlTransportTests
             );
             await connection.OpenAsync(cancellationToken).ConfigureAwait(true);
 
-            // GetFlightInfo is where StarRocks runs the statement: a failure there means it never
-            // executed, so retrying over MySQL is safe and expected.
+            // Only the read-only SELECT is eligible for retry after an ambiguous discovery
+            // failure. A write could already have executed before this failure arrived.
             await using DotRocksFlightSqlCommand discovery = connection.CreateCommand();
             discovery.CommandText = "SELECT value FROM unavailable_discovery";
             DotRocksException fallbackFailure = await Assert
@@ -774,6 +774,12 @@ public sealed partial class FlightSqlTransportTests
             ThrowIfSensitiveFailure("query");
             if (query.Contains("unavailable_discovery", StringComparison.OrdinalIgnoreCase))
             {
+                // Simulate a committed write whose response is lost. Reader execution does not
+                // imply read-only SQL, so the client must not replay it over the fallback.
+                if (query.StartsWith("INSERT", StringComparison.OrdinalIgnoreCase))
+                {
+                    Interlocked.Increment(ref _capture.CommittedWrites);
+                }
                 throw new RpcException(new Status(StatusCode.Unavailable, "Frontend unavailable."));
             }
 
@@ -993,6 +999,8 @@ public sealed partial class FlightSqlTransportTests
 
         public TaskCompletionSource DoGetStarted { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public int CommittedWrites;
 
         public string? FailurePhase { get; set; }
 

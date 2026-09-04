@@ -9,6 +9,9 @@ version is derived from the release tag at publish time.
 ## [Unreleased]
 
 ### Fixed
+- Restrict Flight SQL read fallback to conservatively recognized read-only statements. Writes
+  submitted through reader/scalar APIs use an enabled write fallback before contacting Flight,
+  preventing duplicate execution after an ambiguous discovery failure.
 - Sanitize Flight SQL RPC details, trailers, and inner exceptions across authentication, queries,
   updates, transactions, and result streaming while retaining status codes.
 
