@@ -8,13 +8,13 @@
 Install the packages you use:
 
 ```xml
-<PackageReference Include="DotRocks.Data" Version="1.5.2" />
-<PackageReference Include="DotRocks.EntityFrameworkCore" Version="1.5.2" />
-<PackageReference Include="DotRocks.EntityFrameworkCore.Design" Version="1.5.2" PrivateAssets="all" />
+<PackageReference Include="DotRocks.Data" Version="1.5.3" />
+<PackageReference Include="DotRocks.EntityFrameworkCore" Version="1.5.3" />
+<PackageReference Include="DotRocks.EntityFrameworkCore.Design" Version="1.5.3" PrivateAssets="all" />
 <!-- Optional, experimental Arrow Flight SQL transport; see the Arrow Flight SQL guide. -->
-<PackageReference Include="DotRocks.FlightSql" Version="1.5.2" />
-<PackageReference Include="DotRocks.Analyzers" Version="1.5.2" PrivateAssets="all" />
-<PackageReference Include="DotRocks.Analyzers.CodeFixes" Version="1.5.2" PrivateAssets="all" />
+<PackageReference Include="DotRocks.FlightSql" Version="1.5.3" />
+<PackageReference Include="DotRocks.Analyzers" Version="1.5.3" PrivateAssets="all" />
+<PackageReference Include="DotRocks.Analyzers.CodeFixes" Version="1.5.3" PrivateAssets="all" />
 ```
 
 For columnar analytical reads over gRPC, see [Arrow Flight SQL](arrow-flight-sql.md).
