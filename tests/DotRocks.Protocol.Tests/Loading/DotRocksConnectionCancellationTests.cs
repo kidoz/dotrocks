@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Data;
 using System.Data.Common;
 using System.Diagnostics;
@@ -100,7 +101,7 @@ public sealed class DotRocksConnectionCancellationTests
     {
         CancellationToken ct = TestContext.Current.CancellationToken;
 
-        var activities = new List<Activity>();
+        var activities = new ConcurrentBag<Activity>();
         using var activityListener = new ActivityListener
         {
             ShouldListenTo = source => source.Name == DotRocksTelemetry.ActivitySourceName,

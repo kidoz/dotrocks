@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics.Metrics;
 using System.IO.Compression;
 using System.Net;
@@ -113,7 +114,8 @@ public sealed class DotRocksStreamLoadClientTests
     [Fact]
     public async Task LoadCsvAsync_RecordsStreamLoadMetrics()
     {
-        var measurements = new Dictionary<string, double>(StringComparer.Ordinal);
+        // Meter callbacks also run on threads executing other protocol tests.
+        var measurements = new ConcurrentDictionary<string, double>(StringComparer.Ordinal);
         using var listener = new MeterListener
         {
             InstrumentPublished = (instrument, meterListener) =>
