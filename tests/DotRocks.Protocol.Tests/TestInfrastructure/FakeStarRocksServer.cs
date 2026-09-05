@@ -401,9 +401,26 @@ internal sealed class FakeStarRocksServer : IDisposable
     {
         while (!_cancellation.IsCancellationRequested)
         {
-            using TcpClient client = await _listener
-                .AcceptTcpClientAsync(_cancellation.Token)
-                .ConfigureAwait(true);
+            TcpClient acceptedClient;
+            try
+            {
+                acceptedClient = await _listener
+                    .AcceptTcpClientAsync(_cancellation.Token)
+                    .ConfigureAwait(true);
+            }
+            catch (SocketException exception)
+                when (_cancellation.IsCancellationRequested
+                    && exception.SocketErrorCode
+                        is SocketError.OperationAborted
+                            or SocketError.Interrupted
+                )
+            {
+                // Stopping the listener can win the race with cancellation on macOS.
+                // Only suppress accept shutdown errors; scripted handler failures must surface.
+                return;
+            }
+
+            using TcpClient client = acceptedClient;
             int index = Interlocked.Increment(ref _connectionCount) - 1;
             Func<NetworkStream, Task> handler =
                 index < _handlers.Length
