@@ -20,6 +20,8 @@ version is derived from the release tag at publish time.
   Retain constructor diagnostics for dynamic dispatch and incomplete calls in the IDE.
 - Normalize null parameter names and source columns to empty strings, honoring the ADO.NET
   non-null getter contract.
+- Reject unsupported output parameters before server-prepared command execution instead of
+  silently treating them as inputs.
 
 ### Changed
 - Use C# 14 `field` properties for command text, timeout validation, and parameter name

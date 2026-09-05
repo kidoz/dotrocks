@@ -163,6 +163,32 @@ public sealed class DotRocksCommandTests
         command.Prepare();
     }
 
+    [Theory]
+    [InlineData(ParameterDirection.Output)]
+    [InlineData(ParameterDirection.InputOutput)]
+    [InlineData(ParameterDirection.ReturnValue)]
+    public async Task ServerPreparedMode_RejectsUnsupportedParameterDirectionsBeforeIo(
+        ParameterDirection direction
+    )
+    {
+        using var connection = new DotRocksConnection();
+        using var command = new DotRocksCommand("SELECT ?", connection)
+        {
+            ParameterMode = DotRocksParameterMode.ServerPrepared,
+        };
+        command.Parameters.Add(new DotRocksParameter { Direction = direction, Value = 1 });
+
+        Assert.Throws<NotSupportedException>(() => command.ExecuteScalar());
+        await Assert
+            .ThrowsAsync<NotSupportedException>(async () =>
+                await command
+                    .ExecuteScalarAsync(TestContext.Current.CancellationToken)
+                    .ConfigureAwait(true)
+            )
+            .ConfigureAwait(true);
+        Assert.Equal(ConnectionState.Closed, connection.State);
+    }
+
     [Fact]
     public async Task ServerPreparedMode_ExecuteScalarAsync_RequiresConnection()
     {

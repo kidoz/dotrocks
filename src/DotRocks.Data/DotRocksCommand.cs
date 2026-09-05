@@ -547,7 +547,15 @@ public sealed class DotRocksCommand : DbCommand
         object?[] values = new object?[_parameters.Count];
         for (int i = 0; i < _parameters.Count; i++)
         {
-            values[i] = ((DotRocksParameter)_parameters[i]).Value;
+            DbParameter parameter = _parameters[i];
+            if (parameter.Direction != ParameterDirection.Input)
+            {
+                throw new NotSupportedException(
+                    "Only input parameters are supported for server-prepared commands."
+                );
+            }
+
+            values[i] = parameter.Value;
         }
 
         return values;
