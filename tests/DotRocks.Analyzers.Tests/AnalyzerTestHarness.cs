@@ -12,8 +12,14 @@ namespace DotRocks.Analyzers.Tests;
 /// </summary>
 internal static class AnalyzerTestHarness
 {
+    public static Task<Diagnostic[]> AnalyzeAsync(
+        string source,
+        params DiagnosticAnalyzer[] analyzers
+    ) => AnalyzeAsync(source, requireValidCode: false, analyzers);
+
     public static async Task<Diagnostic[]> AnalyzeAsync(
         string source,
+        bool requireValidCode,
         params DiagnosticAnalyzer[] analyzers
     )
     {
@@ -22,12 +28,20 @@ internal static class AnalyzerTestHarness
             [
                 CSharpSyntaxTree.ParseText(
                     source,
-                    CSharpParseOptions.Default.WithLanguageVersion(LanguageVersion.Preview)
+                    CSharpParseOptions.Default.WithLanguageVersion(LanguageVersion.CSharp14)
                 ),
             ],
             CreateReferences(),
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)
         );
+
+        if (requireValidCode)
+        {
+            Assert.DoesNotContain(
+                compilation.GetDiagnostics(),
+                diagnostic => diagnostic.Severity == DiagnosticSeverity.Error
+            );
+        }
 
         CompilationWithAnalyzers compilationWithAnalyzers = compilation.WithAnalyzers([
             .. analyzers,

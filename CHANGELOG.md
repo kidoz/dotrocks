@@ -15,9 +15,13 @@ version is derived from the release tag at publish time.
   details remain available through `DotRocksStreamLoadException.Result`.
   When a 2xx response cannot be parsed, preserve its HTTP status and raw `ResponseBody` for
   reconciliation while leaving `Result` null and the exception text sanitized.
+- Diagnose unsafe SQL in C# 14 null-conditional `CommandText` assignments, object initializers,
+  target-typed command constructors, and constructors with reordered named arguments.
+  Retain constructor diagnostics for dynamic dispatch and incomplete calls in the IDE.
 
 ### Changed
-- Stream Load parsing uses .NET 10 duplicate-property rejection.
+- Stream Load parsing uses .NET 10 duplicate-property rejection, and analyzer fixtures target
+  stable C# 14.
 
 ## [1.5.2] - 2026-09-05
 

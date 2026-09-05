@@ -35,8 +35,15 @@ All diagnostics default to **Warning** severity and are enabled by default.
 | ID | Trigger | Recommendation |
 |---|---|---|
 | **DTR0001** | A connection string uses an HTTP Stream Load endpoint with credentials. | Use HTTPS for the `Stream Load Endpoint` so Basic credentials are not sent in cleartext. See [Security](security.md). |
-| **DTR0009** | Interpolated or concatenated SQL is assigned to `DotRocksCommand.CommandText` or `DotRocksFlightSqlCommand.CommandText`. | Use parameter placeholders (e.g. `@id`) with `DotRocksParameter` values. This is an SQL-injection signal. |
+| **DTR0009** | Interpolated or concatenated SQL is assigned with `=` to `DotRocksCommand.CommandText` or `DotRocksFlightSqlCommand.CommandText`. | Use parameter placeholders (e.g. `@id`) with `DotRocksParameter` values. This is an SQL-injection signal. |
 | **DTR0012** | A DotRocks connection string contains a literal password. | Load the password from configuration, environment, or a secret store. |
+
+DTR0009 also checks command constructors, including target-typed `new` and reordered
+named arguments, object initializers, and C# 14 null-conditional simple assignments such as
+`command?.CommandText = $"SELECT {id}"`. Constant SQL with parameter placeholders remains valid.
+Constructor checks also cover dynamic dispatch and incomplete calls when the command type and
+SQL argument can be identified. Compound assignments such as `command.CommandText += fragment`
+are not currently covered.
 
 ### Usage — EF Core
 

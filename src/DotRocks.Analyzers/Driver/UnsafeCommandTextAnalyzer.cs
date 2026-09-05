@@ -4,6 +4,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
+using Microsoft.CodeAnalysis.Operations;
 
 namespace DotRocks.Analyzers.Driver;
 
@@ -31,20 +32,22 @@ public sealed class UnsafeCommandTextAnalyzer : DiagnosticAnalyzer
 
         context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
         context.EnableConcurrentExecution();
-        context.RegisterSyntaxNodeAction(AnalyzeAssignment, SyntaxKind.SimpleAssignmentExpression);
+        context.RegisterOperationAction(AnalyzeAssignment, OperationKind.SimpleAssignment);
+        context.RegisterOperationAction(AnalyzeObjectCreation, OperationKind.ObjectCreation);
         context.RegisterSyntaxNodeAction(
-            AnalyzeObjectCreation,
-            SyntaxKind.ObjectCreationExpression
+            AnalyzeUnboundObjectCreation,
+            SyntaxKind.ObjectCreationExpression,
+            SyntaxKind.ImplicitObjectCreationExpression
         );
     }
 
-    private static void AnalyzeAssignment(SyntaxNodeAnalysisContext context)
+    private static void AnalyzeAssignment(OperationAnalysisContext context)
     {
-        var assignment = (AssignmentExpressionSyntax)context.Node;
+        var assignment = (ISimpleAssignmentOperation)context.Operation;
         if (
-            assignment.Left is not MemberAccessExpressionSyntax memberAccess
+            assignment.Target is not IPropertyReferenceOperation propertyReference
             || !string.Equals(
-                memberAccess.Name.Identifier.ValueText,
+                propertyReference.Property.Name,
                 "CommandText",
                 StringComparison.Ordinal
             )
@@ -53,60 +56,107 @@ public sealed class UnsafeCommandTextAnalyzer : DiagnosticAnalyzer
             return;
         }
 
-        ITypeSymbol? receiverType = context.SemanticModel.GetTypeInfo(memberAccess.Expression).Type;
-        if (IsCommandType(receiverType) && IsUnsafeSqlExpression(context, assignment.Right))
+        // Operations cover object initializers and C# 14 null-conditional assignments as well
+        // as ordinary member access, without depending on each syntax shape.
+        if (
+            IsCommandType(propertyReference.Property.ContainingType)
+            && IsUnsafeSqlExpression(assignment.Value)
+        )
         {
-            Report(context, assignment.Right);
+            Report(context, assignment.Value.Syntax);
         }
     }
 
-    private static void AnalyzeObjectCreation(SyntaxNodeAnalysisContext context)
+    private static void AnalyzeObjectCreation(OperationAnalysisContext context)
     {
-        var objectCreation = (ObjectCreationExpressionSyntax)context.Node;
-        if (!IsCommandType(context.SemanticModel.GetTypeInfo(objectCreation).Type))
+        var objectCreation = (IObjectCreationOperation)context.Operation;
+        if (!IsCommandType(objectCreation.Type))
         {
             return;
         }
 
-        ArgumentSyntax? firstArgument = objectCreation.ArgumentList
-            is { Arguments: { Count: > 0 } arguments }
-            ? arguments[0]
-            : null;
-        if (firstArgument is not null && IsUnsafeSqlExpression(context, firstArgument.Expression))
+        foreach (IArgumentOperation argument in objectCreation.Arguments)
         {
-            Report(context, firstArgument.Expression);
+            if (argument.Parameter?.Name == "commandText" && IsUnsafeSqlExpression(argument.Value))
+            {
+                Report(context, argument.Value.Syntax);
+            }
         }
     }
 
+    private static void AnalyzeUnboundObjectCreation(SyntaxNodeAnalysisContext context)
+    {
+        var creation = (BaseObjectCreationExpressionSyntax)context.Node;
+        // Bound constructors are handled by the operation callback. Dynamic dispatch and
+        // incomplete IDE code have no IObjectCreationOperation, but still expose the command
+        // type and argument syntax. Keep their diagnostics without duplicating bound calls.
+        if (
+            context.SemanticModel.GetOperation(creation, context.CancellationToken)
+                is IObjectCreationOperation
+            || !IsCommandType(
+                context.SemanticModel.GetTypeInfo(creation, context.CancellationToken).Type
+            )
+            || creation.ArgumentList is not { } argumentList
+        )
+        {
+            return;
+        }
+
+        for (int index = 0; index < argumentList.Arguments.Count; index++)
+        {
+            ArgumentSyntax argument = argumentList.Arguments[index];
+            string? name = argument.NameColon?.Name.Identifier.ValueText;
+            if (name == "commandText" || (name is null && index == 0))
+            {
+                ExpressionSyntax expression = argument.Expression;
+                if (
+                    IsUnsafeSqlExpression(
+                        expression,
+                        context
+                            .SemanticModel.GetConstantValue(expression, context.CancellationToken)
+                            .HasValue,
+                        context
+                            .SemanticModel.GetTypeInfo(expression, context.CancellationToken)
+                            .Type
+                    )
+                )
+                {
+                    context.ReportDiagnostic(
+                        Diagnostic.Create(
+                            DotRocksDiagnosticDescriptors.UnsafeCommandText,
+                            expression.GetLocation()
+                        )
+                    );
+                }
+            }
+        }
+    }
+
+    private static bool IsUnsafeSqlExpression(IOperation operation) =>
+        operation.Syntax is ExpressionSyntax expression
+        && IsUnsafeSqlExpression(expression, operation.ConstantValue.HasValue, operation.Type);
+
     private static bool IsUnsafeSqlExpression(
-        SyntaxNodeAnalysisContext context,
-        ExpressionSyntax expression
+        ExpressionSyntax expression,
+        bool isConstant,
+        ITypeSymbol? type
     )
     {
-        ExpressionSyntax unwrapped = Unwrap(expression);
-
         // A compile-time constant (literal or fully constant interpolation/concatenation) is safe.
-        if (context.SemanticModel.GetConstantValue(unwrapped).HasValue)
+        if (isConstant)
         {
             return false;
         }
+
+        ExpressionSyntax unwrapped = Unwrap(expression);
 
         return unwrapped switch
         {
             InterpolatedStringExpressionSyntax => true,
             BinaryExpressionSyntax binary when binary.IsKind(SyntaxKind.AddExpression) =>
-                IsStringTyped(context, binary),
+                type?.SpecialType == SpecialType.System_String,
             _ => false,
         };
-    }
-
-    private static bool IsStringTyped(
-        SyntaxNodeAnalysisContext context,
-        ExpressionSyntax expression
-    )
-    {
-        ITypeSymbol? type = context.SemanticModel.GetTypeInfo(expression).Type;
-        return type?.SpecialType == SpecialType.System_String;
     }
 
     private static bool IsCommandType(ITypeSymbol? type) =>
@@ -118,7 +168,7 @@ public sealed class UnsafeCommandTextAnalyzer : DiagnosticAnalyzer
             ? Unwrap(parenthesized.Expression)
             : expression;
 
-    private static void Report(SyntaxNodeAnalysisContext context, SyntaxNode node) =>
+    private static void Report(OperationAnalysisContext context, SyntaxNode node) =>
         context.ReportDiagnostic(
             Diagnostic.Create(DotRocksDiagnosticDescriptors.UnsafeCommandText, node.GetLocation())
         );
