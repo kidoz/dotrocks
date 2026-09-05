@@ -8,6 +8,17 @@ version is derived from the release tag at publish time.
 
 ## [Unreleased]
 
+### Fixed
+- Reject ambiguous Stream Load JSON responses, including duplicate property names with different
+  casing, invalid field types, and overflowing row counts or transaction sequences. Parser errors
+  and failure statuses no longer copy untrusted server details into exception text; parsed server
+  details remain available through `DotRocksStreamLoadException.Result`.
+  When a 2xx response cannot be parsed, preserve its HTTP status and raw `ResponseBody` for
+  reconciliation while leaving `Result` null and the exception text sanitized.
+
+### Changed
+- Stream Load parsing uses .NET 10 duplicate-property rejection.
+
 ## [1.5.2] - 2026-09-05
 
 ### Fixed

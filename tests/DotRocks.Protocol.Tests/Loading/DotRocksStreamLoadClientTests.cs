@@ -898,17 +898,21 @@ public sealed class DotRocksStreamLoadClientTests
         Assert.Equal(1, result.NumberFilteredRows);
     }
 
-    [Fact]
-    public async Task LoadCsvAsync_StarRocksFailure_DoesNotCopySensitiveResultMessageIntoException()
+    [Theory]
+    [InlineData("Fail")]
+    [InlineData("stream-load-secret-value")]
+    public async Task LoadCsvAsync_StarRocksFailure_DoesNotCopySensitiveResultMessageIntoException(
+        string status
+    )
     {
         const string secret = "stream-load-secret-value";
         using var handler = new RecordingHandler(
-            static (_, _) =>
+            (_, _) =>
                 Task.FromResult(
                     JsonResponse(
-                        """
+                        $$"""
                         {
-                          "Status": "Fail",
+                          "Status": "{{status}}",
                           "Message": "filtered row contained stream-load-secret-value",
                           "NumberTotalRows": "1",
                           "NumberLoadedRows": "0",
@@ -944,6 +948,59 @@ public sealed class DotRocksStreamLoadClientTests
             StringComparison.Ordinal
         );
         Assert.DoesNotContain("alice:secret", exception.ToString(), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(
+        HttpStatusCode.OK,
+        """{"Status":"Success","status":"Fail","Message":"private-row-secret"}"""
+    )]
+    [InlineData(
+        HttpStatusCode.Created,
+        """{"Status":"Success","NumberLoadedRows":"private-row-secret"}"""
+    )]
+    [InlineData(HttpStatusCode.Accepted, "private-row-secret")]
+    public async Task LoadCsvAsync_InvalidSuccessResponse_PreservesContextWithoutLeaking(
+        HttpStatusCode statusCode,
+        string responseBody
+    )
+    {
+        int requestCount = 0;
+        using var handler = new RecordingHandler(
+            (_, _) =>
+            {
+                requestCount++;
+                return Task.FromResult(
+                    new HttpResponseMessage(statusCode)
+                    {
+                        Content = new StringContent(responseBody),
+                    }
+                );
+            }
+        );
+        using var httpClient = new HttpClient(handler);
+        using var client = CreateClient(httpClient);
+        using var payload = new MemoryStream([1]);
+
+        DotRocksStreamLoadException exception = await Assert
+            .ThrowsAsync<DotRocksStreamLoadException>(async () =>
+                await client
+                    .LoadCsvAsync(
+                        "warehouse",
+                        "events",
+                        payload,
+                        cancellationToken: TestContext.Current.CancellationToken
+                    )
+                    .ConfigureAwait(true)
+            )
+            .ConfigureAwait(true);
+
+        Assert.Equal(statusCode, exception.HttpStatusCode);
+        Assert.Equal(responseBody, exception.ResponseBody);
+        Assert.Null(exception.Result);
+        Assert.DoesNotContain("private-row-secret", exception.ToString(), StringComparison.Ordinal);
+        Assert.False(exception.IsTransient);
+        Assert.Equal(1, requestCount);
     }
 
     [Fact]

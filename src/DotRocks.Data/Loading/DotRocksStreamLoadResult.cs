@@ -117,54 +117,77 @@ public sealed class DotRocksStreamLoadResult
     {
         try
         {
-            using JsonDocument document = JsonDocument.Parse(responseText);
+            using JsonDocument document = JsonDocument.Parse(
+                responseText,
+                new JsonDocumentOptions { AllowDuplicateProperties = false }
+            );
             JsonElement root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                throw new JsonException();
+            }
+
+            // The response contract accepts case-insensitive names. JsonDocument rejects exact
+            // duplicates; this map also rejects aliases such as Status/status in one response.
+            var properties = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
+            foreach (JsonProperty property in root.EnumerateObject())
+            {
+                if (!properties.TryAdd(property.Name, property.Value))
+                {
+                    throw new JsonException();
+                }
+            }
+
             return new DotRocksStreamLoadResult(
-                GetString(root, "Status") ?? string.Empty,
-                GetString(root, "Message"),
-                GetString(root, "Label"),
-                GetInt64(root, "NumberTotalRows"),
-                GetInt64(root, "NumberLoadedRows"),
-                GetInt64(root, "NumberFilteredRows"),
-                GetInt64(root, "NumberUnselectedRows"),
-                GetInt64(root, "LoadBytes"),
-                GetInt64(root, "LoadTimeMs"),
-                CreateUri(GetString(root, "ErrorURL")),
-                GetNullableInt64(root, "TxnId"),
-                GetNullableInt32(root, "Seq")
+                GetString(properties, "Status") ?? string.Empty,
+                GetString(properties, "Message"),
+                GetString(properties, "Label"),
+                GetNullableInt64(properties, "NumberTotalRows") ?? 0,
+                GetNullableInt64(properties, "NumberLoadedRows") ?? 0,
+                GetNullableInt64(properties, "NumberFilteredRows") ?? 0,
+                GetNullableInt64(properties, "NumberUnselectedRows") ?? 0,
+                GetNullableInt64(properties, "LoadBytes") ?? 0,
+                GetNullableInt64(properties, "LoadTimeMs") ?? 0,
+                CreateUri(GetString(properties, "ErrorURL")),
+                GetNullableInt64(properties, "TxnId"),
+                GetNullableInt32(properties, "Seq")
             );
         }
-        catch (JsonException ex)
+        catch (JsonException)
         {
+            // JSON errors can include server-controlled property names and values. Do not
+            // attach the original exception: Exception.ToString() would expose them to logs.
             throw new DotRocksStreamLoadException(
-                "StarRocks returned an invalid Stream Load JSON response.",
-                ex
+                "StarRocks returned an invalid Stream Load JSON response."
             );
         }
     }
 
-    private static string? GetString(JsonElement root, string name)
+    private static string? GetString(Dictionary<string, JsonElement> properties, string name)
     {
-        if (!TryGetProperty(root, name, out JsonElement property))
+        if (!properties.TryGetValue(name, out JsonElement property))
         {
             return null;
         }
 
-        return property.ValueKind == JsonValueKind.String
-            ? property.GetString()
-            : property.ToString();
+        return property.ValueKind switch
+        {
+            JsonValueKind.String => property.GetString(),
+            JsonValueKind.Null => null,
+            _ => throw new JsonException(),
+        };
     }
 
-    private static long GetInt64(JsonElement root, string name)
+    private static long? GetNullableInt64(Dictionary<string, JsonElement> properties, string name)
     {
-        if (!TryGetProperty(root, name, out JsonElement property))
+        if (!properties.TryGetValue(name, out JsonElement property))
         {
-            return 0;
+            return null;
         }
 
         return property.ValueKind switch
         {
-            JsonValueKind.Number => property.GetInt64(),
+            JsonValueKind.Number when property.TryGetInt64(out long number) => number,
             JsonValueKind.String
                 when long.TryParse(
                     property.GetString(),
@@ -172,57 +195,24 @@ public sealed class DotRocksStreamLoadResult
                     CultureInfo.InvariantCulture,
                     out long value
                 ) => value,
-            _ => 0,
+            JsonValueKind.Null => null,
+            _ => throw new JsonException(),
         };
     }
 
-    private static long? GetNullableInt64(JsonElement root, string name)
+    private static int? GetNullableInt32(Dictionary<string, JsonElement> properties, string name)
     {
-        if (!TryGetProperty(root, name, out JsonElement property))
-        {
-            return null;
-        }
-
-        return property.ValueKind switch
-        {
-            JsonValueKind.Number => property.GetInt64(),
-            JsonValueKind.String
-                when long.TryParse(
-                    property.GetString(),
-                    NumberStyles.Integer,
-                    CultureInfo.InvariantCulture,
-                    out long value
-                ) => value,
-            _ => null,
-        };
-    }
-
-    private static int? GetNullableInt32(JsonElement root, string name)
-    {
-        long? value = GetNullableInt64(root, name);
+        long? value = GetNullableInt64(properties, name);
         if (value is null)
         {
             return null;
         }
 
-        return value is >= int.MinValue and <= int.MaxValue ? (int)value : null;
+        return value is >= int.MinValue and <= int.MaxValue
+            ? (int)value
+            : throw new JsonException();
     }
 
     private static Uri? CreateUri(string? value) =>
         Uri.TryCreate(value, UriKind.Absolute, out Uri? uri) ? uri : null;
-
-    private static bool TryGetProperty(JsonElement root, string name, out JsonElement property)
-    {
-        foreach (JsonProperty jsonProperty in root.EnumerateObject())
-        {
-            if (string.Equals(jsonProperty.Name, name, StringComparison.OrdinalIgnoreCase))
-            {
-                property = jsonProperty.Value;
-                return true;
-            }
-        }
-
-        property = default;
-        return false;
-    }
 }

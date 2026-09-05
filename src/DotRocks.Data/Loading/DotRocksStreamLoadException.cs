@@ -53,7 +53,8 @@ public sealed class DotRocksStreamLoadException : DotRocksException
     public DotRocksStreamLoadResult? Result { get; }
 
     /// <summary>
-    /// Gets the raw HTTP response body for a non-success status, when one was available. Like
+    /// Gets the raw HTTP response body when the HTTP status indicates failure or a successful
+    /// HTTP response cannot be parsed as a Stream Load result. Like
     /// <see cref="Result"/>, this is deliberately a structured property rather than part of the
     /// exception message: server text is untrusted and may carry row data, so it must not flow
     /// into logs implicitly via <see cref="Exception.ToString"/>.

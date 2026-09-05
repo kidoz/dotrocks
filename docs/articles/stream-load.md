@@ -120,10 +120,20 @@ partition names must not be empty or contain `,`.
 A non-success server status never reaches the caller as a result: `LoadCsvAsync` and
 `LoadJsonAsync` throw a `DotRocksStreamLoadException` carrying the status and the HTTP
 status code, plus either the parsed result (when the server returned a parseable
-non-success status) or the raw response body (`ResponseBody`, when the HTTP request
-itself failed) — whichever the failure produced. A returned result always has
+non-success status) or the raw response body (`ResponseBody`, when the HTTP status indicates
+failure or a 2xx response cannot be parsed) — whichever the failure produced. A returned result always has
 `IsSuccess == true`; the one outcome worth checking explicitly is `IsPublishTimeout` —
 the data was written, visibility just lags.
+
+Read parsed server diagnostic details from `exception.Result`, or inspect `exception.ResponseBody`
+when no result could be parsed. The exception message does not include server-supplied status,
+message text, or response bodies. Malformed JSON, duplicate property names
+(including different casing), invalid field types, and overflowing numeric fields raise a
+sanitized `DotRocksStreamLoadException`. Numeric strings and unknown fields remain supported.
+
+For a 2xx parse failure, `HttpStatusCode` and `ResponseBody` are preserved and `Result` is null.
+The load may already have committed: reconcile its label and outcome before retrying. The client
+does not retry the request or classify this failure as transient.
 
 ## Transactional Stream Load (two-phase)
 

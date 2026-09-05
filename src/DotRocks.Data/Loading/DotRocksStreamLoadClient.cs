@@ -417,11 +417,28 @@ public sealed class DotRocksStreamLoadClient : IDisposable
                     );
                 }
 
-                DotRocksStreamLoadResult result = DotRocksStreamLoadResult.Parse(responseText);
+                DotRocksStreamLoadResult result;
+                try
+                {
+                    result = DotRocksStreamLoadResult.Parse(responseText);
+                }
+                catch (DotRocksStreamLoadException)
+                {
+                    // A 2xx response with an unreadable result does not prove the load failed.
+                    // Retain the response for deliberate reconciliation, without logging it or
+                    // marking the operation transient (which could encourage duplicate writes).
+                    throw new DotRocksStreamLoadException(
+                        "StarRocks returned an invalid Stream Load response. The load outcome is unknown. Inspect ResponseBody for server details.",
+                        response.StatusCode,
+                        result: null,
+                        responseBody: responseText
+                    );
+                }
+
                 if (!result.IsSuccess)
                 {
                     throw new DotRocksStreamLoadException(
-                        $"StarRocks Stream Load failed with status '{result.Status}'.",
+                        "StarRocks Stream Load failed. Inspect Result for server details.",
                         response.StatusCode,
                         result
                     );
