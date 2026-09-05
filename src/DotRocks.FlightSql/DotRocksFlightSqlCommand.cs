@@ -18,8 +18,6 @@ public sealed class DotRocksFlightSqlCommand : DbCommand
     private DotRocksFlightSqlDbConnection? _connection;
     private DotRocksFlightSqlDbTransaction? _transaction;
     private CancellationTokenSource? _activeCancellation;
-    private string _commandText = string.Empty;
-    private int _commandTimeout = 30;
     private bool _executing;
 
     /// <summary>
@@ -52,20 +50,20 @@ public sealed class DotRocksFlightSqlCommand : DbCommand
     [AllowNull]
     public override string CommandText
     {
-        get => _commandText;
-        set => _commandText = value ?? string.Empty;
-    }
+        get;
+        set => field = value ?? string.Empty;
+    } = string.Empty;
 
     /// <inheritdoc />
     public override int CommandTimeout
     {
-        get => _commandTimeout;
+        get;
         set
         {
             ArgumentOutOfRangeException.ThrowIfNegative(value);
-            _commandTimeout = value;
+            field = value;
         }
-    }
+    } = 30;
 
     /// <inheritdoc />
     public override CommandType CommandType

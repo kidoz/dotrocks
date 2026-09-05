@@ -17,8 +17,6 @@ public sealed class DotRocksCommand : DbCommand
     private readonly DotRocksParameterCollection _parameters = new();
     private DotRocksConnection? _connection;
     private DbTransaction? _transaction;
-    private string _commandText = string.Empty;
-    private int _commandTimeout = 30;
     private PreparedCommandText? _preparedCommand;
     private DotRocksParameterMode _parameterMode = DotRocksParameterMode.Auto;
 
@@ -52,24 +50,24 @@ public sealed class DotRocksCommand : DbCommand
     [AllowNull]
     public override string CommandText
     {
-        get => _commandText;
+        get;
         set
         {
-            _commandText = value ?? string.Empty;
+            field = value ?? string.Empty;
             _preparedCommand = null;
         }
-    }
+    } = string.Empty;
 
     /// <inheritdoc />
     public override int CommandTimeout
     {
-        get => _commandTimeout;
+        get;
         set
         {
             ArgumentOutOfRangeException.ThrowIfNegative(value);
-            _commandTimeout = value;
+            field = value;
         }
-    }
+    } = 30;
 
     /// <inheritdoc />
     public override CommandType CommandType

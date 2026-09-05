@@ -1,4 +1,5 @@
 using System.Data;
+using System.Data.Common;
 using DotRocks.Data;
 using Xunit;
 
@@ -6,6 +7,37 @@ namespace DotRocks.Protocol.Tests.Commands;
 
 public sealed class DotRocksCommandTests
 {
+    [Fact]
+    public void Parameter_NullNamesReturnEmptyStringsThroughDbParameter()
+    {
+        DbParameter parameter = new DotRocksParameter
+        {
+            ParameterName = "name",
+            SourceColumn = "column",
+        };
+
+        parameter.ParameterName = null;
+        parameter.SourceColumn = null;
+
+        Assert.Equal(string.Empty, parameter.ParameterName);
+        Assert.Equal(string.Empty, parameter.SourceColumn);
+    }
+
+    [Fact]
+    public void CommandText_NullClearsPreparedTemplate()
+    {
+        using var command = new DotRocksCommand { CommandText = "SELECT @value" };
+        command.Parameters.Add(new DotRocksParameter { ParameterName = "value", Value = 1 });
+        command.Prepare();
+
+        command.CommandText = null;
+        command.Parameters.Clear();
+        command.Prepare();
+
+        Assert.Equal(string.Empty, command.CommandText);
+        Assert.Equal(30, command.CommandTimeout);
+    }
+
     [Fact]
     public void CommandType_RejectsNonTextCommands()
     {

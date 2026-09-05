@@ -18,10 +18,13 @@ version is derived from the release tag at publish time.
 - Diagnose unsafe SQL in C# 14 null-conditional `CommandText` assignments, object initializers,
   target-typed command constructors, and constructors with reordered named arguments.
   Retain constructor diagnostics for dynamic dispatch and incomplete calls in the IDE.
+- Normalize null parameter names and source columns to empty strings, honoring the ADO.NET
+  non-null getter contract.
 
 ### Changed
-- Stream Load parsing uses .NET 10 duplicate-property rejection, and analyzer fixtures target
-  stable C# 14.
+- Use C# 14 `field` properties for command text, timeout validation, and parameter name
+  normalization. Stream Load parsing uses .NET 10 duplicate-property rejection, and analyzer
+  fixtures target stable C# 14.
 
 ## [1.5.2] - 2026-09-05
 

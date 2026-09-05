@@ -25,11 +25,19 @@ public sealed class DotRocksParameter : DbParameter
 
     /// <inheritdoc />
     [AllowNull]
-    public override string ParameterName { get; set; } = string.Empty;
+    public override string ParameterName
+    {
+        get;
+        set => field = value ?? string.Empty;
+    } = string.Empty;
 
     /// <inheritdoc />
     [AllowNull]
-    public override string SourceColumn { get; set; } = string.Empty;
+    public override string SourceColumn
+    {
+        get;
+        set => field = value ?? string.Empty;
+    } = string.Empty;
 
     /// <inheritdoc />
     public override object? Value { get; set; }
