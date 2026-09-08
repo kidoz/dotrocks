@@ -8,6 +8,8 @@ version is derived from the release tag at publish time.
 
 ## [Unreleased]
 
+## [1.5.4] - 2026-09-08
+
 ### Added
 - EF Core `ExecuteUpdate` / `ExecuteDelete` translate to StarRocks `UPDATE ... SET ... WHERE ...`
   and `DELETE FROM ... WHERE ...`. StarRocks allows no alias on the target table and takes bare
@@ -595,7 +597,8 @@ version is derived from the release tag at publish time.
 - Stream Load refuses to forward credentials over a downgraded (HTTPS→HTTP) redirect.
 - NuGet vulnerability auditing and CodeQL analysis in CI.
 
-[Unreleased]: https://github.com/kidoz/dotrocks/compare/v1.5.3...HEAD
+[Unreleased]: https://github.com/kidoz/dotrocks/compare/v1.5.4...HEAD
+[1.5.4]: https://github.com/kidoz/dotrocks/compare/v1.5.3...v1.5.4
 [1.5.3]: https://github.com/kidoz/dotrocks/compare/v1.5.2...v1.5.3
 [1.5.2]: https://github.com/kidoz/dotrocks/compare/v1.5.1...v1.5.2
 [1.5.1]: https://github.com/kidoz/dotrocks/compare/v1.5.0...v1.5.1
