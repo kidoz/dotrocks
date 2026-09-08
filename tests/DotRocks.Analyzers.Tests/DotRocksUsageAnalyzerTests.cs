@@ -448,10 +448,16 @@ public sealed class DotRocksUsageAnalyzerTests
     [InlineData("ExecuteUpdateAsync")]
     [InlineData("ExecuteDelete")]
     [InlineData("ExecuteDeleteAsync")]
-    public async Task UnsupportedEfBulkDmlApi_ReportsDiagnostic(string methodName)
+    public async Task RetiredBulkDmlRule_DoesNotReportForExecuteUpdateOrExecuteDelete(
+        string methodName
+    )
     {
+        // DTR0006 shipped in DotRocks.Analyzers 1.0.0 and was retired when DotRocks EF Core
+        // gained ExecuteUpdate/ExecuteDelete translation. The id stays reserved; nothing reports it.
         Diagnostic[] diagnostics = await AnalyzeAsync(
-                EfStubs
+                "using Microsoft.EntityFrameworkCore;"
+                    + Environment.NewLine
+                    + EfStubs
                     + $$"""
 
                     internal sealed class Widget
@@ -463,6 +469,7 @@ public sealed class DotRocksUsageAnalyzerTests
                     {
                         public static void Run(System.Linq.IQueryable<Widget> widgets)
                         {
+                            _ = widgets.{{methodName}}();
                             _ = Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.{{methodName}}(widgets);
                         }
                     }
@@ -470,42 +477,14 @@ public sealed class DotRocksUsageAnalyzerTests
             )
             .ConfigureAwait(true);
 
-        Assert.Contains(
-            diagnostics,
-            diagnostic =>
-                diagnostic.Id == DotRocksDiagnosticDescriptors.UnsupportedBulkDmlDiagnosticId
-        );
-    }
-
-    [Fact]
-    public async Task UnsupportedEfBulkDmlExtensionSyntax_ReportsDiagnostic()
-    {
-        Diagnostic[] diagnostics = await AnalyzeAsync(
-                "using Microsoft.EntityFrameworkCore;"
-                    + Environment.NewLine
-                    + EfStubs
-                    + """
-
-                    internal sealed class Widget
-                    {
-                        public int Id { get; set; }
-                    }
-
-                    internal static class Sample
-                    {
-                        public static void Run(System.Linq.IQueryable<Widget> widgets)
-                        {
-                            _ = widgets.ExecuteDelete();
-                        }
-                    }
-                    """
-            )
-            .ConfigureAwait(true);
-
-        Assert.Contains(
-            diagnostics,
-            diagnostic =>
-                diagnostic.Id == DotRocksDiagnosticDescriptors.UnsupportedBulkDmlDiagnosticId
+#pragma warning disable CS0618 // Type or member is obsolete
+        string retiredId = DotRocksDiagnosticDescriptors.UnsupportedBulkDmlDiagnosticId;
+#pragma warning restore CS0618
+        Assert.Equal("DTR0006", retiredId);
+        Assert.DoesNotContain(diagnostics, diagnostic => diagnostic.Id == retiredId);
+        Assert.DoesNotContain(
+            new UnsupportedEfApiAnalyzer().SupportedDiagnostics,
+            descriptor => descriptor.Id == retiredId
         );
     }
 
@@ -921,11 +900,8 @@ public sealed class DotRocksUsageAnalyzerTests
             result.Output,
             StringComparison.Ordinal
         );
-        Assert.Contains(
-            DotRocksDiagnosticDescriptors.UnsupportedBulkDmlDiagnosticId,
-            result.Output,
-            StringComparison.Ordinal
-        );
+        // The fixture still calls ExecuteDelete; the retired DTR0006 must not surface from the package.
+        Assert.DoesNotContain("DTR0006", result.Output, StringComparison.Ordinal);
         Assert.Contains(
             DotRocksDiagnosticDescriptors.MultiRowSaveChangesDiagnosticId,
             result.Output,

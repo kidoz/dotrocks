@@ -8,7 +8,9 @@ using Microsoft.CodeAnalysis.Diagnostics;
 namespace DotRocks.Analyzers.EntityFrameworkCore;
 
 /// <summary>
-/// Reports EF Core APIs that DotRocks intentionally does not support.
+/// Reports EF Core APIs that DotRocks intentionally does not support. Formerly also reported
+/// DTR0006 for <c>ExecuteUpdate</c>/<c>ExecuteDelete</c>; that rule was retired when DotRocks
+/// EF Core gained single-table <c>ExecuteUpdate</c>/<c>ExecuteDelete</c> translation.
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class UnsupportedEfApiAnalyzer : DiagnosticAnalyzer
@@ -22,21 +24,9 @@ public sealed class UnsupportedEfApiAnalyzer : DiagnosticAnalyzer
             "EnsureDeletedAsync"
         );
 
-    private static readonly ImmutableHashSet<string> UnsupportedBulkDmlMethods =
-        ImmutableHashSet.Create(
-            StringComparer.Ordinal,
-            "ExecuteUpdate",
-            "ExecuteUpdateAsync",
-            "ExecuteDelete",
-            "ExecuteDeleteAsync"
-        );
-
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
-    [
-        DotRocksDiagnosticDescriptors.UnsupportedDatabaseCreator,
-        DotRocksDiagnosticDescriptors.UnsupportedBulkDml,
-    ];
+    [DotRocksDiagnosticDescriptors.UnsupportedDatabaseCreator];
 
     /// <inheritdoc />
     public override void Initialize(AnalysisContext context)
@@ -60,26 +50,10 @@ public sealed class UnsupportedEfApiAnalyzer : DiagnosticAnalyzer
         }
 
         string methodName = memberAccess.Name.Identifier.ValueText;
-        if (UnsupportedDatabaseCreatorMethods.Contains(methodName))
-        {
-            ReportIfDatabaseCreatorApi(context, invocation, memberAccess, methodName);
-            return;
-        }
-
-        if (UnsupportedBulkDmlMethods.Contains(methodName))
-        {
-            ReportIfBulkDmlApi(context, invocation, methodName);
-        }
-    }
-
-    private static void ReportIfDatabaseCreatorApi(
-        SyntaxNodeAnalysisContext context,
-        InvocationExpressionSyntax invocation,
-        MemberAccessExpressionSyntax memberAccess,
-        string methodName
-    )
-    {
-        if (!IsEfDatabaseCreatorInvocation(context, invocation, memberAccess))
+        if (
+            !UnsupportedDatabaseCreatorMethods.Contains(methodName)
+            || !IsEfDatabaseCreatorInvocation(context, invocation, memberAccess)
+        )
         {
             return;
         }
@@ -88,26 +62,6 @@ public sealed class UnsupportedEfApiAnalyzer : DiagnosticAnalyzer
             Diagnostic.Create(
                 DotRocksDiagnosticDescriptors.UnsupportedDatabaseCreator,
                 memberAccess.Name.GetLocation(),
-                methodName
-            )
-        );
-    }
-
-    private static void ReportIfBulkDmlApi(
-        SyntaxNodeAnalysisContext context,
-        InvocationExpressionSyntax invocation,
-        string methodName
-    )
-    {
-        if (!IsEfBulkDmlInvocation(context, invocation))
-        {
-            return;
-        }
-
-        context.ReportDiagnostic(
-            Diagnostic.Create(
-                DotRocksDiagnosticDescriptors.UnsupportedBulkDml,
-                invocation.GetLocation(),
                 methodName
             )
         );
@@ -137,42 +91,5 @@ public sealed class UnsupportedEfApiAnalyzer : DiagnosticAnalyzer
             receiverType,
             "Microsoft.EntityFrameworkCore.Infrastructure.DatabaseFacade"
         );
-    }
-
-    private static bool IsEfBulkDmlInvocation(
-        SyntaxNodeAnalysisContext context,
-        InvocationExpressionSyntax invocation
-    )
-    {
-        IMethodSymbol? method =
-            context.SemanticModel.GetSymbolInfo(invocation).Symbol as IMethodSymbol;
-        if (method is null)
-        {
-            return false;
-        }
-
-        return IsEfNamespace(method.ContainingNamespace)
-            || method.ReducedFrom is { ContainingNamespace: { } reducedNamespace }
-                && IsEfNamespace(reducedNamespace);
-    }
-
-    private static bool IsEfNamespace(INamespaceSymbol? namespaceSymbol)
-    {
-        for (
-            INamespaceSymbol? current = namespaceSymbol;
-            current is { IsGlobalNamespace: false };
-            current = current.ContainingNamespace
-        )
-        {
-            if (
-                string.Equals(current.Name, "EntityFrameworkCore", StringComparison.Ordinal)
-                && current.ContainingNamespace is { Name: "Microsoft" }
-            )
-            {
-                return true;
-            }
-        }
-
-        return false;
     }
 }

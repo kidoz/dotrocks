@@ -20,6 +20,11 @@ version is derived from the release tag at publish time.
   `column op value [AND ...]` grammar fail on the server. Verified live on StarRocks 3.5.21 and
   4.1.4.
 
+### Changed
+- The DTR0006 analyzer rule (`ExecuteUpdate` / `ExecuteDelete`) is retired and no longer reports;
+  the id is reserved and will not be reused. The `UnsupportedBulkDmlDiagnosticId` constant remains
+  as an obsolete member for binary compatibility and will be removed in the next major release.
+
 ## [1.5.3] - 2026-09-05
 
 ### Fixed

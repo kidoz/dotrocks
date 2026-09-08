@@ -33,8 +33,14 @@ public static class DotRocksDiagnosticDescriptors
     public const string UnsupportedDatabaseCreatorDiagnosticId = "DTR0005";
 
     /// <summary>
-    /// Diagnostic id for unsupported EF ExecuteUpdate and ExecuteDelete usage.
+    /// Diagnostic id formerly reported for EF ExecuteUpdate and ExecuteDelete usage. Retired when
+    /// DotRocks EF Core gained single-table ExecuteUpdate/ExecuteDelete translation; the id is
+    /// reserved, no analyzer reports it, and this constant will be removed in the next major
+    /// release.
     /// </summary>
+    [Obsolete(
+        "DTR0006 was retired when DotRocks EF Core gained ExecuteUpdate and ExecuteDelete translation; no analyzer reports this diagnostic and the constant will be removed in the next major release."
+    )]
     public const string UnsupportedBulkDmlDiagnosticId = "DTR0006";
 
     /// <summary>
@@ -122,16 +128,6 @@ public static class DotRocksDiagnosticDescriptors
         DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
         description: "DotRocks EF Core supports migrations for conservative StarRocks DDL; EnsureCreated and EnsureDeleted are explicit unsupported APIs."
-    );
-
-    internal static readonly DiagnosticDescriptor UnsupportedBulkDml = new(
-        UnsupportedBulkDmlDiagnosticId,
-        "EF bulk LINQ DML is unsupported",
-        "DotRocks EF Core does not support '{0}'",
-        "Usage",
-        DiagnosticSeverity.Warning,
-        isEnabledByDefault: true,
-        description: "DotRocks EF Core does not translate ExecuteUpdate or ExecuteDelete; use tracked single-row SaveChanges or raw SQL with explicit parameters."
     );
 
     internal static readonly DiagnosticDescriptor MultiRowSaveChanges = new(

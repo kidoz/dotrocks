@@ -52,13 +52,14 @@ are not currently covered.
 | **DTR0002** | A writable entity key property lacks `ValueGeneratedNever()`. | DotRocks SaveChanges supports explicit values only; configure keys with `ValueGeneratedNever()`. |
 | **DTR0003** | An entity maps a `binary`/`varbinary` column. | Binary mapping is unsupported until the EF read/write surface is verified end to end. |
 | **DTR0005** | Code calls `EnsureCreated` / `EnsureDeleted`. | Use migrations for conservative StarRocks DDL; these database-creator APIs are unsupported. |
-| **DTR0006** | Code calls `ExecuteUpdate` / `ExecuteDelete`. | DotRocks does not translate bulk LINQ DML. Use tracked single-row `SaveChanges` or raw SQL with parameters. |
 | **DTR0007** | A range change (`AddRange`/`UpdateRange`/`RemoveRange`) is followed by `SaveChanges`. | StarRocks rejects a second DML against a table already written in the same transaction; write one row per `SaveChanges`. |
 
-> **Retired:** `DTR0008` (composite primary keys) no longer reports since DotRocks EF Core
-> gained composite primary key support. The id is reserved and will not be reused. The
-> `EfCompositePrimaryKeyAnalyzer` type and `CompositePrimaryKeyDiagnosticId` constant remain
-> as obsolete no-ops for binary compatibility and will be removed in the next major release.
+> **Retired:** `DTR0006` (`ExecuteUpdate` / `ExecuteDelete`) no longer reports since DotRocks
+> EF Core gained single-table `ExecuteUpdate`/`ExecuteDelete` translation, and `DTR0008`
+> (composite primary keys) no longer reports since composite keys are supported. Both ids are
+> reserved and will not be reused. The `EfCompositePrimaryKeyAnalyzer` type and the
+> `CompositePrimaryKeyDiagnosticId` / `UnsupportedBulkDmlDiagnosticId` constants remain as
+> obsolete no-ops for binary compatibility and will be removed in the next major release.
 
 ### Usage — driver
 

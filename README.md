@@ -379,12 +379,15 @@ Current diagnostics:
 | `DTR0003` | Warning | EF Core `binary` / `varbinary` column type mappings. | Avoid EF binary mappings until DotRocks verifies EF read/write binary support. No automatic fix is provided. |
 | `DTR0004` | Warning | Source-visible double completion of `DotRocksTransaction` or `DotRocksStreamLoadTransaction`. | Commit or roll back a transaction object once and do not reuse it after completion. No automatic fix is provided because transaction flow needs human intent. |
 | `DTR0005` | Warning | EF Core `EnsureCreated` / `EnsureDeleted` calls. | Use migrations for conservative StarRocks DDL; these database creator APIs are unsupported. |
-| `DTR0006` | Warning | EF Core `ExecuteUpdate` / `ExecuteDelete` calls. | Use tracked single-row `SaveChanges` or raw SQL with explicit parameters; bulk LINQ DML is not translated. |
 | `DTR0007` | Warning | Source-visible `AddRange` / `UpdateRange` / `RemoveRange` followed by one `SaveChanges` call. | Save one row per `SaveChanges`, or use Stream Load for bulk ingestion. |
 | `DTR0009` | Warning | Interpolated or concatenated SQL assigned to `DotRocksCommand.CommandText` or `DotRocksFlightSqlCommand.CommandText`, or passed to either constructor. | Use parameter placeholders (for example `@id`) with `DotRocksParameter` values. Escalate to a build error with `dotnet_diagnostic.DTR0009.severity = error`. No automatic fix is provided because parameterization needs human intent. |
 | `DTR0010` | Warning | An async DotRocks call that accepts a `CancellationToken` but does not pass the one available in the enclosing method. | Pass the available `CancellationToken` to the async call. No automatic fix is provided. |
 | `DTR0011` | Warning | Blocking on an async DotRocks call with `.Result`, `.Wait()`, or `.GetAwaiter().GetResult()`. | `await` the operation instead of blocking on it. No automatic fix is provided. |
 | `DTR0012` | Warning | A hard-coded password embedded in a DotRocks connection string literal or local string. | Load credentials from configuration, environment, or a secret store instead of a string literal. No automatic fix is provided. |
+
+`DTR0006` (`ExecuteUpdate` / `ExecuteDelete`) and `DTR0008` (composite primary keys) are
+retired: the features they flagged are supported, no analyzer reports them, and the ids are
+reserved.
 
 Disposal of connections, commands, readers, and transactions is covered by the built-in
 .NET analyzer `CA2000`; DotRocks does not duplicate that rule.
