@@ -38,3 +38,11 @@ DTR0012 | Security | Warning | Avoid embedding a literal password in a DotRocks 
 Rule ID | Category | Severity | Notes
 --------|----------|----------|------
 DTR0008 | Usage | Warning | Removed: composite primary keys are supported by DotRocks EF Core. The id is reserved and will not be reused.
+
+## Release 1.5.4
+
+### Removed Rules
+
+Rule ID | Category | Severity | Notes
+--------|----------|----------|------
+DTR0006 | Usage | Warning | Removed: ExecuteUpdate and ExecuteDelete are translated by DotRocks EF Core. The id is reserved and will not be reused.
