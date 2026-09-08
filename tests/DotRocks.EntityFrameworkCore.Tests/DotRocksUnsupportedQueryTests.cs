@@ -16,33 +16,6 @@ public sealed class DotRocksUnsupportedQueryTests
         );
     }
 
-    [Fact]
-    public async Task ExecuteUpdateAsync_ThrowsNotSupportedException()
-    {
-        await using var context = CreateContext();
-
-        await Assert.ThrowsAsync<NotSupportedException>(() =>
-            context
-                .Widgets.Where(widget => widget.Id == 1)
-                .ExecuteUpdateAsync(
-                    setters => setters.SetProperty(widget => widget.Name, "updated"),
-                    TestContext.Current.CancellationToken
-                )
-        );
-    }
-
-    [Fact]
-    public async Task ExecuteDeleteAsync_ThrowsNotSupportedException()
-    {
-        await using var context = CreateContext();
-
-        await Assert.ThrowsAsync<NotSupportedException>(() =>
-            context
-                .Widgets.Where(widget => widget.Id == 1)
-                .ExecuteDeleteAsync(TestContext.Current.CancellationToken)
-        );
-    }
-
     private static UnitContext CreateContext()
     {
         var optionsBuilder = new DbContextOptionsBuilder<UnitContext>();

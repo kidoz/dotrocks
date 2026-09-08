@@ -8,6 +8,18 @@ version is derived from the release tag at publish time.
 
 ## [Unreleased]
 
+### Added
+- EF Core `ExecuteUpdate` / `ExecuteDelete` translate to StarRocks `UPDATE ... SET ... WHERE ...`
+  and `DELETE FROM ... WHERE ...`. StarRocks allows no alias on the target table and takes bare
+  column names in `SET`, so the statement is emitted without the alias EF Core's default generator
+  uses and with the target's columns unqualified. Setter values are parameterized, an unfiltered
+  call emits `WHERE TRUE`, and the returned count is the server's affected-row count (`0` for
+  deletes on non-`PRIMARY KEY` tables, which StarRocks runs as predicate jobs). Joins, subqueries,
+  `Distinct`, `GroupBy`, `OrderBy`, `Skip`, and `Take` fail with `NotSupportedException` before any
+  SQL is sent; `UPDATE` on a non-`PRIMARY KEY` table and delete conditions outside the StarRocks
+  `column op value [AND ...]` grammar fail on the server. Verified live on StarRocks 3.5.21 and
+  4.1.4.
+
 ## [1.5.3] - 2026-09-05
 
 ### Fixed

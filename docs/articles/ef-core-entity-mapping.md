@@ -185,7 +185,9 @@ await context.SaveChangesAsync();   // UPDATE ... WHERE Id = @p — separate cal
 
 `SaveChanges` inside a user transaction works. StarRocks has no `SAVEPOINT`, so EF savepoints
 are disabled, and DotRocks does not perform OLTP-style affected-row concurrency checks. For
-bulk ingestion use Stream Load — see the README and the `DotRocks.Samples.StreamLoad` sample.
+set-based changes use `ExecuteUpdate` / `ExecuteDelete` — see
+[Bulk updates and deletes](ef-core-queries.md#bulk-updates-and-deletes). For bulk ingestion use
+Stream Load — see the README and the `DotRocks.Samples.StreamLoad` sample.
 
 ## Table-shape configuration for migrations
 
@@ -280,6 +282,7 @@ When mapping or debugging an entity for DotRocks, verify in order:
 3. Writable tables use `HasStarRocksPrimaryKey(...)`; read-only tables use
    `HasStarRocksDuplicateKey/UniqueKey(...)`.
 4. Distribution/key columns are real **store column names** and exist on the table.
-5. Writes are one row per `SaveChanges`; bulk goes through Stream Load.
+5. Writes are one row per `SaveChanges`; set-based changes go through
+   `ExecuteUpdate` / `ExecuteDelete`, and bulk ingestion through Stream Load.
 6. Remember validation is whole-model and up-front: a single bad entity breaks read-only
    queries on unrelated tables. Fix the mapping, not the query.

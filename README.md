@@ -215,6 +215,13 @@ expands this list with emitted SQL and NULL-semantics notes):
   call, or Stream Load for bulk. `SaveChanges` inside a user transaction works; StarRocks has
   no `SAVEPOINT`, so EF savepoints are disabled. DotRocks does not model OLTP-style
   affected-row concurrency checks.
+- `ExecuteUpdate` / `ExecuteDelete` for single-table set-based writes, translated to StarRocks
+  `UPDATE ... SET ... WHERE ...` / `DELETE FROM ... WHERE ...` without a table alias, with
+  parameterized setter values and `WHERE TRUE` for an unfiltered call. Any predicate works on
+  `PRIMARY KEY` tables; other key models reject `UPDATE` and accept only the
+  `column op value [AND ...]` delete conditions StarRocks allows, failing on the server otherwise.
+  Joins, subqueries, `Distinct`, `GroupBy`, `OrderBy`, `Skip`, and `Take` fail explicitly before
+  any SQL is sent; use `Database.ExecuteSql` for those statements.
 - Minimal migrations can create StarRocks databases from `EnsureSchema` as
   `CREATE DATABASE IF NOT EXISTS`, create and drop StarRocks tables, and create the EF
   migrations history table. `CREATE TABLE` defaults to `DUPLICATE KEY`, hash
@@ -230,7 +237,8 @@ expands this list with emitted SQL and NULL-semantics notes):
 
 Unsupported EF Core behavior is explicit:
 
-- `ExecuteUpdate` and `ExecuteDelete`.
+- `ExecuteUpdate` / `ExecuteDelete` over joins, subqueries, `Distinct`, `GroupBy`, `OrderBy`,
+  `Skip`, or `Take`.
 - `EnsureCreated` and schema deletion.
 - migration schema mutations beyond conservative database creation and table
   creation/drop, including `DROP DATABASE`, `TRUNCATE TABLE`, add/drop/alter/rename column,

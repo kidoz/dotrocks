@@ -6,9 +6,9 @@ the raw-SQL entry points, and the query shapes it deliberately refuses.
 
 > Authoritative behavior lives in the translators under
 > [`src/DotRocks.EntityFrameworkCore/Query`](https://github.com/kidoz/dotrocks/tree/main/src/DotRocks.EntityFrameworkCore/Query)
-> and is pinned by `DotRocksTranslatorTests`, `DotRocksJoinAndAggregateQueryTests`, and
-> `DotRocksRawSqlQueryTests`. This article mirrors that source. When the two disagree, the
-> source wins.
+> and is pinned by `DotRocksTranslatorTests`, `DotRocksJoinAndAggregateQueryTests`,
+> `DotRocksRawSqlQueryTests`, and `DotRocksExecuteUpdateDeleteTests`. This article mirrors that
+> source. When the two disagree, the source wins.
 
 For mapping entities to tables, see [EF Core entity mapping](ef-core-entity-mapping.md).
 
@@ -29,6 +29,7 @@ For mapping entities to tables, see [EF Core entity mapping](ef-core-entity-mapp
 | Date/time arithmetic | `AddYears` … `AddSeconds` | → `years_add` … `seconds_add` (plain-argument form, no `INTERVAL` syntax); `DateOnly` supports years/months/days |
 | Extrema | `EF.Functions.Greatest`/`Least`, `Math.Max`/`Math.Min`, inline-collection `Max()`/`Min()` | → `greatest()` / `least()`; see [NULL semantics](#greatest--least-and-mysql-null-semantics) |
 | Projection | Anonymous objects and simple DTOs | |
+| Set-based writes | `ExecuteUpdate`, `ExecuteDelete` | Single-table `UPDATE` / `DELETE` without a table alias; see [Bulk updates and deletes](#bulk-updates-and-deletes) |
 
 Two translations fall back to EF's normal "could not be translated" failure rather than emit
 wrong SQL: `Math.Round(value, MidpointRounding)` (StarRocks has no equivalent) and the
@@ -172,14 +173,57 @@ analyzer `DTR0009`, since ADO.NET has no equivalent capture. See [Analyzers](ana
 A result type materialized only through raw SQL is mapped `HasNoKey()` — see
 [Mapping a result that has no table](ef-core-entity-mapping.md#read-only--query-entities).
 
+## Bulk updates and deletes
+
+`ExecuteUpdate` / `ExecuteDelete` translate to StarRocks `UPDATE ... SET ... WHERE ...` and
+`DELETE FROM ... WHERE ...`. StarRocks allows no alias on the target table and takes bare column
+names in `SET`, so DotRocks emits the statement without the alias EF Core's default generator
+uses, and the target table's columns unqualified:
+
+```csharp
+string label = "archived";
+int updated = await context.Measurements
+    .Where(m => m.DeviceId == deviceId && m.Kind == "input")
+    .ExecuteUpdateAsync(setters => setters
+        .SetProperty(m => m.Label, label)
+        .SetProperty(m => m.Value, m => m.Value + 1), cancellationToken);
+// UPDATE `metrics`.`measurements`
+// SET `label` = @p, `value` = `value` + 1
+// WHERE `device_id` = @deviceId AND `kind` = 'input'
+
+int deleted = await context.Measurements
+    .Where(m => m.Value > threshold)
+    .ExecuteDeleteAsync(cancellationToken);
+// DELETE FROM `metrics`.`measurements`
+// WHERE `value` > @threshold
+```
+
+Setter values are parameterized (`@p`) even when they are constants. An unfiltered
+`ExecuteUpdate`/`ExecuteDelete` emits `WHERE TRUE`, which is how StarRocks spells "every row";
+the `WHERE` clause is never omitted. The returned count is the server's affected-row count.
+
+What StarRocks accepts depends on the table's key model. DotRocks does not check the table type
+on the client; a statement the server refuses fails with a `DotRocksException` and no rows change.
+
+| Table model | `ExecuteUpdate` | `ExecuteDelete` |
+|---|---|---|
+| `PRIMARY KEY` | Any predicate over the table's columns | Any predicate; returns the affected-row count |
+| `DUPLICATE KEY`, `AGGREGATE KEY`, `UNIQUE KEY` | Rejected by StarRocks | Only `column op value` conditions joined by `AND` (`=`, `!=`, `<`, `<=`, `>`, `>=`, `IN`, `NOT IN`); key columns only on aggregate and unique tables; the count is reported as `0` |
+
+DotRocks refuses these shapes with a `NotSupportedException` before any SQL is sent: joins,
+subqueries (including a correlated `Any`/`Contains` over another entity), `Distinct`, `GroupBy`,
+`OrderBy`, `Skip`, and `Take`. EF Core rewrites `OrderBy`/`Take` into `WHERE key IN (SELECT ...)`,
+and the unqualified column names StarRocks DML requires could bind to the wrong table inside such
+a subquery, so it is refused rather than guessed at. Use `Database.ExecuteSql` for those
+statements. The server-side rule that a table may be written once per transaction (error 5303)
+applies to these statements exactly as it does to `SaveChanges`.
+
 ## Not translated
 
 These fail explicitly rather than degrading to client evaluation or approximate SQL:
 
-- `ExecuteUpdate` / `ExecuteDelete` — StarRocks does not accept the `UPDATE`/`DELETE` shapes
-  EF Core produces for arbitrary key models. Throws
-  `NotSupportedException: DotRocks EF Core query translation for LINQ UPDATE is not implemented yet.`
-  Analyzer `DTR0006` flags the call at build time. Use single-row `SaveChanges` or raw SQL.
+- `ExecuteUpdate` / `ExecuteDelete` over joins, subqueries, `Distinct`, `GroupBy`, `OrderBy`,
+  `Skip`, or `Take` — see [Bulk updates and deletes](#bulk-updates-and-deletes).
 - `EnsureCreated` / `EnsureDeleted` (`DTR0005`) — use migrations.
 - Navigations on keyed entities — the model validator rejects them outright, so there is
   nothing to `Include`. Model relationships by joining explicitly on key columns.

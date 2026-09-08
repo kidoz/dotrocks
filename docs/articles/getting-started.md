@@ -52,7 +52,8 @@ await using var context = new AppDbContext(options);
 Pin the server version in provider options. To discover it once at startup, call
 `StarRocksServerVersion.DetectAsync(connectionString)` and cache the result.
 
-Write one row per `SaveChanges`, or use Stream Load for bulk ingestion. See
+Write one row per `SaveChanges`, use `ExecuteUpdate` / `ExecuteDelete` for set-based changes,
+or use Stream Load for bulk ingestion. See
 [EF Core entity mapping](ef-core-entity-mapping.md) for model validation and migration
 table-shape rules, and [EF Core query translation](ef-core-queries.md) for the translated
 LINQ surface and raw-SQL entry points.

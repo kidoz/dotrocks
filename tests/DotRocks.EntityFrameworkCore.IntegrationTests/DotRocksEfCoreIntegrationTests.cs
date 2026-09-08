@@ -767,6 +767,248 @@ public sealed class DotRocksEfCoreIntegrationTests
     }
 
     [Fact]
+    public async Task ExecuteUpdateAsync_UpdatesMatchingRowsOfPrimaryKeyTable()
+    {
+        IntegrationTestEnvironment.SkipUnlessEnabled();
+
+        var interceptor = new CapturingCommandInterceptor();
+        await using var context = CreateLiveContext(interceptor);
+        await EnsureWriteWidgetTableAsync(context).ConfigureAwait(true);
+
+        try
+        {
+            await SeedWriteWidgetsAsync(context).ConfigureAwait(true);
+            string name = "bulk";
+            interceptor.Clear();
+
+            int affected = await context
+                .WriteWidgets.Where(widget => widget.Active)
+                .ExecuteUpdateAsync(
+                    setters =>
+                        setters
+                            .SetProperty(widget => widget.Name, name)
+                            .SetProperty(widget => widget.Amount, widget => widget.Amount + 1),
+                    TestContext.Current.CancellationToken
+                )
+                .ConfigureAwait(true);
+
+            CapturedCommand updateCommand = interceptor.SingleNonQueryCommand("UPDATE");
+            // StarRocks UPDATE takes a bare table name (no alias) and bare column names; the
+            // model's `Amount` property matches the `amount` column case-insensitively.
+            Assert.StartsWith(
+                "UPDATE " + DelimitedWriteWidgetTable(),
+                updateCommand.CommandText,
+                StringComparison.Ordinal
+            );
+            Assert.DoesNotContain(" AS ", updateCommand.CommandText, StringComparison.Ordinal);
+            Assert.Contains(
+                "`amount` = `amount` + 1",
+                updateCommand.CommandText,
+                StringComparison.OrdinalIgnoreCase
+            );
+            Assert.Contains(
+                "WHERE `active`",
+                updateCommand.CommandText,
+                StringComparison.OrdinalIgnoreCase
+            );
+            Assert.DoesNotContain("bulk", updateCommand.CommandText, StringComparison.Ordinal);
+            Assert.Contains("bulk", updateCommand.ParameterValues());
+            Assert.Equal(2, affected);
+
+            EfWriteWidget[] rows = await context
+                .WriteWidgets.AsNoTracking()
+                .OrderBy(widget => widget.Id)
+                .ToArrayAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+            string[] expectedNames = ["bulk", "two", "bulk"];
+            decimal[] expectedAmounts = [13.34m, 23.45m, 35.56m];
+            Assert.Equal(expectedNames, rows.Select(widget => widget.Name));
+            Assert.Equal(expectedAmounts, rows.Select(widget => widget.Amount));
+        }
+        finally
+        {
+            await DropWriteWidgetTableAsync(context).ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
+    public async Task ExecuteDeleteAsync_DeletesMatchingRowsThenAllRowsOfPrimaryKeyTable()
+    {
+        IntegrationTestEnvironment.SkipUnlessEnabled();
+
+        var interceptor = new CapturingCommandInterceptor();
+        await using var context = CreateLiveContext(interceptor);
+        await EnsureWriteWidgetTableAsync(context).ConfigureAwait(true);
+
+        try
+        {
+            await SeedWriteWidgetsAsync(context).ConfigureAwait(true);
+            decimal threshold = 20m;
+            interceptor.Clear();
+
+            int affected = await context
+                .WriteWidgets.Where(widget => widget.Amount > threshold)
+                .ExecuteDeleteAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+
+            CapturedCommand deleteCommand = interceptor.SingleNonQueryCommand("DELETE");
+            Assert.StartsWith(
+                "DELETE FROM " + DelimitedWriteWidgetTable(),
+                deleteCommand.CommandText,
+                StringComparison.Ordinal
+            );
+            Assert.DoesNotContain(" AS ", deleteCommand.CommandText, StringComparison.Ordinal);
+            Assert.Contains(
+                "WHERE `amount` > @",
+                deleteCommand.CommandText,
+                StringComparison.OrdinalIgnoreCase
+            );
+            Assert.Contains(20m, deleteCommand.ParameterValues());
+            Assert.Equal(2, affected);
+
+            int[] remainingIds = await context
+                .WriteWidgets.AsNoTracking()
+                .Select(widget => widget.Id)
+                .ToArrayAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+            Assert.Equal([1], remainingIds);
+
+            // An unfiltered ExecuteDelete means "every row"; StarRocks spells that `WHERE TRUE`.
+            interceptor.Clear();
+            int deletedAll = await context
+                .WriteWidgets.ExecuteDeleteAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+
+            CapturedCommand deleteAllCommand = interceptor.SingleNonQueryCommand("DELETE");
+            Assert.EndsWith("WHERE TRUE", deleteAllCommand.CommandText, StringComparison.Ordinal);
+            Assert.Equal(1, deletedAll);
+            Assert.Equal(
+                0,
+                await context
+                    .WriteWidgets.CountAsync(TestContext.Current.CancellationToken)
+                    .ConfigureAwait(true)
+            );
+        }
+        finally
+        {
+            await DropWriteWidgetTableAsync(context).ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
+    public async Task ExecuteUpdateAndDeleteAsync_CompositeKeyTable_TargetRowsByPredicate()
+    {
+        IntegrationTestEnvironment.SkipUnlessEnabled();
+
+        await using var context = CreateLiveContext();
+        await EnsureCompositeWriteWidgetTableAsync(context).ConfigureAwait(true);
+
+        try
+        {
+            await SeedCompositeWriteWidgetsAsync(context).ConfigureAwait(true);
+            int tenantId = 1;
+
+            int updated = await context
+                .CompositeWriteWidgets.Where(widget => widget.TenantId == tenantId)
+                .ExecuteUpdateAsync(
+                    setters => setters.SetProperty(widget => widget.Name, "tenant-one"),
+                    TestContext.Current.CancellationToken
+                )
+                .ConfigureAwait(true);
+            Assert.Equal(2, updated);
+
+            int deleted = await context
+                .CompositeWriteWidgets.Where(widget =>
+                    widget.TenantId == tenantId && widget.Id == 2
+                )
+                .ExecuteDeleteAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+            Assert.Equal(1, deleted);
+
+            var rows = await context
+                .CompositeWriteWidgets.AsNoTracking()
+                .OrderBy(widget => widget.TenantId)
+                .ThenBy(widget => widget.Id)
+                .Select(widget => new
+                {
+                    widget.TenantId,
+                    widget.Id,
+                    widget.Name,
+                })
+                .ToArrayAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+            Assert.Collection(
+                rows,
+                row =>
+                {
+                    Assert.Equal(1, row.TenantId);
+                    Assert.Equal(1, row.Id);
+                    Assert.Equal("tenant-one", row.Name);
+                },
+                row =>
+                {
+                    Assert.Equal(2, row.TenantId);
+                    Assert.Equal(1, row.Id);
+                    Assert.Equal("c", row.Name);
+                }
+            );
+        }
+        finally
+        {
+            await DropCompositeWriteWidgetTableAsync(context).ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
+    public async Task ExecuteDeleteAsync_DuplicateKeyTable_DeletesBySimpleConditionAndUpdateFailsExplicitly()
+    {
+        IntegrationTestEnvironment.SkipUnlessEnabled();
+
+        await using var context = CreateLiveContext();
+        await EnsureWidgetTableAsync(context).ConfigureAwait(true);
+
+        try
+        {
+            // DUPLICATE KEY tables accept `column op value` delete conditions on any column.
+            // StarRocks runs the delete as a predicate job and reports no row count for
+            // non-primary-key tables, so the affected count is 0 even though two rows go.
+            int category = 1;
+            int affected = await context
+                .Widgets.Where(widget => widget.Category == category)
+                .ExecuteDeleteAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+            Assert.Equal(0, affected);
+
+            int[] remainingIds = await context
+                .Widgets.AsNoTracking()
+                .Select(widget => widget.Id)
+                .ToArrayAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+            Assert.Equal([3], remainingIds);
+
+            // StarRocks supports UPDATE only on PRIMARY KEY tables; the server rejects it and
+            // the row is untouched, rather than the driver guessing at an alternative.
+            await Assert
+                .ThrowsAnyAsync<DotRocksException>(() =>
+                    context.Widgets.ExecuteUpdateAsync(
+                        setters => setters.SetProperty(widget => widget.Name, "renamed"),
+                        TestContext.Current.CancellationToken
+                    )
+                )
+                .ConfigureAwait(true);
+            DotRocksWidget remaining = await context
+                .Widgets.AsNoTracking()
+                .SingleAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+            Assert.Equal("three", remaining.Name);
+        }
+        finally
+        {
+            await DropWidgetTableAsync(context).ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
     public async Task SaveChangesAsync_CompositeKey_InsertsUpdatesAndDeletesEntity()
     {
         IntegrationTestEnvironment.SkipUnlessEnabled();
@@ -2639,6 +2881,24 @@ public sealed class DotRocksEfCoreIntegrationTests
     private static Task<int> DropCompositeWriteWidgetTableAsync(DotRocksTestContext context)
     {
         string sql = "DROP TABLE IF EXISTS " + DelimitedCompositeWriteWidgetTable();
+        return context.Database.ExecuteSqlRawAsync(sql, TestContext.Current.CancellationToken);
+    }
+
+    private static Task<int> SeedWriteWidgetsAsync(DotRocksTestContext context)
+    {
+        string sql =
+            "INSERT INTO "
+            + DelimitedWriteWidgetTable()
+            + " VALUES (1, 'one', TRUE, 12.34), (2, 'two', FALSE, 23.45), (3, 'three', TRUE, 34.56)";
+        return context.Database.ExecuteSqlRawAsync(sql, TestContext.Current.CancellationToken);
+    }
+
+    private static Task<int> SeedCompositeWriteWidgetsAsync(DotRocksTestContext context)
+    {
+        string sql =
+            "INSERT INTO "
+            + DelimitedCompositeWriteWidgetTable()
+            + " VALUES (1, 1, 'a', 1.00), (1, 2, 'b', 2.00), (2, 1, 'c', 3.00)";
         return context.Database.ExecuteSqlRawAsync(sql, TestContext.Current.CancellationToken);
     }
 
