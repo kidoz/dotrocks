@@ -8,6 +8,8 @@ version is derived from the release tag at publish time.
 
 ## [Unreleased]
 
+## [1.5.5] - 2026-10-04
+
 ### Fixed
 - Closing or canceling a pooled connection can no longer return the same pool lease twice.
   A second return released the pool permit twice (`SemaphoreFullException`) or handed one
@@ -616,7 +618,8 @@ version is derived from the release tag at publish time.
 - Stream Load refuses to forward credentials over a downgraded (HTTPS→HTTP) redirect.
 - NuGet vulnerability auditing and CodeQL analysis in CI.
 
-[Unreleased]: https://github.com/kidoz/dotrocks/compare/v1.5.4...HEAD
+[Unreleased]: https://github.com/kidoz/dotrocks/compare/v1.5.5...HEAD
+[1.5.5]: https://github.com/kidoz/dotrocks/compare/v1.5.4...v1.5.5
 [1.5.4]: https://github.com/kidoz/dotrocks/compare/v1.5.3...v1.5.4
 [1.5.3]: https://github.com/kidoz/dotrocks/compare/v1.5.2...v1.5.3
 [1.5.2]: https://github.com/kidoz/dotrocks/compare/v1.5.1...v1.5.2
