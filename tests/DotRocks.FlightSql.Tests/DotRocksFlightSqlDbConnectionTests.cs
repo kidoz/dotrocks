@@ -1,6 +1,8 @@
 using System.Data;
 using System.Diagnostics.CodeAnalysis;
+using Apache.Arrow.Flight.Sql;
 using DotRocks.FlightSql;
+using Google.Protobuf;
 using Xunit;
 
 namespace DotRocks.FlightSql.Tests;
@@ -66,6 +68,55 @@ public sealed class DotRocksFlightSqlDbConnectionTests
         );
 
         Assert.Contains("asynchronous only", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Close_WhenImplicitRollbackFails_LeavesTheConnectionClosed()
+    {
+        using var dataSource = new DotRocksFlightSqlDataSource(CreateOptions());
+        using var connection = dataSource.CreateConnection();
+        connection.Open();
+        AdoptFailingTransaction(connection, dataSource);
+        dataSource.Dispose();
+
+        connection.Close();
+
+        Assert.Equal(ConnectionState.Closed, connection.State);
+        Assert.Null(connection.ActiveTransaction);
+    }
+
+    [Fact]
+    public async Task DisposeAsync_WhenImplicitRollbackFails_LeavesTheConnectionClosed()
+    {
+        await using var dataSource = new DotRocksFlightSqlDataSource(CreateOptions());
+        await using var connection = dataSource.CreateConnection();
+        await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+        AdoptFailingTransaction(connection, dataSource);
+        await dataSource.DisposeAsync().ConfigureAwait(true);
+
+        await connection.DisposeAsync().ConfigureAwait(true);
+
+        Assert.Equal(ConnectionState.Closed, connection.State);
+        Assert.Null(connection.ActiveTransaction);
+    }
+
+    [SuppressMessage(
+        "Reliability",
+        "CA2000:Dispose objects before losing scope",
+        Justification = "Close and DisposeAsync take ownership of the adopted transaction. Disposing it here would skip the rollback path under test."
+    )]
+    private static void AdoptFailingTransaction(
+        DotRocksFlightSqlDbConnection connection,
+        DotRocksFlightSqlDataSource dataSource
+    )
+    {
+        var transaction = new DotRocksFlightSqlTransaction(
+            dataSource,
+            new Transaction(ByteString.CopyFrom([0x01]))
+        );
+        connection.AdoptActiveTransaction(
+            new DotRocksFlightSqlDbTransaction(connection, transaction, IsolationLevel.Unspecified)
+        );
     }
 
     private static DotRocksFlightSqlOptions CreateOptions() =>

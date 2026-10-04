@@ -156,15 +156,7 @@ public sealed class DotRocksFlightSqlDbConnection : DbConnection
 
         try
         {
-            if (_activeTransaction is not null)
-            {
-                _activeTransaction
-                    .DisposeAsync()
-                    .AsTask()
-                    .ConfigureAwait(false)
-                    .GetAwaiter()
-                    .GetResult();
-            }
+            CompleteActiveTransaction();
         }
         finally
         {
@@ -183,10 +175,7 @@ public sealed class DotRocksFlightSqlDbConnection : DbConnection
 
         try
         {
-            if (_activeTransaction is not null)
-            {
-                await _activeTransaction.DisposeAsync().ConfigureAwait(false);
-            }
+            await CompleteActiveTransactionAsync().ConfigureAwait(false);
         }
         finally
         {
@@ -238,7 +227,7 @@ public sealed class DotRocksFlightSqlDbConnection : DbConnection
             .BeginTransactionAsync(cancellationToken)
             .ConfigureAwait(false);
         var dbTransaction = new DotRocksFlightSqlDbTransaction(this, transaction, isolationLevel);
-        _activeTransaction = dbTransaction;
+        AdoptActiveTransaction(dbTransaction);
         return dbTransaction;
     }
 
@@ -273,6 +262,12 @@ public sealed class DotRocksFlightSqlDbConnection : DbConnection
                 "Commands must reference the connection's active Flight SQL transaction."
             );
         }
+    }
+
+    internal void AdoptActiveTransaction(DotRocksFlightSqlDbTransaction transaction)
+    {
+        ArgumentNullException.ThrowIfNull(transaction);
+        _activeTransaction = transaction;
     }
 
     internal void ClearActiveTransaction(DotRocksFlightSqlDbTransaction transaction)
@@ -353,10 +348,7 @@ public sealed class DotRocksFlightSqlDbConnection : DbConnection
 
         try
         {
-            if (_activeTransaction is not null)
-            {
-                await _activeTransaction.DisposeAsync().ConfigureAwait(false);
-            }
+            await CompleteActiveTransactionAsync().ConfigureAwait(false);
 
             if (_fallbackConnection is not null)
             {
@@ -376,6 +368,55 @@ public sealed class DotRocksFlightSqlDbConnection : DbConnection
 
         await base.DisposeAsync().ConfigureAwait(false);
         GC.SuppressFinalize(this);
+    }
+
+    [SuppressMessage(
+        "Design",
+        "CA1031:Do not catch general exception types",
+        Justification = "An implicit rollback failure must not escape Close or Dispose. The server expires the transaction, and a throw here would replace an exception already in flight."
+    )]
+    private void CompleteActiveTransaction()
+    {
+        if (_activeTransaction is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _activeTransaction
+                .DisposeAsync()
+                .AsTask()
+                .ConfigureAwait(false)
+                .GetAwaiter()
+                .GetResult();
+        }
+        catch (Exception)
+        {
+            // The transaction clears itself from this connection even when the rollback fails.
+        }
+    }
+
+    [SuppressMessage(
+        "Design",
+        "CA1031:Do not catch general exception types",
+        Justification = "An implicit rollback failure must not escape Close or Dispose. The server expires the transaction, and a throw here would replace an exception already in flight."
+    )]
+    private async Task CompleteActiveTransactionAsync()
+    {
+        if (_activeTransaction is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _activeTransaction.DisposeAsync().ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            // The transaction clears itself from this connection even when the rollback fails.
+        }
     }
 
     private static DotRocksFlightSqlDataSource CreateOwnedDataSource(
