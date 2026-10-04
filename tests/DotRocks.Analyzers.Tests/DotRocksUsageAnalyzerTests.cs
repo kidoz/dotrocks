@@ -989,6 +989,81 @@ public sealed class DotRocksUsageAnalyzerTests
         );
     }
 
+    [Fact]
+    public async Task EfValueGeneratedNeverCodeFix_BlockLambda_InsertsInsideTheLambda()
+    {
+        string source =
+            EfStubs
+            + """
+
+                internal sealed class Widget
+                {
+                    public int Id { get; set; }
+                }
+
+                internal sealed class SampleContext : Microsoft.EntityFrameworkCore.DbContext
+                {
+                    protected override void OnModelCreating(Microsoft.EntityFrameworkCore.ModelBuilder modelBuilder)
+                    {
+                        modelBuilder.Entity<Widget>(widget =>
+                        {
+                            widget.HasKey(widget => widget.Id);
+                        });
+                    }
+                }
+                """;
+
+        string fixedSource = await ApplyFirstCodeFixAsync(
+                source,
+                new EfValueGeneratedNeverAnalyzer(),
+                new EfValueGeneratedNeverCodeFixProvider()
+            )
+            .ConfigureAwait(true);
+
+        Assert.Contains(
+            "widget.Property(widget => widget.Id).ValueGeneratedNever();",
+            fixedSource,
+            StringComparison.Ordinal
+        );
+        int propertyIndex = fixedSource.IndexOf(
+            "widget.Property(widget => widget.Id).ValueGeneratedNever();",
+            StringComparison.Ordinal
+        );
+        int lambdaClose = fixedSource.LastIndexOf("});", StringComparison.Ordinal);
+        Assert.True(propertyIndex < lambdaClose);
+    }
+
+    [Fact]
+    public async Task EfValueGeneratedNeverCodeFix_ExpressionLambda_IsNotOffered()
+    {
+        string source =
+            EfStubs
+            + """
+
+                internal sealed class Widget
+                {
+                    public int Id { get; set; }
+                }
+
+                internal sealed class SampleContext : Microsoft.EntityFrameworkCore.DbContext
+                {
+                    protected override void OnModelCreating(Microsoft.EntityFrameworkCore.ModelBuilder modelBuilder)
+                    {
+                        modelBuilder.Entity<Widget>(widget => widget.HasKey(widget => widget.Id));
+                    }
+                }
+                """;
+
+        (IReadOnlyList<CodeAction> actions, _) = await RegisterCodeFixesAsync(
+                source,
+                new EfValueGeneratedNeverAnalyzer(),
+                new EfValueGeneratedNeverCodeFixProvider()
+            )
+            .ConfigureAwait(true);
+
+        Assert.Empty(actions);
+    }
+
     private static Task<Diagnostic[]> AnalyzeAsync(string source) =>
         AnalyzerTestHarness.AnalyzeAsync(
             source,
@@ -1001,6 +1076,36 @@ public sealed class DotRocksUsageAnalyzerTests
         );
 
     private static async Task<string> ApplyFirstCodeFixAsync(
+        string source,
+        DiagnosticAnalyzer analyzer,
+        CodeFixProvider codeFixProvider
+    )
+    {
+        (IReadOnlyList<CodeAction> actions, Document document) = await RegisterCodeFixesAsync(
+                source,
+                analyzer,
+                codeFixProvider
+            )
+            .ConfigureAwait(true);
+        CodeAction codeAction = Assert.Single(actions);
+        ImmutableArray<CodeActionOperation> operations = await codeAction
+            .GetOperationsAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+        ApplyChangesOperation applyChanges = Assert.IsType<ApplyChangesOperation>(
+            Assert.Single(operations)
+        );
+        Document? changedDocument = applyChanges.ChangedSolution.GetDocument(document.Id);
+        Assert.NotNull(changedDocument);
+        SourceText text = await changedDocument!
+            .GetTextAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+        return text.ToString();
+    }
+
+    private static async Task<(
+        IReadOnlyList<CodeAction> Actions,
+        Document Document
+    )> RegisterCodeFixesAsync(
         string source,
         DiagnosticAnalyzer analyzer,
         CodeFixProvider codeFixProvider
@@ -1039,19 +1144,7 @@ public sealed class DotRocksUsageAnalyzerTests
             TestContext.Current.CancellationToken
         );
         await codeFixProvider.RegisterCodeFixesAsync(context).ConfigureAwait(true);
-        CodeAction codeAction = Assert.Single(actions);
-        ImmutableArray<CodeActionOperation> operations = await codeAction
-            .GetOperationsAsync(TestContext.Current.CancellationToken)
-            .ConfigureAwait(true);
-        ApplyChangesOperation applyChanges = Assert.IsType<ApplyChangesOperation>(
-            Assert.Single(operations)
-        );
-        Document? changedDocument = applyChanges.ChangedSolution.GetDocument(document.Id);
-        Assert.NotNull(changedDocument);
-        SourceText text = await changedDocument!
-            .GetTextAsync(TestContext.Current.CancellationToken)
-            .ConfigureAwait(true);
-        return text.ToString();
+        return (actions, document);
     }
 
     private static async Task<string> PackAnalyzerAsync()

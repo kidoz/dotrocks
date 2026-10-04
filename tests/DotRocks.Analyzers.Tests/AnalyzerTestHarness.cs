@@ -169,6 +169,14 @@ internal static class AnalyzerTestHarness
             public class ModelBuilder
             {
                 public Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<TEntity> Entity<TEntity>() => new();
+
+                public Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<TEntity> Entity<TEntity>(
+                    System.Action<Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<TEntity>> buildAction)
+                {
+                    var builder = new Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<TEntity>();
+                    buildAction(builder);
+                    return builder;
+                }
             }
 
             public class DbSet<TEntity>

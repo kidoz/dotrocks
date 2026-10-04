@@ -108,6 +108,9 @@ public sealed class EfValueGeneratedNeverCodeFixProvider : CodeFixProvider
                 is not SimpleLambdaExpressionSyntax lambda
             || lambda.Body is not MemberAccessExpressionSyntax memberAccess
             || !diagnostic.Location.SourceSpan.IntersectsWith(memberAccess.Name.Span)
+            || hasKeyInvocation.FirstAncestorOrSelf<StatementSyntax>() is not { } sourceStatement
+            || sourceStatement.Parent is not BlockSyntax
+            || !IsReceiverInScope(entityExpression, sourceStatement)
         )
         {
             return null;
@@ -118,6 +121,92 @@ public sealed class EfValueGeneratedNeverCodeFixProvider : CodeFixProvider
         return SyntaxFactory.ParseStatement(
             $"{entityExpression}.Property({parameterName} => {parameterName}.{propertyName}).ValueGeneratedNever();"
         );
+    }
+
+    // The inserted statement is a sibling of the statement that contains HasKey. An expression-bodied
+    // lambda such as Entity(w => w.HasKey(...)) ends before that sibling, so w would not compile.
+    private static bool IsReceiverInScope(
+        ExpressionSyntax entityExpression,
+        StatementSyntax sourceStatement
+    )
+    {
+        foreach (
+            IdentifierNameSyntax identifier in entityExpression
+                .DescendantNodesAndSelf()
+                .OfType<IdentifierNameSyntax>()
+        )
+        {
+            if (!IsIdentifierInScope(identifier, sourceStatement))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool IsIdentifierInScope(
+        IdentifierNameSyntax identifier,
+        StatementSyntax sourceStatement
+    )
+    {
+        string name = identifier.Identifier.ValueText;
+        for (SyntaxNode? node = identifier.Parent; node is not null; node = node.Parent)
+        {
+            switch (node)
+            {
+                case SimpleLambdaExpressionSyntax simpleLambda
+                    when simpleLambda.Parameter.Identifier.ValueText == name:
+                    return simpleLambda.Body is BlockSyntax simpleBody
+                        && simpleBody.Contains(sourceStatement);
+                case ParenthesizedLambdaExpressionSyntax parenthesizedLambda
+                    when DeclaresParameter(parenthesizedLambda.ParameterList, name):
+                    return parenthesizedLambda.Body is BlockSyntax parenthesizedBody
+                        && parenthesizedBody.Contains(sourceStatement);
+                case LocalFunctionStatementSyntax localFunction
+                    when DeclaresParameter(localFunction.ParameterList, name):
+                    return localFunction.Body?.Contains(sourceStatement) == true;
+                case BaseMethodDeclarationSyntax method
+                    when DeclaresParameter(method.ParameterList, name):
+                    return method.Body?.Contains(sourceStatement) == true;
+                case BlockSyntax localBlock
+                    when DeclaresLocalBefore(localBlock, name, sourceStatement):
+                    return true;
+            }
+        }
+
+        // A name with no local or parameter declaration is a type or member, which stays in scope.
+        return true;
+    }
+
+    private static bool DeclaresParameter(BaseParameterListSyntax parameterList, string name) =>
+        parameterList.Parameters.Any(parameter => parameter.Identifier.ValueText == name);
+
+    private static bool DeclaresLocalBefore(
+        BlockSyntax block,
+        string name,
+        StatementSyntax sourceStatement
+    )
+    {
+        foreach (StatementSyntax statement in block.Statements)
+        {
+            if (statement.SpanStart >= sourceStatement.SpanStart)
+            {
+                return false;
+            }
+
+            if (
+                statement is LocalDeclarationStatementSyntax local
+                && local.Declaration.Variables.Any(variable =>
+                    variable.Identifier.ValueText == name
+                )
+            )
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool IsHasKeyInvocation(InvocationExpressionSyntax invocation) =>
