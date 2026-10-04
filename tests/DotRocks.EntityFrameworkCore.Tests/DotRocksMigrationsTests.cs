@@ -1,6 +1,8 @@
 using System.Diagnostics.CodeAnalysis;
+using DotRocks.Data;
 using DotRocks.EntityFrameworkCore.Design;
 using DotRocks.EntityFrameworkCore.Metadata;
+using DotRocks.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -626,6 +628,34 @@ public sealed class DotRocksMigrationsTests
             deleteSql,
             StringComparison.Ordinal
         );
+    }
+
+    [Theory]
+    [InlineData(1049, true)]
+    [InlineData(1045, false)]
+    [InlineData(null, false)]
+    public void HistoryRepository_IsUnknownDatabase_MatchesOnlyError1049(
+        int? serverErrorCode,
+        bool isUnknownDatabase
+    )
+    {
+        Assert.Equal(
+            isUnknownDatabase,
+            DotRocksHistoryRepository.IsUnknownDatabase(serverErrorCode)
+        );
+    }
+
+    [Fact]
+    public void HistoryRepository_Exists_DoesNotTreatConnectionFailureAsMissingDatabase()
+    {
+        var optionsBuilder = new DbContextOptionsBuilder<UnitContext>();
+        optionsBuilder.UseStarRocks(
+            "Server=127.0.0.1;Port=1;User ID=root;Connection Timeout=1;Pooling=false"
+        );
+        using var context = new UnitContext(optionsBuilder.Options);
+        var history = context.GetService<IHistoryRepository>();
+
+        Assert.Throws<DotRocksException>(() => history.Exists());
     }
 
     [Fact]

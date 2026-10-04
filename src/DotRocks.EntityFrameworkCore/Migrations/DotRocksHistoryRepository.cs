@@ -17,6 +17,10 @@ internal sealed class DotRocksHistoryRepository(HistoryRepositoryDependencies de
     : HistoryRepository(dependencies),
         IHistoryRepository
 {
+    // StarRocks documents 1049 as "an invalid database is specified" and refuses login when the
+    // connection's default database does not exist.
+    private const int UnknownDatabaseErrorCode = 1049;
+
     public override LockReleaseBehavior LockReleaseBehavior => LockReleaseBehavior.Explicit;
 
     protected override string ExistsSql =>
@@ -160,6 +164,12 @@ internal sealed class DotRocksHistoryRepository(HistoryRepositoryDependencies de
             : new DotRocksConnection(connectionString);
     }
 
+    // Authentication, network, and protocol failures must surface. Exists() returning false makes
+    // the migrator treat applied migrations as pending, and StarRocks has no unique constraint to
+    // stop that re-apply.
+    internal static bool IsUnknownDatabase(int? serverErrorCode) =>
+        serverErrorCode == UnknownDatabaseErrorCode;
+
     private static bool TryOpen(DotRocksConnection connection)
     {
         try
@@ -167,10 +177,8 @@ internal sealed class DotRocksHistoryRepository(HistoryRepositoryDependencies de
             connection.Open();
             return true;
         }
-        catch (DotRocksException)
+        catch (DotRocksException exception) when (IsUnknownDatabase(exception.ServerErrorCode))
         {
-            // The database does not exist (StarRocks refuses login to a missing database), so the
-            // history table cannot exist either.
             return false;
         }
     }
@@ -185,7 +193,7 @@ internal sealed class DotRocksHistoryRepository(HistoryRepositoryDependencies de
             await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
             return true;
         }
-        catch (DotRocksException)
+        catch (DotRocksException exception) when (IsUnknownDatabase(exception.ServerErrorCode))
         {
             return false;
         }
