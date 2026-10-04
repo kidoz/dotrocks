@@ -8,6 +8,25 @@ version is derived from the release tag at publish time.
 
 ## [Unreleased]
 
+### Fixed
+- Closing or canceling a pooled connection can no longer return the same pool lease twice.
+  A second return released the pool permit twice (`SemaphoreFullException`) or handed one
+  socket to two callers.
+- `DbCommand.Cancel()` and per-row command timeouts no longer throw `ObjectDisposedException`
+  when the operation scope is disposed on another thread, so a timeout is not replaced by a
+  disposal error.
+- EF Core maps `byte` to `SMALLINT`. StarRocks has no unsigned integer types, so the previous
+  `tinyint unsigned` store type produced invalid DDL, and signed `TINYINT` cannot hold 0–255.
+- The migrations history repository treats only StarRocks error 1049 (unknown database) as a
+  missing database. Authentication and network failures surface instead of looking like an
+  empty history, which made the migrator re-apply migrations.
+- The `ValueGeneratedNever` code fix is offered only when the entity receiver is still in
+  scope at the insertion point. An expression-bodied `Entity(w => w.HasKey(...))` lambda no
+  longer gets a fix that references `w` outside the lambda.
+- Disposing a Flight SQL connection swallows a failed implicit transaction rollback. The
+  server expires the transaction, and the rollback error no longer replaces an exception
+  already in flight.
+
 ## [1.5.4] - 2026-09-08
 
 ### Added
