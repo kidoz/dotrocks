@@ -87,6 +87,23 @@ public sealed class DotRocksTypeMappingTests
     }
 
     [Fact]
+    public void FindMapping_MapsByteToSignedSmallint()
+    {
+        IRelationalTypeMappingSource source = CreateMappingSource();
+
+        RelationalTypeMapping? mapping = source.FindMapping(typeof(byte));
+
+        Assert.NotNull(mapping);
+        Assert.Equal(typeof(byte), mapping.ClrType);
+        Assert.Equal("smallint", mapping.StoreType);
+        Assert.NotNull(mapping.Converter);
+        Assert.Equal(typeof(short), mapping.Converter.ProviderClrType);
+        Assert.Equal((short)255, mapping.Converter.ConvertToProvider((byte)255));
+        Assert.Equal((byte)7, mapping.Converter.ConvertFromProvider((short)7));
+        Assert.Equal("255", mapping.GenerateSqlLiteral((byte)255));
+    }
+
+    [Fact]
     public void FindMapping_MapsInt128ClrType()
     {
         IRelationalTypeMappingSource source = CreateMappingSource();

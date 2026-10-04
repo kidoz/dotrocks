@@ -23,7 +23,7 @@ internal sealed class DotRocksTypeMappingSource(
         {
             [typeof(bool)] = new BoolTypeMapping("boolean", DbType.Boolean),
             [typeof(sbyte)] = new SByteTypeMapping("tinyint", DbType.SByte),
-            [typeof(byte)] = new ByteTypeMapping("tinyint unsigned", DbType.Byte),
+            [typeof(byte)] = new DotRocksByteTypeMapping(),
             [typeof(short)] = new ShortTypeMapping("smallint", DbType.Int16),
             [typeof(int)] = new IntTypeMapping("int", DbType.Int32),
             [typeof(long)] = new LongTypeMapping("bigint", DbType.Int64),

@@ -301,7 +301,6 @@ EF Core type mapping:
 | --- | --- |
 | `BOOLEAN` (alias `BOOL`) | `bool` |
 | `TINYINT` | `sbyte` |
-| `TINYINT UNSIGNED` | `byte` |
 | `SMALLINT` | `short` |
 | `INT`, `INTEGER`, `MEDIUMINT` | `int` |
 | `BIGINT` | `long` |
@@ -317,6 +316,9 @@ EF Core type mapping:
 | `CHAR(36)` | `Guid` |
 | `CHAR`, `VARCHAR`, `STRING`, `TEXT` | `string` |
 | `JSON` | `string` |
+
+A `byte` property is stored as `SMALLINT`. StarRocks has no unsigned integer types, and signed
+`TINYINT` cannot store values from 0 through 255.
 
 EF Core maps only the `json` store type, to `string`. `ARRAY`, `MAP`, and `STRUCT` are not EF-mapped,
 and `DotRocksJson` (below) is an ADO.NET reader feature, not an EF type mapping.
