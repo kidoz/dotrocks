@@ -15,6 +15,7 @@ public sealed class DotRocksConnection : DbConnection
 {
     private DotRocksConnectionOptions _options;
     private DotRocksConnectionPoolLease? _lease;
+    private int _discardPhysicalConnection;
     private DotRocksDataReader? _activeReader;
 
     [SuppressMessage(
@@ -124,6 +125,9 @@ public sealed class DotRocksConnection : DbConnection
 
     internal void Abort()
     {
+        // Publish the discard before taking the lease so a concurrent clean close, if it wins the
+        // lease, still drops the socket instead of returning it to the pool.
+        Interlocked.Exchange(ref _discardPhysicalConnection, 1);
         _lease?.PhysicalConnection.MarkBroken();
         CloseCore(reusable: false);
     }
@@ -144,11 +148,23 @@ public sealed class DotRocksConnection : DbConnection
             reusable = false;
         }
 
-        DotRocksConnectionPoolLease? lease = _lease;
-        _lease = null;
+        // Cancel, the command timeout, and the executing thread can all enter CloseCore. Only the
+        // caller that takes the lease may return it.
+        DotRocksConnectionPoolLease? lease = Interlocked.Exchange(ref _lease, null);
         _serverVersion = string.Empty;
         _state = ConnectionState.Closed;
-        lease?.Return(reusable);
+        if (lease is null)
+        {
+            return;
+        }
+
+        if (Volatile.Read(ref _discardPhysicalConnection) != 0)
+        {
+            lease.PhysicalConnection.MarkBroken();
+            reusable = false;
+        }
+
+        lease.Return(reusable);
     }
 
     /// <inheritdoc />

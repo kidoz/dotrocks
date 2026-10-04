@@ -3,7 +3,7 @@ namespace DotRocks.Data.Pooling;
 internal sealed class DotRocksConnectionPoolLease : IDisposable
 {
     private readonly DotRocksConnectionPool? _pool;
-    private bool _isReturned;
+    private int _isReturned;
 
     private DotRocksConnectionPoolLease(
         DotRocksPhysicalConnection physicalConnection,
@@ -27,12 +27,13 @@ internal sealed class DotRocksConnectionPoolLease : IDisposable
 
     public void Return(bool reusable)
     {
-        if (_isReturned)
+        // Close and Abort can both observe one lease. A second return releases the pool permit
+        // twice or disposes a socket the pool has already handed out again.
+        if (Interlocked.CompareExchange(ref _isReturned, 1, 0) != 0)
         {
             return;
         }
 
-        _isReturned = true;
         if (_pool is null)
         {
             PhysicalConnection.Dispose();
