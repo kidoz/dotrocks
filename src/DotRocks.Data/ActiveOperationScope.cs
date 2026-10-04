@@ -51,7 +51,17 @@ internal sealed class ActiveOperationGate
             return false;
         }
 
-        active.Cancel();
+        try
+        {
+            active.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // The executing thread can dispose the scope after this method snapshots the source
+            // and before Cancel runs. The operation is already finished, so Cancel must not throw.
+            return false;
+        }
+
         return true;
     }
 }
@@ -157,22 +167,34 @@ internal sealed class ActiveOperationScope : IDisposable
     /// lifetime — a long streaming scan is not a stalled one — so the reader re-arms the timeout
     /// around each row fetch instead of letting one budget cover the whole result set.
     /// </summary>
-    public void SuspendTimeout()
-    {
-        if (!_disposed)
-        {
-            _timeoutCancellation?.CancelAfter(Timeout.InfiniteTimeSpan);
-        }
-    }
+    public void SuspendTimeout() => TryRescheduleTimeout(Timeout.InfiniteTimeSpan);
 
     /// <summary>
     /// Re-arms the timeout to bound a single upcoming operation, such as fetching the next row.
     /// </summary>
     public void ResumeTimeout()
     {
-        if (!_disposed && _timeout != Timeout.InfiniteTimeSpan)
+        if (_timeout != Timeout.InfiniteTimeSpan)
         {
-            _timeoutCancellation?.CancelAfter(_timeout);
+            TryRescheduleTimeout(_timeout);
+        }
+    }
+
+    private void TryRescheduleTimeout(TimeSpan timeout)
+    {
+        if (_disposed || _timeoutCancellation is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _timeoutCancellation.CancelAfter(timeout);
+        }
+        catch (ObjectDisposedException)
+        {
+            // Dispose can release the timeout source between the check and CancelAfter. Readers
+            // call this from a finally, so a throw here would replace the timeout exception.
         }
     }
 
