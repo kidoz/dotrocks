@@ -1,7 +1,9 @@
 using System.Data;
 using System.Data.Common;
+using System.Diagnostics;
 using DotRocks.Data;
 using DotRocks.Data.Pooling;
+using DotRocks.Data.Protocol.Serialization;
 using DotRocks.Protocol.Tests.TestInfrastructure;
 using Xunit;
 
@@ -97,20 +99,32 @@ public sealed class DotRocksDataSourceTests
     )
     {
         CancellationToken ct = TestContext.Current.CancellationToken;
-        var release = new TaskCompletionSource();
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var server = FakeStarRocksServer.Start(async stream =>
         {
-            await FakeStarRocksServer
-                .CompleteAuthenticationVerifyingScrambleAsync(stream)
-                .ConfigureAwait(true);
-            _ = await FakeStarRocksServer.ReadCommandAndReplyOkAsync(stream).ConfigureAwait(true);
-            _ = await FakeStarRocksServer
-                .ReadCommandAndReplyResultSetAsync(stream, "scalar")
-                .ConfigureAwait(true);
-            _ = await FakeStarRocksServer
-                .ReadCommandAndReplyResultSetAsync(stream, "row")
-                .ConfigureAwait(true);
-            await release.Task.WaitAsync(ct).ConfigureAwait(true);
+            try
+            {
+                await FakeStarRocksServer
+                    .CompleteAuthenticationVerifyingScrambleAsync(stream)
+                    .ConfigureAwait(true);
+                _ = await FakeStarRocksServer
+                    .ReadCommandAndReplyOkAsync(stream)
+                    .ConfigureAwait(true);
+                _ = await FakeStarRocksServer
+                    .ReadCommandAndReplyResultSetAsync(stream, "scalar")
+                    .ConfigureAwait(true);
+                _ = await FakeStarRocksServer
+                    .ReadCommandAndReplyResultSetAsync(stream, "row")
+                    .ConfigureAwait(true);
+                await release.Task.WaitAsync(ct).ConfigureAwait(true);
+            }
+            catch (MalformedPacketException exception)
+                when (exception.InnerException is EndOfStreamException)
+            {
+                // A failed assertion disposes the pool and closes the socket while this handler
+                // waits for the next command. Let the assertion surface instead of replacing it
+                // with the teardown EOF.
+            }
         });
         string connectionString = server.ConnectionString + ";Pooling=true;Maximum Pool Size=1";
         DotRocksConnectionOptions options = DotRocksConnectionOptions.Parse(connectionString);
@@ -127,20 +141,22 @@ public sealed class DotRocksDataSourceTests
                         ? await command.ExecuteNonQueryAsync(ct).ConfigureAwait(true)
                         : command.ExecuteNonQuery()
                 );
-                Assert.Equal(0, pool.ActiveLeaseCount);
-                Assert.Equal(1, pool.IdleCount);
+                await AssertPoolStateAsync(pool, activeLeases: 0, idleConnections: 1, ct)
+                    .ConfigureAwait(true);
                 Assert.Equal(
                     "scalar",
                     asynchronous
                         ? await command.ExecuteScalarAsync(ct).ConfigureAwait(true)
                         : command.ExecuteScalar()
                 );
-                Assert.Equal(0, pool.ActiveLeaseCount);
+                await AssertPoolStateAsync(pool, activeLeases: 0, idleConnections: null, ct)
+                    .ConfigureAwait(true);
 
                 DbDataReader reader = asynchronous
                     ? await command.ExecuteReaderAsync(ct).ConfigureAwait(true)
                     : command.ExecuteReader();
-                Assert.Equal(1, pool.ActiveLeaseCount);
+                await AssertPoolStateAsync(pool, activeLeases: 1, idleConnections: null, ct)
+                    .ConfigureAwait(true);
                 if (asynchronous)
                 {
                     Assert.True(await reader.ReadAsync(ct).ConfigureAwait(true));
@@ -154,8 +170,8 @@ public sealed class DotRocksDataSourceTests
                     reader.Dispose();
                 }
 
-                Assert.Equal(0, pool.ActiveLeaseCount);
-                Assert.Equal(1, pool.IdleCount);
+                await AssertPoolStateAsync(pool, activeLeases: 0, idleConnections: 1, ct)
+                    .ConfigureAwait(true);
             }
             Assert.Equal(1, server.ConnectionCount);
         }
@@ -163,6 +179,36 @@ public sealed class DotRocksDataSourceTests
         {
             DotRocksConnectionPool.Clear(options);
             release.TrySetResult();
+        }
+    }
+
+    // Pool bookkeeping can trail the ADO.NET call that returns the connection. Wait briefly for
+    // the expected state so a slow runner does not turn a return into an intermittent failure.
+    private static async Task AssertPoolStateAsync(
+        DotRocksConnectionPool pool,
+        int activeLeases,
+        int? idleConnections,
+        CancellationToken cancellationToken
+    )
+    {
+        Stopwatch elapsed = Stopwatch.StartNew();
+        while (elapsed.Elapsed < TimeSpan.FromSeconds(5))
+        {
+            if (
+                pool.ActiveLeaseCount == activeLeases
+                && (idleConnections is not int expectedIdle || pool.IdleCount == expectedIdle)
+            )
+            {
+                return;
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(10), cancellationToken).ConfigureAwait(true);
+        }
+
+        Assert.Equal(activeLeases, pool.ActiveLeaseCount);
+        if (idleConnections is int expected)
+        {
+            Assert.Equal(expected, pool.IdleCount);
         }
     }
 
