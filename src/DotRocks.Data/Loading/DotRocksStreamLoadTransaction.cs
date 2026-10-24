@@ -182,6 +182,7 @@ public sealed class DotRocksStreamLoadTransaction
             _state
             is not DotRocksStreamLoadTransactionState.Active
                 and not DotRocksStreamLoadTransactionState.Prepared
+                and not DotRocksStreamLoadTransactionState.Failed
         )
         {
             throw CreateInvalidStateException("rollback");

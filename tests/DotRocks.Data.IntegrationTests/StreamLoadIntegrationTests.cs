@@ -204,7 +204,7 @@ public sealed class StreamLoadIntegrationTests
     }
 
     [Fact]
-    public async Task TransactionalLoadCsvAsync_FailedLoad_RejectsFurtherOperations()
+    public async Task TransactionalLoadCsvAsync_FailedLoad_AllowsRollbackAndRejectsFurtherOperations()
     {
         IntegrationTestEnvironment.SkipUnlessEnabled();
 
@@ -254,6 +254,12 @@ public sealed class StreamLoadIntegrationTests
                         .ConfigureAwait(true)
                 )
                 .ConfigureAwait(true);
+            DotRocksStreamLoadResult rollback = await transaction
+                .RollbackAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+
+            Assert.True(rollback.IsSuccess);
+            Assert.Equal(transaction.Label, rollback.Label);
             await Assert
                 .ThrowsAsync<InvalidOperationException>(async () =>
                     await transaction

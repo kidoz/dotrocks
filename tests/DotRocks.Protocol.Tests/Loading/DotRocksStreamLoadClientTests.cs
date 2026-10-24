@@ -1363,6 +1363,66 @@ public sealed class DotRocksStreamLoadClientTests
             .ConfigureAwait(true);
     }
 
+    [Theory]
+    [InlineData("load")]
+    [InlineData("prepare")]
+    public async Task TransactionFailedOperation_AllowsRollback(string operation)
+    {
+        var paths = new List<string>();
+        using var handler = new RecordingHandler(
+            (request, _) =>
+            {
+                string path = request.RequestUri!.AbsolutePath;
+                paths.Add(path);
+                return Task.FromResult(
+                    path.EndsWith('/' + operation, StringComparison.Ordinal)
+                        ? TransactionResponse("{\"Status\":\"FAILED\",\"Message\":\"rejected\"}")
+                        : TransactionResponse()
+                );
+            }
+        );
+        using var httpClient = new HttpClient(handler);
+        using var client = CreateClient(httpClient);
+        DotRocksStreamLoadTransaction transaction = await client
+            .BeginTransactionAsync(
+                "warehouse",
+                "events",
+                new DotRocksStreamLoadTransactionOptions { Label = "tx_label" },
+                TestContext.Current.CancellationToken
+            )
+            .ConfigureAwait(true);
+        using var payload = new MemoryStream([1]);
+        await Assert
+            .ThrowsAsync<DotRocksStreamLoadException>(() =>
+                operation == "load"
+                    ? transaction.LoadCsvAsync(
+                        payload,
+                        cancellationToken: TestContext.Current.CancellationToken
+                    )
+                    : transaction.PrepareAsync(TestContext.Current.CancellationToken)
+            )
+            .ConfigureAwait(true);
+
+        DotRocksStreamLoadResult result = await transaction
+            .RollbackAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(
+            [
+                "/api/transaction/begin",
+                "/api/transaction/" + operation,
+                "/api/transaction/rollback",
+            ],
+            paths
+        );
+        await Assert
+            .ThrowsAsync<InvalidOperationException>(() =>
+                transaction.RollbackAsync(TestContext.Current.CancellationToken)
+            )
+            .ConfigureAwait(true);
+    }
+
     [Fact]
     public async Task TransactionCommitServerFailure_ReportsInDoubt()
     {

@@ -150,7 +150,8 @@ unknown, so reconcile by label before retrying.
 For exactly-once ingestion across multiple loads, use a Stream Load transaction:
 `begin → load(s) → prepare → commit`. The transaction is a state machine
 (`Active → Prepared → Committed`, with `RolledBack` / `Failed` / `CompletionInDoubt`
-terminals); operations on the wrong state throw `InvalidOperationException`.
+states). A failed load or prepare still allows rollback; an in-doubt completion cannot be
+retried or rolled back. Other operations on the wrong state throw `InvalidOperationException`.
 
 ```csharp
 using var client = new DotRocksStreamLoadClient(connectionString);
@@ -169,13 +170,15 @@ try
     await txn.LoadCsvAsync(batch2);
 
     await txn.PrepareAsync();
-    await txn.CommitAsync();
 }
 catch
 {
     await txn.RollbackAsync();
     throw;
 }
+
+// A dispatched commit failure can be in doubt; reconcile it by label instead of rolling back.
+await txn.CommitAsync();
 ```
 
 The transaction is not disposable, and nothing rolls it back implicitly. Call
