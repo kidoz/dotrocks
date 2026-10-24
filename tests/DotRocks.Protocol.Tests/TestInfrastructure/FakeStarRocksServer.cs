@@ -391,9 +391,16 @@ internal sealed class FakeStarRocksServer : IDisposable
         var subjectAlternativeNames = new SubjectAlternativeNameBuilder();
         subjectAlternativeNames.AddIpAddress(IPAddress.Loopback);
         request.CertificateExtensions.Add(subjectAlternativeNames.Build());
-        return request.CreateSelfSigned(
+        using X509Certificate2 ephemeral = request.CreateSelfSigned(
             DateTimeOffset.UtcNow.AddDays(-1),
             DateTimeOffset.UtcNow.AddDays(1)
+        );
+        // Windows Schannel cannot use an ephemeral private key for server authentication.
+        // Reimport through PFX so the key is backed by a platform key container.
+        return X509CertificateLoader.LoadPkcs12(
+            ephemeral.Export(X509ContentType.Pfx),
+            password: null,
+            X509KeyStorageFlags.Exportable
         );
     }
 
