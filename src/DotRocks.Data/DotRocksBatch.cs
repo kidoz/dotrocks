@@ -195,6 +195,11 @@ public sealed class DotRocksBatch : DbBatch
 
             return results;
         }
+        catch (Exception ex) when (scope.IsTimeout)
+        {
+            await _connection.CloseAsync().ConfigureAwait(false);
+            throw DotRocksCommand.CreateCommandTimeoutException(ex);
+        }
         catch (OperationCanceledException ex) when (scope.IsCanceledByCancelMethod)
         {
             await _connection.CloseAsync().ConfigureAwait(false);

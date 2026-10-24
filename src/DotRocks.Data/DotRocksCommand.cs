@@ -507,7 +507,7 @@ public sealed class DotRocksCommand : DbCommand
         DotRocksTelemetry.CommandsExecuted.Add(1, tags);
     }
 
-    private static DotRocksException CreateCommandTimeoutException(Exception innerException) =>
+    internal static DotRocksException CreateCommandTimeoutException(Exception innerException) =>
         new(
             "The DotRocks command timed out.",
             serverErrorCode: null,

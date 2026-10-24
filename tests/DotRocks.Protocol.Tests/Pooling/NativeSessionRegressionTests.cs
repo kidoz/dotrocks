@@ -142,4 +142,38 @@ public sealed class NativeSessionRegressionTests
         }
     }
 
+    [Fact]
+    public async Task BatchTimeout_UsesCommandTimeoutErrorModel()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        var release = new TaskCompletionSource();
+        using var server = FakeStarRocksServer.Start(async stream =>
+        {
+            await FakeStarRocksServer.CompleteAuthenticationAsync(stream).ConfigureAwait(true);
+            await FakeStarRocksServer
+                .ReadCommandAndStallMidResultSetAsync(stream, release.Task, "1")
+                .ConfigureAwait(true);
+        });
+        try
+        {
+            using var connection = new DotRocksConnection(server.ConnectionString);
+            await connection.OpenAsync(ct).ConfigureAwait(true);
+            using DbBatch batch = connection.CreateBatch();
+            batch.Timeout = 1;
+            DbBatchCommand command = batch.CreateBatchCommand();
+            command.CommandText = "SELECT value FROM stalled";
+            batch.BatchCommands.Add(command);
+
+            DotRocksException exception = await Assert
+                .ThrowsAsync<DotRocksException>(() => batch.ExecuteNonQueryAsync(ct))
+                .ConfigureAwait(true);
+            Assert.Contains("timed out", exception.Message, StringComparison.Ordinal);
+            Assert.True(exception.IsTransient);
+            Assert.Equal(ConnectionState.Closed, connection.State);
+        }
+        finally
+        {
+            release.TrySetResult();
+        }
+    }
 }
