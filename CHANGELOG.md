@@ -16,6 +16,39 @@ version is derived from the release tag at publish time.
 - Test the latest stable StarRocks patch in each supported branch: 3.5.21, 4.0.16, and
   4.1.6. Use 4.1.6 as the local Docker default.
 
+- Require SQL TLS by default. Plaintext deployments must explicitly select `Ssl Mode=Disabled`
+  or `Preferred`; `Preferred` permits an active downgrade.
+- Require keyed EF Core entities to declare a StarRocks `PRIMARY KEY` table with the same
+  ordered store key columns. Use keyless mappings for read-only models.
+- Fail EF migration lock acquisition unless the application explicitly declares
+  `ExternallySerializedMigrations()` while holding a deployment-wide external lock.
+- Reject server-side `Math.Round` translation because StarRocks rounding does not preserve
+  .NET midpoint semantics. Use explicit SQL for StarRocks rounding or round on the client.
+- Run server-free CI suites on Linux, Windows, and macOS.
+
+### Fixed
+- Retire pooled sessions after raw SQL transaction control so an unresolved transaction cannot
+  cross connection leases.
+- Keep SQL server error text out of exception messages and `ToString()` output. Untrusted,
+  possibly sensitive diagnostics are available only through `DotRocksException.ServerMessage`.
+- Require explicit `Stream Load Redirect Origins` for additional origins receiving credentials;
+  keep the existing transport and address checks. Bound response bodies to 1 MiB and redact
+  endpoint queries and fragments from diagnostic connection strings.
+- Execute `DbDataSource.CreateCommand()` commands with owned connections that open and close
+  automatically, including reader and async disposal paths.
+- Preserve credentials and transport when cloning independent EF migration-history connections.
+- Allow rollback after failed Stream Load load or prepare operations; unresolved completion
+  remains in doubt and cannot be replayed.
+- Mark dispatched Flight transaction completion failures as in doubt, preventing retries or
+  implicit rollback after a possibly committed operation.
+- Route recognized read SQL through the Flight query path for `ExecuteNonQueryAsync`, consistent
+  with reader execution and write-fallback policy.
+- Let unknown StarRocks versions use server enforcement for multi-table Stream Load transactions.
+- Retire sessions when unsupported `LOCAL INFILE` leaves the wire protocol incomplete; reject a
+  configured database if the server lacks `ConnectWithDb` during authentication.
+- Omit untrusted authentication-plugin names from exception messages and surface batch timeout
+  failures through the command timeout exception model.
+
 ## [1.5.5] - 2026-10-04
 
 ### Fixed
