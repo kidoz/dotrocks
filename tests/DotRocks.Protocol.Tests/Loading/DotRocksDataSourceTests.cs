@@ -272,6 +272,33 @@ public sealed class DotRocksDataSourceTests
     }
 
     [Fact]
+    public async Task Clone_PreservesCredentialsWithoutCopyingSessionState()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using var server = FakeStarRocksServer.Start(async stream =>
+        {
+            await FakeStarRocksServer
+                .CompleteAuthenticationVerifyingScrambleAsync(stream)
+                .ConfigureAwait(true);
+            _ = await FakeStarRocksServer.ReadCommandAndReplyOkAsync(stream).ConfigureAwait(true);
+        });
+        using var original = new DotRocksConnection(server.ConnectionString);
+        using var clone = Assert.IsType<DotRocksConnection>(((ICloneable)original).Clone());
+        Assert.NotSame(original, clone);
+        Assert.Equal(ConnectionState.Closed, clone.State);
+        Assert.DoesNotContain(
+            FakeStarRocksServer.Secret,
+            clone.ConnectionString,
+            StringComparison.Ordinal
+        );
+        await clone.OpenAsync(ct).ConfigureAwait(true);
+        using DbCommand command = clone.CreateCommand();
+        command.CommandText = "SELECT 1";
+        Assert.Equal(0, await command.ExecuteNonQueryAsync(ct).ConfigureAwait(true));
+        Assert.Equal(ConnectionState.Closed, original.State);
+    }
+
+    [Fact]
     public async Task DisposedDataSource_RejectsNewConnectionsAndCommands()
     {
         var dataSource = new DotRocksDataSource("Host=starrocks.local;User=alice");

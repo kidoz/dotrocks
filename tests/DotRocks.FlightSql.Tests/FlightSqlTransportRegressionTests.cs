@@ -3,6 +3,9 @@ using Apache.Arrow;
 using DotRocks.Data;
 using DotRocks.FlightSql;
 using Grpc.Core;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Hosting;
 using Xunit;
 
@@ -11,6 +14,93 @@ namespace DotRocks.FlightSql.Tests;
 public sealed partial class FlightSqlTransportTests
 {
     private const string SensitiveValue = "synthetic-private-value";
+
+    [Fact]
+    public async Task MigrationHistory_ClonesCredentialedFlightConnection()
+    {
+        using IHost host = CreateHost();
+        CancellationToken token = TestContext.Current.CancellationToken;
+        await host.StartAsync(token).ConfigureAwait(true);
+        try
+        {
+            var options = new DotRocksFlightSqlOptions(GetServerAddress(host), "root", "secret")
+            {
+                AllowInsecureTransport = true,
+            };
+            await using var connection = new DotRocksFlightSqlDbConnection(
+                options,
+                "Server=localhost;Database=history_database;Password=fallback-secret",
+                DotRocksFlightSqlFallbackMode.WriteCommands
+            );
+            await connection.OpenAsync(token).ConfigureAwait(true);
+            await using var command = connection.CreateCommand();
+            command.CommandText = "SELECT value FROM test";
+            Assert.Equal(1, await command.ExecuteScalarAsync(token).ConfigureAwait(true));
+            var contextOptions = new DbContextOptionsBuilder<FlightContext>()
+                .UseStarRocks(connection)
+                .Options;
+            await using var context = new FlightContext(contextOptions);
+            IHistoryRepository history = context.GetService<IHistoryRepository>();
+            Assert.True(await history.ExistsAsync(token).ConfigureAwait(true));
+            Assert.Contains(
+                "information_schema.tables",
+                GetQueryCapture(host).LastQuery,
+                StringComparison.Ordinal
+            );
+            Assert.Contains(
+                "DATABASE()",
+                GetQueryCapture(host).LastQuery,
+                StringComparison.Ordinal
+            );
+            Assert.Equal(2, GetQueryCapture(host).Handshakes);
+            Assert.Equal(System.Data.ConnectionState.Open, connection.State);
+            Assert.Equal(1, await command.ExecuteScalarAsync(token).ConfigureAwait(true));
+        }
+        finally
+        {
+            await host.StopAsync(token).ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
+    public async Task Clone_PreservesCredentialsWithIndependentFlightSession()
+    {
+        using IHost host = CreateHost();
+        CancellationToken token = TestContext.Current.CancellationToken;
+        await host.StartAsync(token).ConfigureAwait(true);
+        try
+        {
+            var options = new DotRocksFlightSqlOptions(GetServerAddress(host), "root", "secret")
+            {
+                AllowInsecureTransport = true,
+            };
+            await using var source = new DotRocksFlightSqlDbConnection(
+                options,
+                "Server=localhost;Database=clone_database;Password=fallback-secret",
+                DotRocksFlightSqlFallbackMode.WriteCommands
+            );
+            await source.OpenAsync(token).ConfigureAwait(true);
+            await using var command = source.CreateCommand();
+            command.CommandText = "SELECT value FROM test";
+            Assert.Equal(1, await command.ExecuteScalarAsync(token).ConfigureAwait(true));
+            await using var clone = (DotRocksFlightSqlDbConnection)((ICloneable)source).Clone();
+            Assert.Equal(System.Data.ConnectionState.Closed, clone.State);
+            Assert.Equal(source.FallbackMode, clone.FallbackMode);
+            Assert.Equal(source.Database, clone.Database);
+            Assert.DoesNotContain("secret", clone.ConnectionString, StringComparison.Ordinal);
+            await clone.OpenAsync(token).ConfigureAwait(true);
+            await using var cloneCommand = clone.CreateCommand();
+            cloneCommand.CommandText = "SELECT value FROM test";
+            Assert.Equal(1, await cloneCommand.ExecuteScalarAsync(token).ConfigureAwait(true));
+            Assert.Equal(2, GetQueryCapture(host).Handshakes);
+            await clone.DisposeAsync().ConfigureAwait(true);
+            Assert.Equal(1, await command.ExecuteScalarAsync(token).ConfigureAwait(true));
+        }
+        finally
+        {
+            await host.StopAsync(token).ConfigureAwait(true);
+        }
+    }
 
     [Theory]
     [InlineData("INSERT INTO unavailable_discovery VALUES (1)")]

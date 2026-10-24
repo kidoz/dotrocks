@@ -8,7 +8,7 @@ namespace DotRocks.FlightSql;
 /// <summary>
 /// Represents an asynchronous ADO.NET connection that executes commands over Arrow Flight SQL.
 /// </summary>
-public sealed class DotRocksFlightSqlDbConnection : DbConnection
+public sealed class DotRocksFlightSqlDbConnection : DbConnection, ICloneable
 {
     private readonly DotRocksFlightSqlDataSource _flightDataSource;
     private readonly bool _ownsFlightDataSource;
@@ -82,6 +82,26 @@ public sealed class DotRocksFlightSqlDbConnection : DbConnection
         FallbackMode = fallbackMode;
         _flightDataSource = dataSource;
         _ownsFlightDataSource = ownsFlightDataSource;
+    }
+
+    private DotRocksFlightSqlDbConnection(DotRocksFlightSqlDbConnection source)
+    {
+        _options = source._options;
+        _fallbackConnection = source._fallbackConnection is null
+            ? null
+            : (DotRocksConnection)((ICloneable)source._fallbackConnection).Clone();
+        FallbackMode = source.FallbackMode;
+        _flightDataSource = CreateOwnedDataSource(_options);
+        _ownsFlightDataSource = true;
+    }
+
+    /// <summary>
+    /// Creates a closed connection with the same credentials and endpoint policy and an independent server session.
+    /// </summary>
+    object ICloneable.Clone()
+    {
+        ThrowIfDisposed();
+        return new DotRocksFlightSqlDbConnection(this);
     }
 
     /// <summary>

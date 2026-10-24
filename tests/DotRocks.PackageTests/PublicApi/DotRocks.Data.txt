@@ -54,7 +54,7 @@ public sealed class DotRocks.Data.DotRocksCommand System.Data.Common.DbCommand
   public virtual method System.Void Cancel()
   public virtual method System.Void Prepare()
 
-public sealed class DotRocks.Data.DotRocksConnection System.Data.Common.DbConnection
+public sealed class DotRocks.Data.DotRocksConnection System.Data.Common.DbConnection , System.ICloneable
   public DotRocks.Data.DotRocksConnection()
   public DotRocks.Data.DotRocksConnection(System.String connectionString)
   public property System.Boolean CanCreateBatch { get; }

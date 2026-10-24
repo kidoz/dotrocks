@@ -74,7 +74,7 @@ public sealed class DotRocks.FlightSql.DotRocksFlightSqlDataSource System.IAsync
   public virtual method System.Threading.Tasks.ValueTask DisposeAsync()
   public virtual method System.Void Dispose()
 
-public sealed class DotRocks.FlightSql.DotRocksFlightSqlDbConnection System.Data.Common.DbConnection
+public sealed class DotRocks.FlightSql.DotRocksFlightSqlDbConnection System.Data.Common.DbConnection , System.ICloneable
   public DotRocks.FlightSql.DotRocksFlightSqlDbConnection(DotRocks.FlightSql.DotRocksFlightSqlOptions options, System.String fallbackConnectionString, DotRocks.FlightSql.DotRocksFlightSqlFallbackMode fallbackMode)
   public property System.String ConnectionString { get; set; }
   public property System.Int32 ConnectionTimeout { get; }

@@ -95,7 +95,7 @@ internal sealed class DotRocksHistoryRepository(HistoryRepositoryDependencies de
     )]
     public override async Task<bool> ExistsAsync(CancellationToken cancellationToken = default)
     {
-        DotRocksConnection connection = CreateNonTransactionalConnection();
+        DbConnection connection = CreateNonTransactionalConnection();
         await using var connectionScope = connection.ConfigureAwait(false);
         if (!await TryOpenAsync(connection, cancellationToken).ConfigureAwait(false))
         {
@@ -122,7 +122,7 @@ internal sealed class DotRocksHistoryRepository(HistoryRepositoryDependencies de
         }
 
         var rows = new List<HistoryRow>();
-        using DotRocksConnection connection = CreateNonTransactionalConnection();
+        using DbConnection connection = CreateNonTransactionalConnection();
         connection.Open();
         using DbCommand command = connection.CreateCommand();
         command.CommandText = GetAppliedMigrationsSql;
@@ -150,7 +150,7 @@ internal sealed class DotRocksHistoryRepository(HistoryRepositoryDependencies de
         }
 
         var rows = new List<HistoryRow>();
-        DotRocksConnection connection = CreateNonTransactionalConnection();
+        DbConnection connection = CreateNonTransactionalConnection();
         await using var connectionScope = connection.ConfigureAwait(false);
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
         using DbCommand command = connection.CreateCommand();
@@ -167,15 +167,15 @@ internal sealed class DotRocksHistoryRepository(HistoryRepositoryDependencies de
         return rows;
     }
 
-    private DotRocksConnection CreateNonTransactionalConnection()
-    {
-        string? connectionString = Dependencies.Connection.ConnectionString;
-        return connectionString is null
-            ? throw new InvalidOperationException(
-                "The migration connection has no connection string to open a transaction-free history connection."
-            )
-            : new DotRocksConnection(connectionString);
-    }
+    private DbConnection CreateNonTransactionalConnection() =>
+        CloneHistoryConnection(Dependencies.Connection.DbConnection);
+
+    internal static DbConnection CloneHistoryConnection(DbConnection connection) =>
+        connection is ICloneable cloneable && cloneable.Clone() is DbConnection clone
+            ? clone
+            : throw new NotSupportedException(
+                "The migration connection must support ICloneable to create an independent, credential-preserving history connection."
+            );
 
     // Authentication, network, and protocol failures must surface. Exists() returning false makes
     // the migrator treat applied migrations as pending, and StarRocks has no unique constraint to
@@ -183,7 +183,7 @@ internal sealed class DotRocksHistoryRepository(HistoryRepositoryDependencies de
     internal static bool IsUnknownDatabase(int? serverErrorCode) =>
         serverErrorCode == UnknownDatabaseErrorCode;
 
-    private static bool TryOpen(DotRocksConnection connection)
+    private static bool TryOpen(DbConnection connection)
     {
         try
         {
@@ -197,7 +197,7 @@ internal sealed class DotRocksHistoryRepository(HistoryRepositoryDependencies de
     }
 
     private static async Task<bool> TryOpenAsync(
-        DotRocksConnection connection,
+        DbConnection connection,
         CancellationToken cancellationToken
     )
     {

@@ -1613,6 +1613,124 @@ public sealed class DotRocksEfCoreIntegrationTests
         "EF1003:Method inserts concatenated strings directly into the SQL",
         Justification = "The migration cleanup and verification SQL is assembled only from fixed sanitized identifiers and parameter placeholders."
     )]
+    [SuppressMessage(
+        "Reliability",
+        "CA1849:Call async methods when in an async method",
+        Justification = "This regression verifies both the synchronous and asynchronous history connection paths with password authentication."
+    )]
+    public async Task HistoryRepository_PasswordAuthenticatedConnection_PreservesCredentials()
+    {
+        IntegrationTestEnvironment.SkipUnlessEnabled();
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        string suffix = Guid.NewGuid().ToString("N");
+        string database = "dotrocks_history_" + suffix;
+        string user = "history_" + suffix;
+        string password = "history-secret-" + Guid.NewGuid().ToString("N");
+        await using DotRocksTestContext administrator = CreateLiveContext();
+        await administrator
+            .Database.ExecuteSqlRawAsync(
+                "CREATE DATABASE " + DelimitIdentifier(database),
+                cancellationToken
+            )
+            .ConfigureAwait(true);
+        try
+        {
+            await administrator
+                .Database.ExecuteSqlAsync(
+                    $"CREATE USER {user} IDENTIFIED BY {password}",
+                    cancellationToken
+                )
+                .ConfigureAwait(true);
+            try
+            {
+                await administrator
+                    .Database.ExecuteSqlRawAsync(
+                        "GRANT CREATE TABLE ON DATABASE "
+                            + DelimitIdentifier(database)
+                            + " TO USER "
+                            + DelimitIdentifier(user),
+                        cancellationToken
+                    )
+                    .ConfigureAwait(true);
+                await administrator
+                    .Database.ExecuteSqlRawAsync(
+                        "GRANT ALL ON ALL TABLES IN DATABASE "
+                            + DelimitIdentifier(database)
+                            + " TO USER "
+                            + DelimitIdentifier(user),
+                        cancellationToken
+                    )
+                    .ConfigureAwait(true);
+                var builder = new DbConnectionStringBuilder
+                {
+                    ConnectionString = IntegrationTestEnvironment.ConnectionString,
+                    ["User ID"] = user,
+                    ["Password"] = password,
+                    ["Database"] = database,
+                    ["Pooling"] = false,
+                };
+                var context = new MigrationTestContext(
+                    CreateMigrationContextOptions(builder.ConnectionString)
+                );
+                await using var contextScope = context.ConfigureAwait(true);
+                await context.Database.OpenConnectionAsync(cancellationToken).ConfigureAwait(true);
+                Assert.DoesNotContain(
+                    password,
+                    context.Database.GetDbConnection().ConnectionString,
+                    StringComparison.Ordinal
+                );
+                var history = context.GetService<IHistoryRepository>();
+                Assert.False(await history.ExistsAsync(cancellationToken).ConfigureAwait(true));
+                Assert.False(history.Exists());
+                await history.CreateIfNotExistsAsync(cancellationToken).ConfigureAwait(true);
+                await context
+                    .Database.ExecuteSqlRawAsync(
+                        history.GetInsertScript(new HistoryRow("password-history", "10.0.13")),
+                        cancellationToken
+                    )
+                    .ConfigureAwait(true);
+
+                Assert.True(history.Exists());
+                Assert.True(await history.ExistsAsync(cancellationToken).ConfigureAwait(true));
+                Assert.Equal(
+                    "password-history",
+                    Assert.Single(history.GetAppliedMigrations()).MigrationId
+                );
+                Assert.Equal(
+                    "password-history",
+                    Assert
+                        .Single(
+                            await history
+                                .GetAppliedMigrationsAsync(cancellationToken)
+                                .ConfigureAwait(true)
+                        )
+                        .MigrationId
+                );
+            }
+            finally
+            {
+                await administrator
+                    .Database.ExecuteSqlAsync($"DROP USER {user}", cancellationToken)
+                    .ConfigureAwait(true);
+            }
+        }
+        finally
+        {
+            await administrator
+                .Database.ExecuteSqlRawAsync(
+                    "DROP DATABASE " + DelimitIdentifier(database),
+                    cancellationToken
+                )
+                .ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
+    [SuppressMessage(
+        "Security",
+        "EF1003:Method inserts concatenated strings directly into the SQL",
+        Justification = "The migration cleanup and verification SQL is assembled only from fixed sanitized identifiers and parameter placeholders."
+    )]
     public async Task MigrateAsync_CreatesValidStarRocksTable()
     {
         IntegrationTestEnvironment.SkipUnlessEnabled();

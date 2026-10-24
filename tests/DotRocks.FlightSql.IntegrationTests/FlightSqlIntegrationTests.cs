@@ -5,6 +5,8 @@ using DotRocks.Data;
 using DotRocks.FlightSql;
 using Grpc.Core;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Xunit;
 
 namespace DotRocks.FlightSql.IntegrationTests;
@@ -116,6 +118,12 @@ public sealed class FlightSqlIntegrationTests
                 .Widgets.SingleAsync(item => item.Id == 1, cancellationToken)
                 .ConfigureAwait(true);
             Assert.Equal("flight", widget.Name);
+
+            IHistoryRepository history = context.GetService<IHistoryRepository>();
+            Assert.False(await history.ExistsAsync(cancellationToken).ConfigureAwait(true));
+            Assert.Empty(
+                await history.GetAppliedMigrationsAsync(cancellationToken).ConfigureAwait(true)
+            );
 
             context.Widgets.Add(new Widget { Id = 2, Name = "ef-flight" });
             Assert.Equal(1, await context.SaveChangesAsync(cancellationToken).ConfigureAwait(true));

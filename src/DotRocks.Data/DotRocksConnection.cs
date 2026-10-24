@@ -11,7 +11,7 @@ namespace DotRocks.Data;
 /// <summary>
 /// Represents a connection to a StarRocks FE query endpoint.
 /// </summary>
-public sealed class DotRocksConnection : DbConnection
+public sealed class DotRocksConnection : DbConnection, ICloneable
 {
     private DotRocksConnectionOptions _options;
     private DotRocksConnectionPoolLease? _lease;
@@ -52,6 +52,12 @@ public sealed class DotRocksConnection : DbConnection
         ArgumentNullException.ThrowIfNull(options);
         _options = options;
     }
+
+    /// <summary>
+    /// Creates a closed connection with the same configuration, including credentials.
+    /// </summary>
+    /// <returns>A new closed connection; no session or transaction state is copied.</returns>
+    object ICloneable.Clone() => new DotRocksConnection(_options);
 
     /// <summary>
     /// Closes and removes all idle physical connections from all DotRocks connection pools.
