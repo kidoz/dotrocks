@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Data.Common;
 using System.Globalization;
 using System.Security.Cryptography.X509Certificates;
@@ -30,6 +31,8 @@ internal sealed record DotRocksConnectionOptions(
     TimeSpan ConnectionLifetime
 )
 {
+    public ImmutableArray<Uri> StreamLoadRedirectOrigins { get; init; } = [];
+
     public const string DefaultServer = "127.0.0.1";
     public const int DefaultPort = 9030;
     public const string DefaultUserId = "root";
@@ -175,7 +178,12 @@ internal sealed record DotRocksConnectionOptions(
             string.Empty,
             serverCompatibilityLevel,
             TimeSpan.FromSeconds(connectionLifetimeSeconds)
-        );
+        )
+        {
+            StreamLoadRedirectOrigins = ParseStreamLoadRedirectOrigins(
+                GetString(builder, "Stream Load Redirect Origins", string.Empty)
+            ),
+        };
 
         // The canonical string is derived from the parsed values, so compute it from the
         // constructed record instead of a third parallel argument list.
@@ -190,12 +198,46 @@ internal sealed record DotRocksConnectionOptions(
     // debugger; the sanitized form redacts the password.
     public override string ToString() => ToSanitizedString();
 
-    public string ToSanitizedString() => BuildConnectionString("***");
+    public string ToSanitizedString() => BuildConnectionString("***", redactEndpoint: true);
 
     // The public ADO.NET ConnectionString getter must not return the password (the ODBC/ADO
     // PersistSecurityInfo=false convention): the password is omitted entirely so logging the getter
     // cannot leak the secret. The full credentialed string remains internal for pool keying.
-    public string ToRedactedConnectionString() => BuildConnectionString(string.Empty);
+    public string ToRedactedConnectionString() =>
+        BuildConnectionString(string.Empty, redactEndpoint: true);
+
+    internal static ImmutableArray<Uri> ParseStreamLoadRedirectOrigins(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return [];
+        }
+
+        var origins = ImmutableArray.CreateBuilder<Uri>();
+        foreach (string entry in value.Split(','))
+        {
+            if (
+                !Uri.TryCreate(entry.Trim(), UriKind.Absolute, out Uri? origin)
+                || origin.Scheme is not ("http" or "https")
+                || origin.Host.Length == 0
+                || origin.Host.Contains('*', StringComparison.Ordinal)
+                || origin.UserInfo.Length != 0
+                || origin.AbsolutePath != "/"
+                || origin.Query.Length != 0
+                || origin.Fragment.Length != 0
+            )
+            {
+                throw new ArgumentException(
+                    "Stream Load Redirect Origins must contain comma-separated HTTP(S) origins without user information, paths, queries, or fragments.",
+                    nameof(value)
+                );
+            }
+
+            origins.Add(origin);
+        }
+
+        return origins.ToImmutable();
+    }
 
     internal DotRocksConnectionPoolKey CreatePoolKey() =>
         new(
@@ -334,7 +376,7 @@ internal sealed record DotRocksConnectionOptions(
 
     // Serializes this record back to its canonical connection-string form; only the password
     // rendering varies by caller (real value, "***", or omitted), so it is the single parameter.
-    private string BuildConnectionString(string password)
+    private string BuildConnectionString(string password, bool redactEndpoint = false)
     {
         var builder = new StringBuilder();
         Append(builder, "Server", Server);
@@ -378,7 +420,27 @@ internal sealed record DotRocksConnectionOptions(
             TrustServerCertificate.ToString(CultureInfo.InvariantCulture)
         );
         Append(builder, "Ssl Revocation Check", SslRevocationMode.ToString());
-        Append(builder, "Stream Load Endpoint", StreamLoadEndpoint.AbsoluteUri);
+        Uri endpoint = redactEndpoint
+            ? new UriBuilder(StreamLoadEndpoint)
+            {
+                Query = string.Empty,
+                Fragment = string.Empty,
+            }.Uri
+            : StreamLoadEndpoint;
+        Append(builder, "Stream Load Endpoint", endpoint.AbsoluteUri);
+        if (!StreamLoadRedirectOrigins.IsEmpty)
+        {
+            Append(
+                builder,
+                "Stream Load Redirect Origins",
+                string.Join(
+                    ',',
+                    StreamLoadRedirectOrigins.Select(origin =>
+                        origin.GetLeftPart(UriPartial.Authority)
+                    )
+                )
+            );
+        }
         Append(
             builder,
             "Allow Insecure Stream Load",

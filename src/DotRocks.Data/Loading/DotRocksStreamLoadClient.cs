@@ -17,6 +17,7 @@ namespace DotRocks.Data.Loading;
 public sealed class DotRocksStreamLoadClient : IDisposable
 {
     private const int MaximumRedirects = 5;
+    internal const int MaximumResponseBytes = 1024 * 1024;
     private readonly DotRocksConnectionOptions _options;
     private readonly HttpClient _httpClient;
     private readonly bool _disposeHttpClient;
@@ -399,8 +400,10 @@ public sealed class DotRocksStreamLoadClient : IDisposable
                     continue;
                 }
 
-                string responseText = await response
-                    .Content.ReadAsStringAsync(cancellationToken)
+                string responseText = await ReadBoundedResponseAsync(
+                        response.Content,
+                        cancellationToken
+                    )
                     .ConfigureAwait(false);
 
                 if (!response.IsSuccessStatusCode)
@@ -450,6 +453,53 @@ public sealed class DotRocksStreamLoadClient : IDisposable
 
         throw new DotRocksStreamLoadException("StarRocks Stream Load exceeded the redirect limit.");
     }
+
+    private static async Task<string> ReadBoundedResponseAsync(
+        HttpContent content,
+        CancellationToken cancellationToken
+    )
+    {
+        if (content.Headers.ContentLength > MaximumResponseBytes)
+        {
+            throw CreateResponseTooLargeException();
+        }
+
+        Stream source = await content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        await using var sourceScope = source.ConfigureAwait(false);
+        using var buffer = new MemoryStream();
+        byte[] chunk = new byte[8192];
+        while (true)
+        {
+            // Read at most one byte beyond the limit, including for an endless chunked response.
+            int remaining = MaximumResponseBytes - (int)buffer.Length;
+            int read = await source
+                .ReadAsync(
+                    chunk.AsMemory(0, Math.Min(chunk.Length, remaining + 1)),
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+            if (read == 0)
+            {
+                return Encoding
+                    .UTF8.GetString(buffer.GetBuffer(), 0, (int)buffer.Length)
+                    .TrimStart('\uFEFF');
+            }
+
+            if (read > remaining)
+            {
+                throw CreateResponseTooLargeException();
+            }
+
+            await buffer
+                .WriteAsync(chunk.AsMemory(0, read), cancellationToken)
+                .ConfigureAwait(false);
+        }
+    }
+
+    private static DotRocksStreamLoadException CreateResponseTooLargeException() =>
+        new(
+            "StarRocks Stream Load response exceeds the 1 MiB limit. The load outcome is unknown; reconcile by label before retrying."
+        );
 
     private HttpRequestMessage CreateRequest(
         HttpMethod method,
@@ -528,8 +578,20 @@ public sealed class DotRocksStreamLoadClient : IDisposable
     // has explicitly opted into insecure Stream Load for a trusted local environment. This
     // keeps a redirect from leaking credentials in clear text.
     private bool ShouldSendCredentials(Uri requestUri) =>
-        string.Equals(requestUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
-        || _options.AllowInsecureStreamLoad;
+        IsTrustedOrigin(requestUri)
+        && (
+            string.Equals(requestUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
+            || _options.AllowInsecureStreamLoad
+        );
+
+    private bool IsTrustedOrigin(Uri uri) =>
+        SameOrigin(uri, _options.StreamLoadEndpoint)
+        || _options.StreamLoadRedirectOrigins.Any(origin => SameOrigin(uri, origin));
+
+    private static bool SameOrigin(Uri left, Uri right) =>
+        left.Port == right.Port
+        && string.Equals(left.Scheme, right.Scheme, StringComparison.OrdinalIgnoreCase)
+        && string.Equals(left.IdnHost, right.IdnHost, StringComparison.OrdinalIgnoreCase);
 
     [SuppressMessage(
         "Reliability",
@@ -622,6 +684,13 @@ public sealed class DotRocksStreamLoadClient : IDisposable
         // connect time). ClassifyLiteralHost returns Public for a host name, so this is a no-op for
         // names and only fast-fails obvious internal literals.
         EnsureTargetAllowed(ClassifyLiteralHost(redirectUri), "redirected");
+
+        if (!IsTrustedOrigin(redirectUri))
+        {
+            throw new DotRocksStreamLoadException(
+                "StarRocks Stream Load redirected to an untrusted origin; DotRocks refuses to forward credentials. Configure 'Stream Load Redirect Origins' with trusted BE origins."
+            );
+        }
     }
 
     // The authoritative SSRF gate for the default client. HttpClient hands each outbound connection

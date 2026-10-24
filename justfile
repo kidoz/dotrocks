@@ -39,6 +39,19 @@ test:
 
 # Run integration tests against an already-running StarRocks FE.
 integration-test:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [[ -z "${DOTROCKS_STREAM_LOAD_REDIRECT_ORIGINS:-}" ]]; then
+        origins="http://{{fe_host}}:${DOTROCKS_BE_HTTP_PORT:-8040}"
+        # The local fixture's advertised BE can use the container address instead of loopback.
+        if command -v docker >/dev/null 2>&1; then
+            container_ip=$(docker inspect -f '{{"{{"}}range .NetworkSettings.Networks{{"}}"}}{{"{{"}}.IPAddress{{"}}"}}{{"{{"}}end{{"}}"}}' dotrocks-starrocks 2>/dev/null || true)
+            if [[ -n "$container_ip" ]]; then
+                origins="$origins,http://$container_ip:8040"
+            fi
+        fi
+        export DOTROCKS_STREAM_LOAD_REDIRECT_ORIGINS="$origins"
+    fi
     DOTROCKS_RUN_INTEGRATION=1 DOTROCKS_FE_HTTP_PORT={{fe_http_port}} dotnet test --project tests/DotRocks.Data.IntegrationTests --configuration {{config}} --no-build
     DOTROCKS_RUN_INTEGRATION=1 dotnet test --project tests/DotRocks.Data.DapperTests --configuration {{config}} --no-build
     DOTROCKS_RUN_INTEGRATION=1 dotnet test --project tests/DotRocks.EntityFrameworkCore.IntegrationTests --configuration {{config}} --no-build

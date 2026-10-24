@@ -384,6 +384,167 @@ public sealed class DotRocksStreamLoadClientTests
         Assert.All(handler.Requests, request => Assert.Equal(HttpMethod.Put, request.Method));
     }
 
+    [Theory]
+    [InlineData("https://attacker.example:8040/api/warehouse/events/_stream_load")]
+    [InlineData("https://starrocks.local:8443/api/warehouse/events/_stream_load")]
+    public async Task LoadCsvAsync_UntrustedRedirectOrigin_DoesNotSendRequest(string location)
+    {
+        using var handler = new SequencedRedirectHandler(new Uri(location));
+        using var httpClient = new HttpClient(handler);
+        using var client = new DotRocksStreamLoadClient(
+            DotRocksConnectionOptions.Parse(
+                "Server=starrocks.local;User ID=alice;Password=secret;Stream Load Endpoint=https://starrocks.local:8030"
+            ),
+            httpClient,
+            disposeHttpClient: false
+        );
+        using var payload = new MemoryStream([1]);
+
+        DotRocksStreamLoadException exception = await Assert
+            .ThrowsAsync<DotRocksStreamLoadException>(() =>
+                client.LoadCsvAsync(
+                    "warehouse",
+                    "events",
+                    payload,
+                    cancellationToken: TestContext.Current.CancellationToken
+                )
+            )
+            .ConfigureAwait(true);
+
+        Assert.Contains("untrusted origin", exception.Message, StringComparison.Ordinal);
+        Assert.Single(handler.Requests);
+    }
+
+    [Theory]
+    [InlineData("https://starrocks.local:8030/api/warehouse/events/_stream_load", "")]
+    [InlineData(
+        "https://BE.STARROCKS.LOCAL:8040/api/warehouse/events/_stream_load",
+        "https://be.starrocks.local:8040"
+    )]
+    public async Task LoadCsvAsync_TrustedRedirectOrigin_ForwardsCredentials(
+        string location,
+        string allowedOrigins
+    )
+    {
+        using var handler = new SequencedRedirectHandler(new Uri(location));
+        using var httpClient = new HttpClient(handler);
+        using var client = new DotRocksStreamLoadClient(
+            DotRocksConnectionOptions.Parse(
+                "Server=starrocks.local;User ID=alice;Password=secret;Stream Load Endpoint=https://starrocks.local:8030;Stream Load Redirect Origins="
+                    + allowedOrigins
+            ),
+            httpClient,
+            disposeHttpClient: false
+        );
+        using var payload = new MemoryStream([1]);
+
+        await client
+            .LoadCsvAsync(
+                "warehouse",
+                "events",
+                payload,
+                cancellationToken: TestContext.Current.CancellationToken
+            )
+            .ConfigureAwait(true);
+
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.Equal("Basic", handler.Requests[1].Headers.Authorization!.Scheme);
+        Assert.Equal(
+            Convert.ToBase64String(Encoding.UTF8.GetBytes("alice:secret")),
+            handler.Requests[1].Headers.Authorization!.Parameter
+        );
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task LoadCsvAsync_OversizedResponse_IsBoundedAndDisposed(bool hasContentLength)
+    {
+        using var responseStream = new EndlessResponseStream();
+        using var handler = new RecordingHandler(
+            (_, _) =>
+            {
+                var content = new StreamContent(responseStream);
+                if (hasContentLength)
+                {
+                    content.Headers.ContentLength =
+                        DotRocksStreamLoadClient.MaximumResponseBytes + 1;
+                }
+
+                return Task.FromResult(
+                    new HttpResponseMessage(HttpStatusCode.OK) { Content = content }
+                );
+            }
+        );
+        using var httpClient = new HttpClient(handler);
+        using var client = CreateClient(httpClient);
+        using var payload = new MemoryStream([1]);
+
+        DotRocksStreamLoadException exception = await Assert
+            .ThrowsAsync<DotRocksStreamLoadException>(() =>
+                client.LoadCsvAsync(
+                    "warehouse",
+                    "events",
+                    payload,
+                    cancellationToken: TestContext.Current.CancellationToken
+                )
+            )
+            .ConfigureAwait(true);
+
+        Assert.Contains("1 MiB", exception.Message, StringComparison.Ordinal);
+        Assert.Null(exception.ResponseBody);
+        Assert.Equal(
+            hasContentLength ? 0 : DotRocksStreamLoadClient.MaximumResponseBytes + 1,
+            responseStream.BytesRead
+        );
+        Assert.True(responseStream.WasDisposed);
+    }
+
+    private sealed class EndlessResponseStream : Stream
+    {
+        public int BytesRead { get; private set; }
+        public bool WasDisposed { get; private set; }
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position
+        {
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
+        }
+
+        public override void Flush() => throw new NotSupportedException();
+
+        public override int Read(byte[] buffer, int offset, int count) =>
+            throw new NotSupportedException();
+
+        public override ValueTask<int> ReadAsync(
+            Memory<byte> buffer,
+            CancellationToken cancellationToken = default
+        )
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            buffer.Span.Fill((byte)'x');
+            BytesRead += buffer.Length;
+            return ValueTask.FromResult(buffer.Length);
+        }
+
+        public override long Seek(long offset, SeekOrigin origin) =>
+            throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) =>
+            throw new NotSupportedException();
+
+        protected override void Dispose(bool disposing)
+        {
+            WasDisposed = true;
+            base.Dispose(disposing);
+        }
+    }
+
     [Fact]
     public void Constructor_HttpEndpointWithoutExplicitOptIn_Throws()
     {
@@ -728,7 +889,7 @@ public sealed class DotRocksStreamLoadClientTests
         using var httpClient = new HttpClient(handler);
         DotRocksConnectionOptions options = DotRocksConnectionOptions.Parse(
             "Server=localhost;User ID=alice;Password=secret;"
-                + "Stream Load Endpoint=http://localhost:8030;Allow Insecure Stream Load=true"
+                + "Stream Load Endpoint=http://localhost:8030;Allow Insecure Stream Load=true;Stream Load Redirect Origins=http://127.0.0.1:8040"
         );
         using var client = new DotRocksStreamLoadClient(
             options,
@@ -1588,7 +1749,7 @@ public sealed class DotRocksStreamLoadClientTests
     private static DotRocksStreamLoadClient CreateClient(HttpClient httpClient)
     {
         DotRocksConnectionOptions options = DotRocksConnectionOptions.Parse(
-            "Server=starrocks.local;User ID=alice;Password=secret;Allow Insecure Stream Load=true"
+            "Server=starrocks.local;User ID=alice;Password=secret;Allow Insecure Stream Load=true;Stream Load Redirect Origins=http://be.starrocks.local:8040"
         );
         return new DotRocksStreamLoadClient(options, httpClient, disposeHttpClient: false);
     }
@@ -1603,7 +1764,7 @@ public sealed class DotRocksStreamLoadClientTests
     )
     {
         DotRocksConnectionOptions options = DotRocksConnectionOptions.Parse(
-            "Server=starrocks.local;User ID=alice;Password=secret;Allow Insecure Stream Load=true"
+            "Server=starrocks.local;User ID=alice;Password=secret;Allow Insecure Stream Load=true;Stream Load Redirect Origins=http://be.starrocks.local:8040"
         );
         return new DotRocksStreamLoadClient(
             options,

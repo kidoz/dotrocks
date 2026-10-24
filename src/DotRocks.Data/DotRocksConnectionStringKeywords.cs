@@ -48,6 +48,11 @@ internal static class DotRocksConnectionStringKeywords
                 "Stream Load URL",
                 "Http Endpoint",
             ],
+            ["Stream Load Redirect Origins"] =
+            [
+                "Stream Load Redirect Origins",
+                "StreamLoadRedirectOrigins",
+            ],
             ["Connection Retries"] =
             [
                 "Connection Retries",

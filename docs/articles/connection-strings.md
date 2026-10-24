@@ -44,6 +44,7 @@ the canonical spaced forms (`User ID`, `Ssl Mode`).
 | `Trust Server Certificate` | `TrustServerCertificate` | bool | `false` | requires `Ssl Mode=Required` |
 | `Ssl Revocation Check` | `SSL Revocation Check`, `SslRevocationCheck`, `Revocation` | `X509RevocationMode` | `Offline` | defined member |
 | `Stream Load Endpoint` | `StreamLoadEndpoint`, `Stream Load URL`, `Http Endpoint` | absolute Uri | `http://{Server}:8030` | http/https; no embedded user info |
+| `Stream Load Redirect Origins` | `StreamLoadRedirectOrigins` | comma-separated HTTP(S) origins | empty | Explicitly trusted BE origins, including scheme and port; no paths, queries, fragments, user info, or wildcards |
 | `Allow Insecure Stream Load` | `AllowInsecureStreamLoad`, `Allow Insecure StreamLoad` | bool | `false` | — |
 | `Server Compatibility Level` | `ServerCompatibilityLevel`, `Compatibility Level` | StarRocks version | auto-detect | valid version string |
 

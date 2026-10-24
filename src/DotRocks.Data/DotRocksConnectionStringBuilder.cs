@@ -31,6 +31,7 @@ public sealed class DotRocksConnectionStringBuilder
     private const string TrustServerCertificateKeyword = "Trust Server Certificate";
     private const string SslRevocationCheckKeyword = "Ssl Revocation Check";
     private const string StreamLoadEndpointKeyword = "Stream Load Endpoint";
+    private const string StreamLoadRedirectOriginsKeyword = "Stream Load Redirect Origins";
     private const string AllowInsecureStreamLoadKeyword = "Allow Insecure Stream Load";
     private const string ConnectionRetriesKeyword = "Connection Retries";
     private const string ConnectionRetryDelayKeyword = "Connection Retry Delay";
@@ -281,6 +282,22 @@ public sealed class DotRocksConnectionStringBuilder
             }
 
             this[StreamLoadEndpointKeyword] = endpoint.AbsoluteUri;
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets comma-separated HTTP(S) origins trusted to receive Stream Load redirects and
+    /// Basic credentials. Each origin includes its scheme, host, and optional port. The configured
+    /// endpoint origin is always trusted; additional origins are empty by default.
+    /// </summary>
+    public string StreamLoadRedirectOrigins
+    {
+        get => GetString(StreamLoadRedirectOriginsKeyword, string.Empty);
+        set
+        {
+            ArgumentNullException.ThrowIfNull(value);
+            _ = DotRocksConnectionOptions.ParseStreamLoadRedirectOrigins(value);
+            this[StreamLoadRedirectOriginsKeyword] = value;
         }
     }
 

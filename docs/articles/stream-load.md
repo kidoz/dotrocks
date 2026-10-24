@@ -19,12 +19,18 @@ using DotRocks.Data.Loading;
 
 using var client = new DotRocksStreamLoadClient(
     "Server=starrocks.example.com;Port=9030;User ID=loader;Password=secret;"
-    + "Stream Load Endpoint=https://starrocks.example.com:8030"
+    + "Stream Load Endpoint=https://starrocks.example.com:8030;"
+    + "Stream Load Redirect Origins=https://be1.example.com:8040,https://be2.example.com:8040"
 );
 ```
 
 HTTPS is enforced by default. See [Security](security.md#stream-load-transport-security)
 for the credential-forwarding rules.
+
+Only the configured endpoint origin is trusted by default. FE-to-BE redirects require
+`Stream Load Redirect Origins` to list each trusted BE origin (scheme, host, and port).
+No wildcard hosts are accepted. An origin allowlist entry does not permit TLS downgrades
+or bypass the address checks described in the security article.
 
 ## Loading CSV
 
@@ -134,6 +140,10 @@ sanitized `DotRocksStreamLoadException`. Numeric strings and unknown fields rema
 For a 2xx parse failure, `HttpStatusCode` and `ResponseBody` are preserved and `Result` is null.
 The load may already have committed: reconcile its label and outcome before retrying. The client
 does not retry the request or classify this failure as transient.
+
+Response bodies are limited to 1 MiB, including error responses and chunked responses.
+An oversized body raises a sanitized exception and is discarded. The load outcome remains
+unknown, so reconcile by label before retrying.
 
 ## Transactional Stream Load (two-phase)
 

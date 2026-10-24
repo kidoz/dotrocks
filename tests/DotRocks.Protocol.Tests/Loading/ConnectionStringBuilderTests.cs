@@ -9,6 +9,81 @@ namespace DotRocks.Protocol.Tests.Loading;
 public sealed class ConnectionStringBuilderTests
 {
     [Fact]
+    public void StreamLoadEndpoint_QueryAndFragment_AreRedactedFromDiagnosticStrings()
+    {
+        const string connectionString =
+            "Server=h;Password=secret;Stream Load Endpoint=https://load.example.com:8443/?token=querysecret#fragmentsecret";
+        var options = DotRocksConnectionOptions.Parse(connectionString);
+        using var connection = new DotRocksConnection(connectionString);
+        using var source = new DotRocksDataSource(connectionString);
+        var builder = new DotRocksConnectionStringBuilder(connectionString);
+
+        foreach (
+            string diagnostic in new[]
+            {
+                options.ToString(),
+                options.ToSanitizedString(),
+                options.ToRedactedConnectionString(),
+                connection.ConnectionString,
+                source.ConnectionString,
+                builder.ToString(),
+            }
+        )
+        {
+            Assert.DoesNotContain("querysecret", diagnostic, StringComparison.Ordinal);
+            Assert.DoesNotContain("fragmentsecret", diagnostic, StringComparison.Ordinal);
+            Assert.Contains("https://load.example.com:8443/", diagnostic, StringComparison.Ordinal);
+        }
+
+        Assert.Equal(
+            "?token=querysecret",
+            DotRocksConnectionOptions.Parse(options.ConnectionString).StreamLoadEndpoint.Query
+        );
+        Assert.Equal("#fragmentsecret", options.StreamLoadEndpoint.Fragment);
+    }
+
+    [Fact]
+    public void StreamLoadRedirectOrigins_RoundTripsAndDefaultsToEmpty()
+    {
+        Assert.Empty(new DotRocksConnectionStringBuilder().StreamLoadRedirectOrigins);
+        Assert.Empty(DotRocksConnectionOptions.Default.StreamLoadRedirectOrigins);
+        var builder = new DotRocksConnectionStringBuilder
+        {
+            StreamLoadRedirectOrigins = "https://be1.example.com:8040,https://be2.example.com:8040",
+        };
+
+        DotRocksConnectionOptions options = builder.BuildOptions();
+        DotRocksConnectionOptions reparsed = DotRocksConnectionOptions.Parse(
+            options.ConnectionString
+        );
+        Assert.Equal(options.StreamLoadRedirectOrigins, reparsed.StreamLoadRedirectOrigins);
+        Assert.Equal(2, reparsed.StreamLoadRedirectOrigins.Length);
+        Assert.Equal(
+            "https://be1.example.com:8040/",
+            reparsed.StreamLoadRedirectOrigins[0].AbsoluteUri
+        );
+    }
+
+    [Theory]
+    [InlineData("https://user:secret@be.example.com")]
+    [InlineData("https://be.example.com/path")]
+    [InlineData("https://be.example.com/?token=secret")]
+    [InlineData("https://be.example.com/#secret")]
+    [InlineData("https://be.example.com,")]
+    [InlineData("*.example.com")]
+    [InlineData("https://*.example.com")]
+    [InlineData("ftp://be.example.com")]
+    public void StreamLoadRedirectOrigins_InvalidOrigin_RejectsWithoutDisclosure(string origins)
+    {
+        ArgumentException exception = Assert.Throws<ArgumentException>(() =>
+            DotRocksConnectionOptions.Parse("StreamLoadRedirectOrigins=" + origins)
+        );
+        Assert.DoesNotContain(origins, exception.Message, StringComparison.Ordinal);
+        var builder = new DotRocksConnectionStringBuilder();
+        Assert.Throws<ArgumentException>(() => builder.StreamLoadRedirectOrigins = origins);
+    }
+
+    [Fact]
     public void PoolKey_ToString_RedactsPassword()
     {
         DotRocksConnectionPoolKey key = DotRocksConnectionOptions

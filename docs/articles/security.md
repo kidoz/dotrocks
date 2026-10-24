@@ -109,6 +109,8 @@ a connect-time gate that:
 - **Fails closed** on DNS resolution failure: the load fails rather than connecting to an
   unvetted target.
 - **Rejects** unsupported redirect schemes, embedded user info, and TLS downgrades.
+- **Rejects** origins outside the configured endpoint and `Stream Load Redirect Origins`
+  before sending another request, even when their addresses are publicly routable.
 
 The **configured endpoint host is operator-supplied and trusted**, so it is exempt from
 vetting — only server-chosen redirect hosts are checked.
@@ -122,8 +124,15 @@ Passwords and connection strings are kept out of every observable surface by des
 | `DotRocksConnection.ConnectionString` getter | Password omitted entirely |
 | `DotRocksConnectionStringBuilder.ToString()` | Password redacted as `***` |
 | Connection-pool key `ToString()` | Password redacted |
-| Exception messages | No password, connection string, SQL text, or parameter values |
+| Exception messages and `ToString()` | No password, connection string, SQL text, or parameter values |
 | Telemetry spans and metrics | No SQL text, parameters, credentials, or usernames (see below) |
+
+SQL server errors have a generic `DotRocksException.Message`. Error codes and SQLSTATE remain
+available as structured fields. `ServerMessage` is explicit diagnostic access to untrusted server
+text: it may contain SQL and parameter values even after control characters are removed. Do not
+log it or destructure it into ordinary exception logs. Stream Load similarly exposes response
+details only through its diagnostic properties. Endpoint queries and fragments are omitted from
+redacted connection strings because they can carry tokens.
 
 Load credentials from configuration, environment variables, or a secret store — never
 inline them in source. The [DTR0012 analyzer](analyzers.md) flags a literal password

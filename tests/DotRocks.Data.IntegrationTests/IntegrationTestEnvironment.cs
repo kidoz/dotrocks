@@ -91,6 +91,10 @@ internal static class IntegrationTestEnvironment
                 }
             }
 
+            builder.StreamLoadRedirectOrigins =
+                Environment.GetEnvironmentVariable("DOTROCKS_STREAM_LOAD_REDIRECT_ORIGINS")
+                ?? $"http://{builder.Server}:{Environment.GetEnvironmentVariable("DOTROCKS_BE_HTTP_PORT") ?? "8040"}";
+
             return builder.ConnectionString;
         }
     }

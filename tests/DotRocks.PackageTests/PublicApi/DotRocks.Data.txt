@@ -100,6 +100,7 @@ public sealed class DotRocks.Data.DotRocksConnectionStringBuilder System.Data.Co
   public property DotRocks.Data.DotRocksSslMode SslMode { get; set; }
   public property System.Security.Cryptography.X509Certificates.X509RevocationMode SslRevocationCheck { get; set; }
   public property System.String StreamLoadEndpoint { get; set; }
+  public property System.String StreamLoadRedirectOrigins { get; set; }
   public property System.Boolean TrustServerCertificate { get; set; }
   public property System.String UserId { get; set; }
   public virtual method System.String ToString()
