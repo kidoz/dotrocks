@@ -204,6 +204,8 @@ a StarRocks 4.0+ capability — DotRocks probes the server version once (lazily)
 the begin on earlier lines. Each `LoadCsvAsync`/`LoadJsonAsync` overload takes an explicit
 table name for multi-table use.
 
+If version detection fails or returns an unrecognized version, the server enforces support.
+
 ### In-doubt transactions
 
 If the commit request is dispatched but the transport fails (or the server returns a

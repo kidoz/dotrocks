@@ -174,7 +174,10 @@ public sealed class DotRocksStreamLoadClient : IDisposable
     {
         _capabilities ??= await _capabilityProbe(_options, cancellationToken).ConfigureAwait(false);
 
-        if (_capabilities is { SupportsMultiTableStreamLoadTransaction: false })
+        if (
+            _capabilities is
+            { EffectiveVersion.IsStarRocks: true, SupportsMultiTableStreamLoadTransaction: false }
+        )
         {
             throw new DotRocksStreamLoadException(
                 $"Multi-table Stream Load transactions require StarRocks 4.0 or later; the effective StarRocks version is '{_capabilities.EffectiveVersion.Raw}'. Use single-table transactions on this server."
@@ -203,7 +206,7 @@ public sealed class DotRocksStreamLoadClient : IDisposable
             DotRocksServerVersion version = await probe
                 .QueryServerVersionAsync(cancellationToken)
                 .ConfigureAwait(false);
-            return DotRocksServerCapabilities.For(version);
+            return version.IsStarRocks ? DotRocksServerCapabilities.For(version) : null;
         }
         catch (DotRocksException)
         {

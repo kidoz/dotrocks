@@ -8,6 +8,7 @@ using DotRocks.Data;
 using DotRocks.Data.Diagnostics;
 using DotRocks.Data.Loading;
 using DotRocks.Data.Protocol.Handshake;
+using DotRocks.Protocol.Tests.TestInfrastructure;
 using Xunit;
 
 namespace DotRocks.Protocol.Tests.Loading;
@@ -1715,6 +1716,79 @@ public sealed class DotRocksStreamLoadClientTests
             .ConfigureAwait(true);
 
         Assert.Equal("tx_label", transaction.Label);
+    }
+
+    [Fact]
+    public async Task BeginTransactionAsync_UnknownVersionCapabilities_FallsBackToServer()
+    {
+        using var handler = new RecordingHandler(
+            static (_, _) => Task.FromResult(TransactionResponse())
+        );
+        using var httpClient = new HttpClient(handler);
+        using DotRocksStreamLoadClient client = CreateClient(
+            httpClient,
+            static (_, _) =>
+                ValueTask.FromResult<DotRocksServerCapabilities?>(
+                    DotRocksServerCapabilities.For(DotRocksServerVersion.Unknown)
+                )
+        );
+
+        DotRocksStreamLoadTransaction transaction = await client
+            .BeginTransactionAsync(
+                "warehouse",
+                "events",
+                new DotRocksStreamLoadTransactionOptions
+                {
+                    Label = "tx_label",
+                    IsMultiTable = true,
+                },
+                TestContext.Current.CancellationToken
+            )
+            .ConfigureAwait(true);
+
+        Assert.Equal("tx_label", transaction.Label);
+        Assert.NotNull(handler.Request);
+    }
+
+    [Fact]
+    public async Task BeginTransactionAsync_VersionQueryRejected_FallsBackToServer()
+    {
+        using var server = FakeStarRocksServer.Start(async stream =>
+        {
+            await FakeStarRocksServer.CompleteAuthenticationAsync(stream).ConfigureAwait(true);
+            string sql = await FakeStarRocksServer
+                .ReadCommandAndReplyErrorAsync(stream)
+                .ConfigureAwait(true);
+            Assert.Equal("SELECT current_version()", sql);
+        });
+        using var handler = new RecordingHandler(
+            static (_, _) => Task.FromResult(TransactionResponse())
+        );
+        using var httpClient = new HttpClient(handler);
+        using var client = new DotRocksStreamLoadClient(
+            DotRocksConnectionOptions.Parse(
+                server.ConnectionString + ";Allow Insecure Stream Load=true"
+            ),
+            httpClient,
+            disposeHttpClient: false
+        );
+
+        DotRocksStreamLoadTransaction transaction = await client
+            .BeginTransactionAsync(
+                "warehouse",
+                "events",
+                new DotRocksStreamLoadTransactionOptions
+                {
+                    Label = "tx_label",
+                    IsMultiTable = true,
+                },
+                TestContext.Current.CancellationToken
+            )
+            .ConfigureAwait(true);
+
+        Assert.Equal("tx_label", transaction.Label);
+        Assert.NotNull(handler.Request);
+        Assert.Equal(1, server.ConnectionCount);
     }
 
     [Fact]
