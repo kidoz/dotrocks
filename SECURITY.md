@@ -3,7 +3,7 @@
 ## Supported versions
 
 Security fixes target the latest released version and `main`. The current latest tagged
-release is 1.6.0.
+release is 1.6.1.
 
 ## Reporting a vulnerability
 
