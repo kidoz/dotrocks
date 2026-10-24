@@ -51,7 +51,7 @@ internal static class SqlStatementClassifier
     }
 
     // Detection is intentionally conservative (it errs toward discarding): it skips leading
-    // whitespace and SQL comments, then flags a statement whose leading keyword is USE or SET.
+    // whitespace and SQL comments, then flags session and transaction control statements.
     // It also flags any statement that assigns a user variable with ":=" (for example
     // "SELECT @tenant := ?"), since that mutates session state without a leading SET keyword and
     // would otherwise leak the variable into the next lease of a pooled connection. Matching ":="
@@ -68,6 +68,14 @@ internal static class SqlStatementClassifier
         int index = SkipLeadingTrivia(sql);
         return MatchesKeyword(sql, index, "USE")
             || MatchesKeyword(sql, index, "SET")
+            || MatchesKeyword(sql, index, "START")
+            || MatchesKeyword(sql, index, "BEGIN")
+            || MatchesKeyword(sql, index, "COMMIT")
+            || MatchesKeyword(sql, index, "ROLLBACK")
+            || MatchesKeyword(sql, index, "SAVEPOINT")
+            || MatchesKeyword(sql, index, "RELEASE")
+            || MatchesKeyword(sql, index, "XA")
+            || commandText.Contains("/*!", StringComparison.Ordinal)
             || commandText.Contains(":=", StringComparison.Ordinal);
     }
 

@@ -23,6 +23,14 @@ public sealed class SessionDirtyDetectionTests
     [InlineData("SELECT @tenant := 7")]
     [InlineData("SELECT @tenant := ?")]
     [InlineData("select @x:=@x+1 from t")]
+    [InlineData("START TRANSACTION")]
+    [InlineData(" /* transaction */ begin work")]
+    [InlineData("-- done\nCOMMIT AND CHAIN")]
+    [InlineData("ROLLBACK")]
+    [InlineData("SAVEPOINT tenant")]
+    [InlineData("RELEASE SAVEPOINT tenant")]
+    [InlineData("XA START 'tenant'")]
+    [InlineData("/*! START TRANSACTION */")]
     public void IsSessionMutatingStatement_FlagsUseAndSet(string commandText) =>
         Assert.True(SqlStatementClassifier.IsSessionMutating(commandText));
 
