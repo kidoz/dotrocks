@@ -27,6 +27,14 @@ version is derived from the release tag at publish time.
 - Run server-free CI suites on Linux, Windows, and macOS.
 
 ### Fixed
+- Reject writable TPT/TPC inheritance explicitly, preventing a separate derived table from
+  inheriting the root table's PRIMARY KEY validation. TPH shared-table mappings remain supported.
+- Reuse clean pooled connections after successful managed transaction commit, rollback, or
+  disposal. Raw transaction SQL, session mutations, and failed controls still retire the session.
+- Cache unknown Stream Load capability results and share probes across concurrent multi-table
+  begins. Canceled probes can be retried without repeatedly probing a resolved unknown version.
+- Preserve batch cancellation as `OperationCanceledException` when aborting an in-flight socket
+  read produces a transport exception, while retaining normal transport errors without cancellation.
 - Retire pooled sessions after raw SQL transaction control so an unresolved transaction cannot
   cross connection leases.
 - Keep SQL server error text out of exception messages and `ToString()` output. Untrusted,
