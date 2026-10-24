@@ -221,6 +221,21 @@ public sealed class DotRocksConnection : DbConnection, ICloneable
             );
             RecordConnectionOpenDuration(startTimestamp, timedOut ? "timeout" : "error");
             CloseCore(reusable: false);
+            if (timedOut && ex is OperationCanceledException)
+            {
+                // The internal timeout canceled the linked token, not the caller's. Report a
+                // connect failure rather than caller cancellation so callers see a transient
+                // open error and the retry policy can classify it.
+                throw new DotRocksException(
+                    "Could not connect to the StarRocks server within the connection timeout.",
+                    serverErrorCode: null,
+                    sqlState: null,
+                    isTransient: true,
+                    connectionId: null,
+                    innerException: ex
+                );
+            }
+
             throw;
         }
     }

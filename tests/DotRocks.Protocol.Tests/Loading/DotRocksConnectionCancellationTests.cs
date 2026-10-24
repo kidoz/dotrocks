@@ -365,6 +365,38 @@ public sealed class DotRocksConnectionCancellationTests
     }
 
     [Fact]
+    public async Task OpenAsync_ConnectionTimeout_ThrowsConnectErrorNotCallerCancellation()
+    {
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        // The server accepts the TCP connection but never sends a handshake, so the open times
+        // out inside the internal connection-timeout token. Keep the server in method scope so
+        // the finally block releases the handler before disposal waits for it.
+        using var server = FakeStarRocksServer.Start(async stream =>
+            await release.Task.WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(true)
+        );
+        try
+        {
+            string connectionString =
+                $"Server=127.0.0.1;Port={server.Port};User ID={FakeStarRocksServer.UserName};"
+                + $"Password={FakeStarRocksServer.Secret};Connection Timeout=1;Ssl Mode=Disabled";
+            using var connection = new DotRocksConnection(connectionString);
+
+            DotRocksException exception = await Assert
+                .ThrowsAsync<DotRocksException>(() =>
+                    connection.OpenAsync(TestContext.Current.CancellationToken)
+                )
+                .ConfigureAwait(true);
+            Assert.Contains("connect", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.True(exception.IsTransient);
+            Assert.Equal(ConnectionState.Closed, connection.State);
+        }
+        finally
+        {
+            release.TrySetResult();
+        }
+    }
+
+    [Fact]
     public async Task OpenAsync_SslModeRequiredWithoutServerSupport_ThrowsSanitizedDotRocksException()
     {
         using var server = FakeStarRocksServer.Start(async stream =>
