@@ -115,7 +115,7 @@ validator enforces. Violating any one throws at model-build time.
 | Requirement | Why | Enforced by |
 |---|---|---|
 | Explicit primary key — single-column or composite | The key columns drive `UPDATE`/`DELETE` conditions (one condition per key column) and must match the StarRocks `PRIMARY KEY` columns | `FindPrimaryKey()` (keyed = writable) |
-| `HasStarRocksPrimaryKey(...)` with the same ordered store column names as the EF key | Prevents treating DUPLICATE/UNIQUE tables or a different physical key as a writable row identity | Key-model and ordered store-key validation |
+| Explicit table-shape annotations, when supplied, declare `PRIMARY KEY` with the same ordered store column names as the EF key | Rejects explicitly conflicting table models or physical keys | Key-model and ordered store-key validation |
 | Inheritance shares one table (`TPH`) | Writable `TPT` and `TPC` hierarchies are unsupported and fail at model build; a derived table must never inherit another table's write-safety metadata | Mapping-strategy validation |
 | `ValueGeneratedNever()` on every property | DotRocks does not materialize server-generated values; keys are client-generated | `ValueGenerated != Never` |
 | Scalar properties only — no navigations | No FK/JOIN/cascade semantics are modeled | `GetNavigations()/GetSkipNavigations()` |
@@ -125,7 +125,13 @@ validator enforces. Violating any one throws at model-build time.
 | No default/computed SQL | DotRocks does not emit generated DDL/values | `GetDefaultValueSql()/GetComputedColumnSql()` |
 | No `byte[]` / `UInt128` / `binary` / `varbinary` | EF binary mapping is not verified end to end | property CLR/store-type check |
 
-For a `TPH` hierarchy, configure `HasStarRocksPrimaryKey(...)` on the root entity; every
+`HasStarRocksPrimaryKey(...)` is optional when mapping an existing table. `HasKey(...)`
+and explicit non-generated values remain sufficient; the application must ensure the actual
+table uses the matching StarRocks `PRIMARY KEY`. Model validation does not inspect the
+database. An explicit `DUPLICATE KEY` or `UNIQUE KEY` annotation on a keyed entity, or a
+`PRIMARY KEY` annotation with mismatched columns or order, is still rejected.
+
+For a `TPH` hierarchy, put any `HasStarRocksPrimaryKey(...)` annotation on the root entity; every
 derived entity uses the same table and ordered store key. Conflicting table-shape annotations
 on a derived entity are rejected. Writable `TPT` and `TPC` mappings are rejected even when
 each table declares `PRIMARY KEY`; use independent entities when separate tables are needed.
@@ -184,8 +190,8 @@ credentials and transport configuration and return a new closed connection.
 
 ### Composite primary keys
 
-A writable entity may declare a multi-column key. Pass the same store columns, in the same
-order, to `HasStarRocksPrimaryKey`; `UPDATE` and `DELETE` emit one `WHERE` condition per key
+A writable entity may declare a multi-column key. If configuring `HasStarRocksPrimaryKey`,
+pass the same store columns in the same order; `UPDATE` and `DELETE` emit one `WHERE` condition per key
 column, and `Find`/`FindAsync` takes the key values in the declared order.
 
 ```csharp
@@ -226,14 +232,16 @@ Stream Load — see the README and the `DotRocks.Samples.StreamLoad` sample.
 
 These fluent extensions live in `Microsoft.EntityFrameworkCore` (namespace import is the EF
 one) and annotate the entity for the **migrations** SQL generator. Writable model validation
-also requires `HasStarRocksPrimaryKey(...)` and matching EF store keys. For keyless table
-models or hand-authored `CreateTable` operations, the DDL defaults are `DUPLICATE KEY`, hash
-distribution by the key columns, **one** bucket, and `replication_num = 1`.
+checks explicit key-model annotations against the EF store keys but permits existing-table
+mappings without them. The DDL defaults remain `DUPLICATE KEY`, hash distribution by the key
+columns, **one** bucket, and `replication_num = 1`. To create a writable `PRIMARY KEY` table
+through migrations, configure `HasStarRocksPrimaryKey(...)` explicitly; omitting it does not
+change the migration default or infer a table-shape annotation from `HasKey(...)`.
 
 | API | Emits | Notes |
 |---|---|---|
 | `HasStarRocksDuplicateKey(params cols)` | `DUPLICATE KEY (...)` | Read-only model; pair with `HasNoKey()` entities |
-| `HasStarRocksPrimaryKey(params cols)` | `PRIMARY KEY (...)` | Required for writable entities |
+| `HasStarRocksPrimaryKey(params cols)` | `PRIMARY KEY (...)` | Optional for existing tables; required to generate `PRIMARY KEY` DDL |
 | `HasStarRocksUniqueKey(params cols)` | `UNIQUE KEY (...)` | |
 | `HasStarRocksHashDistribution(int buckets, params cols)` | `DISTRIBUTED BY HASH (...) BUCKETS n` | `buckets` must be `> 0` |
 | `HasStarRocksRandomDistribution(int buckets = 1)` | `DISTRIBUTED BY RANDOM BUCKETS n` | Clears hash-distribution columns; `buckets` must be `> 0`; `DistributedRandomly(int buckets)` is a shorthand alias |
@@ -313,8 +321,9 @@ When mapping or debugging an entity for DotRocks, verify in order:
 2. If written: `HasKey` (single-column or composite) matching the StarRocks `PRIMARY KEY`
    columns, `ValueGeneratedNever()` on **every** property, no
    navigations/complex/owned/concurrency/generated/binary members.
-3. Writable tables use `HasStarRocksPrimaryKey(...)`; read-only tables use
-   `HasStarRocksDuplicateKey/UniqueKey(...)`.
+3. Existing writable tables may omit `HasStarRocksPrimaryKey(...)`; use it to generate
+   `PRIMARY KEY` migration DDL. Explicit table keys must match the EF key. Read-only
+   tables may use `HasStarRocksDuplicateKey/UniqueKey(...)` with `HasNoKey()`.
 4. Distribution/key columns are real **store column names** and exist on the table.
 5. Writes are one row per `SaveChanges`; set-based changes go through
    `ExecuteUpdate` / `ExecuteDelete`, and bulk ingestion through Stream Load.

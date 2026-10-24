@@ -3313,7 +3313,7 @@ public sealed class DotRocksEfCoreIntegrationTests
                 .Entity<EfWriteWidget>()
                 .ToTable(WriteWidgetTableName, LinqDatabaseName)
                 .HasKey(widget => widget.Id);
-            modelBuilder.Entity<EfWriteWidget>().HasStarRocksPrimaryKey("Id");
+            // Existing table mappings need only the EF key, without a table-shape annotation.
             modelBuilder
                 .Entity<EfWriteWidget>()
                 .Property(widget => widget.Id)
@@ -3326,7 +3326,6 @@ public sealed class DotRocksEfCoreIntegrationTests
                 .Entity<EfCompositeWriteWidget>()
                 .ToTable(CompositeWriteWidgetTableName, LinqDatabaseName)
                 .HasKey(widget => new { widget.TenantId, widget.Id });
-            modelBuilder.Entity<EfCompositeWriteWidget>().HasStarRocksPrimaryKey("tenant_id", "Id");
             modelBuilder
                 .Entity<EfCompositeWriteWidget>()
                 .Property(widget => widget.TenantId)

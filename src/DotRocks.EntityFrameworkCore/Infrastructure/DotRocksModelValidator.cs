@@ -49,9 +49,20 @@ internal sealed class DotRocksModelValidator(
         }
 
         IEntityType tableType = entityType.GetRootType();
+        if (tableType.FindAnnotation(DotRocksAnnotationNames.KeyModel) is null)
+        {
+            tableType = entityType;
+        }
         DotRocksTableKeyModel? keyModel = DotRocksTableShapeAnnotations.CoerceKeyModel(
             tableType.FindAnnotation(DotRocksAnnotationNames.KeyModel)?.Value
         );
+        // Existing table mappings may supply only an EF key. Preserve that contract without
+        // inferring migration annotations; validate the table shape when explicitly declared.
+        if (keyModel is null)
+        {
+            return;
+        }
+
         if (keyModel != DotRocksTableKeyModel.PrimaryKey)
         {
             throw new NotSupportedException(

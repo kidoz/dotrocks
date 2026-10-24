@@ -1,5 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
+using DotRocks.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Xunit;
 
@@ -8,9 +10,44 @@ namespace DotRocks.EntityFrameworkCore.Tests;
 public sealed class DotRocksWritableTableValidationTests
 {
     [Fact]
-    public void WritableTable_RequiresExplicitPrimaryKeyModel()
+    public void WritableTable_AcceptsCompositeKeyWithoutTableKeyAnnotation()
     {
         using var context = new MissingKeyModelContext(CreateOptions<MissingKeyModelContext>());
+
+        IEntityType entityType = context.Model.FindEntityType(typeof(Row))!;
+        Assert.Equal(
+            [nameof(Row.Id), nameof(Row.Category)],
+            entityType.FindPrimaryKey()!.Properties.Select(property => property.Name)
+        );
+        Assert.Null(entityType.FindAnnotation(DotRocksAnnotationNames.KeyModel));
+        Assert.Null(entityType.FindAnnotation(DotRocksAnnotationNames.KeyColumns));
+    }
+
+    [Fact]
+    public void WritableTable_AcceptsSingleKeyWithoutTableKeyAnnotation()
+    {
+        using var context = new SingleKeyContext(CreateOptions<SingleKeyContext>());
+
+        IEntityType entityType = context.Model.FindEntityType(typeof(Row))!;
+        Assert.Equal(nameof(Row.Id), Assert.Single(entityType.FindPrimaryKey()!.Properties).Name);
+        Assert.Null(entityType.FindAnnotation(DotRocksAnnotationNames.KeyModel));
+        Assert.Null(entityType.FindAnnotation(DotRocksAnnotationNames.KeyColumns));
+    }
+
+    [Fact]
+    public void WritableTphHierarchy_AcceptsMissingTableKeyAnnotation()
+    {
+        using var context = new TphUnannotatedContext(CreateOptions<TphUnannotatedContext>());
+
+        Assert.NotNull(context.Model.FindEntityType(typeof(DerivedRow)));
+    }
+
+    [Fact]
+    public void WritableTphHierarchy_RejectsExplicitDuplicateKeyOnDerivedTypeWithUnannotatedRoot()
+    {
+        using var context = new TphDerivedDuplicateKeyContext(
+            CreateOptions<TphDerivedDuplicateKeyContext>()
+        );
 
         Assert.Contains(
             "PRIMARY KEY table",
@@ -156,6 +193,8 @@ public sealed class DotRocksWritableTableValidationTests
 
     private abstract class InheritanceShapeContext(DbContextOptions options) : DbContext(options)
     {
+        protected virtual bool HasTableKeyAnnotation => true;
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             modelBuilder.Entity<BaseRow>(entity =>
@@ -163,7 +202,10 @@ public sealed class DotRocksWritableTableValidationTests
                 entity.ToTable("base_rows");
                 entity.HasKey(row => row.Id);
                 entity.Property(row => row.Id).ValueGeneratedNever().HasColumnName("id");
-                entity.HasStarRocksPrimaryKey("id");
+                if (HasTableKeyAnnotation)
+                {
+                    entity.HasStarRocksPrimaryKey("id");
+                }
             });
             modelBuilder.Entity<DerivedRow>().HasBaseType<BaseRow>();
             ConfigureInheritance(modelBuilder);
@@ -219,6 +261,42 @@ public sealed class DotRocksWritableTableValidationTests
         : ShapeContext(options)
     {
         protected override void ConfigureKey(EntityTypeBuilder<Row> entity) { }
+    }
+
+    private sealed class SingleKeyContext(DbContextOptions<SingleKeyContext> options)
+        : DbContext(options)
+    {
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<Row>(entity =>
+            {
+                entity.HasKey(row => row.Id);
+                entity.Property(row => row.Id).HasColumnName("row_id").ValueGeneratedNever();
+                entity.Property(row => row.Category).ValueGeneratedNever();
+            });
+        }
+    }
+
+    private sealed class TphUnannotatedContext(DbContextOptions<TphUnannotatedContext> options)
+        : InheritanceShapeContext(options)
+    {
+        protected override bool HasTableKeyAnnotation => false;
+
+        protected override void ConfigureInheritance(ModelBuilder modelBuilder) =>
+            modelBuilder.Entity<BaseRow>().HasDiscriminator<string>("kind");
+    }
+
+    private sealed class TphDerivedDuplicateKeyContext(
+        DbContextOptions<TphDerivedDuplicateKeyContext> options
+    ) : InheritanceShapeContext(options)
+    {
+        protected override bool HasTableKeyAnnotation => false;
+
+        protected override void ConfigureInheritance(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<BaseRow>().HasDiscriminator<string>("kind");
+            modelBuilder.Entity<DerivedRow>().HasStarRocksDuplicateKey("id");
+        }
     }
 
     private sealed class DuplicateKeyContext(DbContextOptions<DuplicateKeyContext> options)
