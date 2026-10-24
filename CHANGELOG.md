@@ -8,6 +8,8 @@ version is derived from the release tag at publish time.
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-10-24
+
 ### Changed
 - Update NuGet dependencies to their latest stable versions: EF Core and dependency injection
   10.0.13, Dapper 2.1.89, gRPC 2.84.0, Microsoft.NET.Test.Sdk 18.11.0, xUnit 4.0.2,
@@ -15,7 +17,6 @@ version is derived from the release tag at publish time.
 - Update the pinned DocFX local tool to 2.81.0.
 - Test the latest stable StarRocks patch in each supported branch: 3.5.21, 4.0.16, and
   4.1.6. Use 4.1.6 as the local Docker default.
-
 - Require SQL TLS by default. Plaintext deployments must explicitly select `Ssl Mode=Disabled`
   or `Preferred`; `Preferred` permits an active downgrade.
 - Require keyed EF Core entities to declare a StarRocks `PRIMARY KEY` table with the same
@@ -667,7 +668,8 @@ version is derived from the release tag at publish time.
 - Stream Load refuses to forward credentials over a downgraded (HTTPS→HTTP) redirect.
 - NuGet vulnerability auditing and CodeQL analysis in CI.
 
-[Unreleased]: https://github.com/kidoz/dotrocks/compare/v1.5.5...HEAD
+[Unreleased]: https://github.com/kidoz/dotrocks/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/kidoz/dotrocks/compare/v1.5.5...v1.6.0
 [1.5.5]: https://github.com/kidoz/dotrocks/compare/v1.5.4...v1.5.5
 [1.5.4]: https://github.com/kidoz/dotrocks/compare/v1.5.3...v1.5.4
 [1.5.3]: https://github.com/kidoz/dotrocks/compare/v1.5.2...v1.5.3
