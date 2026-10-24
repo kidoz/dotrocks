@@ -12,6 +12,11 @@ fixes for validation errors.
 For what the provider translates once the model is mapped, see
 [EF Core query translation](ef-core-queries.md).
 
+`starRocks.ServerVersion(...)` records version metadata and service-provider cache identity
+only. It does not change SQL generation or transport capability policy. For the native
+transport's explicit capability override, configure `Server Compatibility Level` in the
+connection string; it is separate from EF's version metadata.
+
 ## Model Validation Timing
 
 **DotRocks validates the entire mapped model the first time the model is built — not at

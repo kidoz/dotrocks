@@ -50,7 +50,8 @@ DbContextOptions<AppDbContext> options = new DbContextOptionsBuilder<AppDbContex
 await using var context = new AppDbContext(options);
 ```
 
-Pin the server version in provider options. To discover it once at startup, call
+The provider version option records metadata/cache identity; it does not change SQL generation
+or transport capabilities. To discover it once at startup, call
 `StarRocksServerVersion.DetectAsync(connectionString)` and cache the result.
 
 Write one row per `SaveChanges`, use `ExecuteUpdate` / `ExecuteDelete` for set-based changes,
