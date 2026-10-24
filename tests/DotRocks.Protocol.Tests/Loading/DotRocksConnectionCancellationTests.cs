@@ -9,6 +9,7 @@ using System.Security.Authentication;
 using DotRocks.Data;
 using DotRocks.Data.Authentication;
 using DotRocks.Data.Diagnostics;
+using DotRocks.Data.Pooling;
 using DotRocks.Data.Protocol.Framing;
 using DotRocks.Data.Protocol.Serialization;
 using DotRocks.Protocol.Tests.TestInfrastructure;
@@ -484,7 +485,10 @@ public sealed class DotRocksConnectionCancellationTests
         );
         string connectionString =
             server.ConnectionString + ";Pooling=True;Maximum Pool Size=1;Minimum Pool Size=0";
-        DotRocksConnection.ClearAllPools();
+        // Clear only this server's pool. ClearAllPools() is process-wide and would discard
+        // connections owned by tests running in parallel.
+        DotRocksConnectionOptions poolOptions = DotRocksConnectionOptions.Parse(connectionString);
+        DotRocksConnectionPool.Clear(poolOptions);
 
         try
         {
@@ -522,7 +526,7 @@ public sealed class DotRocksConnectionCancellationTests
         }
         finally
         {
-            DotRocksConnection.ClearAllPools();
+            DotRocksConnectionPool.Clear(poolOptions);
         }
     }
 
