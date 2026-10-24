@@ -97,6 +97,19 @@ internal sealed class DotRocksModelValidator(
             return;
         }
 
+        string? mappingStrategy = entityType.GetMappingStrategy();
+        if (
+            entityType.BaseType is not null
+            && mappingStrategy
+                is RelationalAnnotationNames.TptMappingStrategy
+                    or RelationalAnnotationNames.TpcMappingStrategy
+        )
+        {
+            throw new NotSupportedException(
+                $"DotRocks EF Core does not support writable '{mappingStrategy}' inheritance for entity type '{entityType.DisplayName()}'; use TPH inheritance on one PRIMARY KEY table or map independent entities."
+            );
+        }
+
         if (entityType.GetNavigations().Any() || entityType.GetSkipNavigations().Any())
         {
             throw new NotSupportedException(

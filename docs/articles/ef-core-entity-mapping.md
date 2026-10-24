@@ -116,6 +116,7 @@ validator enforces. Violating any one throws at model-build time.
 |---|---|---|
 | Explicit primary key — single-column or composite | The key columns drive `UPDATE`/`DELETE` conditions (one condition per key column) and must match the StarRocks `PRIMARY KEY` columns | `FindPrimaryKey()` (keyed = writable) |
 | `HasStarRocksPrimaryKey(...)` with the same ordered store column names as the EF key | Prevents treating DUPLICATE/UNIQUE tables or a different physical key as a writable row identity | Key-model and ordered store-key validation |
+| Inheritance shares one table (`TPH`) | Writable `TPT` and `TPC` hierarchies are unsupported and fail at model build; a derived table must never inherit another table's write-safety metadata | Mapping-strategy validation |
 | `ValueGeneratedNever()` on every property | DotRocks does not materialize server-generated values; keys are client-generated | `ValueGenerated != Never` |
 | Scalar properties only — no navigations | No FK/JOIN/cascade semantics are modeled | `GetNavigations()/GetSkipNavigations()` |
 | No alternate keys, foreign keys, or check constraints | StarRocks enforces none of them, so a migration could only drop them silently | `GetKeys()`, `GetForeignKeys()`, `GetCheckConstraints()` |
@@ -123,6 +124,11 @@ validator enforces. Violating any one throws at model-build time.
 | No concurrency tokens / row versions | OLTP-style concurrency is not emulated | `IsConcurrencyToken` |
 | No default/computed SQL | DotRocks does not emit generated DDL/values | `GetDefaultValueSql()/GetComputedColumnSql()` |
 | No `byte[]` / `UInt128` / `binary` / `varbinary` | EF binary mapping is not verified end to end | property CLR/store-type check |
+
+For a `TPH` hierarchy, configure `HasStarRocksPrimaryKey(...)` on the root entity; every
+derived entity uses the same table and ordered store key. Conflicting table-shape annotations
+on a derived entity are rejected. Writable `TPT` and `TPC` mappings are rejected even when
+each table declares `PRIMARY KEY`; use independent entities when separate tables are needed.
 
 ### Complete writable example
 

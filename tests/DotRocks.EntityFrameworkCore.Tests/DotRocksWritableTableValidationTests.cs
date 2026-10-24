@@ -79,6 +79,50 @@ public sealed class DotRocksWritableTableValidationTests
         Assert.Null(context.Model.FindEntityType(typeof(Row))!.FindPrimaryKey());
     }
 
+    [Fact]
+    public void WritableTptDerivedTable_RejectsDuplicateKeyDespitePrimaryKeyRoot()
+    {
+        using var context = new TptDuplicateKeyContext(CreateOptions<TptDuplicateKeyContext>());
+
+        Assert.Contains(
+            "writable 'TPT' inheritance",
+            Assert.Throws<NotSupportedException>(() => context.Model).Message,
+            StringComparison.Ordinal
+        );
+    }
+
+    [Fact]
+    public void WritableTptHierarchy_RejectsMultiplePrimaryKeyTables()
+    {
+        using var context = new TptPrimaryKeyContext(CreateOptions<TptPrimaryKeyContext>());
+
+        Assert.Contains(
+            "writable 'TPT' inheritance",
+            Assert.Throws<NotSupportedException>(() => context.Model).Message,
+            StringComparison.Ordinal
+        );
+    }
+
+    [Fact]
+    public void WritableTpcDerivedTable_RejectsDuplicateKeyDespitePrimaryKeyRoot()
+    {
+        using var context = new TpcDuplicateKeyContext(CreateOptions<TpcDuplicateKeyContext>());
+
+        Assert.Contains(
+            "writable 'TPC' inheritance",
+            Assert.Throws<NotSupportedException>(() => context.Model).Message,
+            StringComparison.Ordinal
+        );
+    }
+
+    [Fact]
+    public void WritableTphHierarchy_UsesPrimaryKeyRootMetadata()
+    {
+        using var context = new TphPrimaryKeyContext(CreateOptions<TphPrimaryKeyContext>());
+
+        Assert.NotNull(context.Model.FindEntityType(typeof(DerivedRow)));
+    }
+
     private static DbContextOptions<TContext> CreateOptions<TContext>()
         where TContext : DbContext =>
         new DbContextOptionsBuilder<TContext>()
@@ -108,6 +152,67 @@ public sealed class DotRocksWritableTableValidationTests
         }
 
         protected abstract void ConfigureKey(EntityTypeBuilder<Row> entity);
+    }
+
+    private abstract class InheritanceShapeContext(DbContextOptions options) : DbContext(options)
+    {
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<BaseRow>(entity =>
+            {
+                entity.ToTable("base_rows");
+                entity.HasKey(row => row.Id);
+                entity.Property(row => row.Id).ValueGeneratedNever().HasColumnName("id");
+                entity.HasStarRocksPrimaryKey("id");
+            });
+            modelBuilder.Entity<DerivedRow>().HasBaseType<BaseRow>();
+            ConfigureInheritance(modelBuilder);
+        }
+
+        protected abstract void ConfigureInheritance(ModelBuilder modelBuilder);
+    }
+
+    private sealed class TptDuplicateKeyContext(DbContextOptions<TptDuplicateKeyContext> options)
+        : InheritanceShapeContext(options)
+    {
+        protected override void ConfigureInheritance(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<BaseRow>().UseTptMappingStrategy();
+            modelBuilder
+                .Entity<DerivedRow>()
+                .ToTable("derived_rows")
+                .HasStarRocksDuplicateKey("id");
+        }
+    }
+
+    private sealed class TptPrimaryKeyContext(DbContextOptions<TptPrimaryKeyContext> options)
+        : InheritanceShapeContext(options)
+    {
+        protected override void ConfigureInheritance(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<BaseRow>().UseTptMappingStrategy();
+            modelBuilder.Entity<DerivedRow>().ToTable("derived_rows").HasStarRocksPrimaryKey("id");
+        }
+    }
+
+    private sealed class TpcDuplicateKeyContext(DbContextOptions<TpcDuplicateKeyContext> options)
+        : InheritanceShapeContext(options)
+    {
+        protected override void ConfigureInheritance(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<BaseRow>().UseTpcMappingStrategy();
+            modelBuilder
+                .Entity<DerivedRow>()
+                .ToTable("derived_rows")
+                .HasStarRocksDuplicateKey("id");
+        }
+    }
+
+    private sealed class TphPrimaryKeyContext(DbContextOptions<TphPrimaryKeyContext> options)
+        : InheritanceShapeContext(options)
+    {
+        protected override void ConfigureInheritance(ModelBuilder modelBuilder) =>
+            modelBuilder.Entity<BaseRow>().HasDiscriminator<string>("kind");
     }
 
     private sealed class MissingKeyModelContext(DbContextOptions<MissingKeyModelContext> options)
@@ -173,5 +278,25 @@ public sealed class DotRocksWritableTableValidationTests
         public int Id { get; set; }
 
         public int Category { get; set; }
+    }
+
+    [SuppressMessage(
+        "Performance",
+        "CA1812:Avoid uninstantiated internal classes",
+        Justification = "EF Core uses this entity type through model metadata."
+    )]
+    private class BaseRow
+    {
+        public int Id { get; set; }
+    }
+
+    [SuppressMessage(
+        "Performance",
+        "CA1812:Avoid uninstantiated internal classes",
+        Justification = "EF Core uses this entity type through model metadata."
+    )]
+    private sealed class DerivedRow : BaseRow
+    {
+        public string Value { get; set; } = string.Empty;
     }
 }
