@@ -200,7 +200,10 @@ public sealed class DotRocksBatch : DbBatch
             await _connection.CloseAsync().ConfigureAwait(false);
             throw DotRocksCommand.CreateCommandTimeoutException(ex);
         }
-        catch (OperationCanceledException ex) when (scope.IsCanceledByCancelMethod)
+        catch (Exception ex)
+            when (ex is OperationCanceledException or DotRocksException
+                && scope.IsCanceledByCancelMethod
+            )
         {
             await _connection.CloseAsync().ConfigureAwait(false);
             throw new OperationCanceledException(
@@ -208,6 +211,20 @@ public sealed class DotRocksBatch : DbBatch
                 ex,
                 scope.OperationToken
             );
+        }
+        catch (DotRocksException ex) when (scope.IsCanceledByExternalToken)
+        {
+            await _connection.CloseAsync().ConfigureAwait(false);
+            throw new OperationCanceledException(
+                "The DotRocks batch was canceled.",
+                ex,
+                scope.ExternalToken
+            );
+        }
+        catch (OperationCanceledException)
+        {
+            await _connection.CloseAsync().ConfigureAwait(false);
+            throw;
         }
     }
 }
