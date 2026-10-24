@@ -110,6 +110,7 @@ validator enforces. Violating any one throws at model-build time.
 | Requirement | Why | Enforced by |
 |---|---|---|
 | Explicit primary key — single-column or composite | The key columns drive `UPDATE`/`DELETE` conditions (one condition per key column) and must match the StarRocks `PRIMARY KEY` columns | `FindPrimaryKey()` (keyed = writable) |
+| `HasStarRocksPrimaryKey(...)` with the same ordered store column names as the EF key | Prevents treating DUPLICATE/UNIQUE tables or a different physical key as a writable row identity | Key-model and ordered store-key validation |
 | `ValueGeneratedNever()` on every property | DotRocks does not materialize server-generated values; keys are client-generated | `ValueGenerated != Never` |
 | Scalar properties only — no navigations | No FK/JOIN/cascade semantics are modeled | `GetNavigations()/GetSkipNavigations()` |
 | No alternate keys, foreign keys, or check constraints | StarRocks enforces none of them, so a migration could only drop them silently | `GetKeys()`, `GetForeignKeys()`, `GetCheckConstraints()` |
@@ -192,9 +193,10 @@ Stream Load — see the README and the `DotRocks.Samples.StreamLoad` sample.
 ## Table-shape configuration for migrations
 
 These fluent extensions live in `Microsoft.EntityFrameworkCore` (namespace import is the EF
-one) and annotate the entity for the **migrations** SQL generator. They do not change query
-behavior. Defaults when you configure nothing: `DUPLICATE KEY`, hash distribution by the key
-columns, **one** bucket, `replication_num = 1`.
+one) and annotate the entity for the **migrations** SQL generator. Writable model validation
+also requires `HasStarRocksPrimaryKey(...)` and matching EF store keys. For keyless table
+models or hand-authored `CreateTable` operations, the DDL defaults are `DUPLICATE KEY`, hash
+distribution by the key columns, **one** bucket, and `replication_num = 1`.
 
 | API | Emits | Notes |
 |---|---|---|

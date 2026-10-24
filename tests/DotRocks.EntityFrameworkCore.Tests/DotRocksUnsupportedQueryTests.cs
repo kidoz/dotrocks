@@ -41,6 +41,7 @@ public sealed class DotRocksUnsupportedQueryTests
                 .Entity<UnitWidget>()
                 .ToTable("widgets", "unit_db")
                 .HasKey(widget => widget.Id);
+            modelBuilder.Entity<UnitWidget>().HasStarRocksPrimaryKey("Id");
             modelBuilder.Entity<UnitWidget>().Property(widget => widget.Id).ValueGeneratedNever();
         }
     }

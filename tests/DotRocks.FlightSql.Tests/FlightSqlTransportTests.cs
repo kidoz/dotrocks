@@ -1035,6 +1035,7 @@ public sealed partial class FlightSqlTransportTests
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             modelBuilder.Entity<Widget>().ToTable("widgets").HasKey(widget => widget.Id);
+            modelBuilder.Entity<Widget>().HasStarRocksPrimaryKey("Id");
             modelBuilder.Entity<Widget>().Property(widget => widget.Id).ValueGeneratedNever();
         }
     }

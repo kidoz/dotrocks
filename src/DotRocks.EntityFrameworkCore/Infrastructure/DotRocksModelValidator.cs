@@ -32,6 +32,50 @@ internal sealed class DotRocksModelValidator(
         }
 
         ValidateSharedTableShapeAnnotations(model);
+
+        foreach (IEntityType entityType in model.GetEntityTypes())
+        {
+            ValidateWritableTable(entityType);
+        }
+    }
+
+    private static void ValidateWritableTable(IEntityType entityType)
+    {
+        IKey? primaryKey = entityType.FindPrimaryKey();
+        string? tableName = entityType.GetTableName();
+        if (primaryKey is null || tableName is null)
+        {
+            return;
+        }
+
+        IEntityType tableType = entityType.GetRootType();
+        DotRocksTableKeyModel? keyModel = DotRocksTableShapeAnnotations.CoerceKeyModel(
+            tableType.FindAnnotation(DotRocksAnnotationNames.KeyModel)?.Value
+        );
+        if (keyModel != DotRocksTableKeyModel.PrimaryKey)
+        {
+            throw new NotSupportedException(
+                $"DotRocks EF Core writable entity type '{entityType.DisplayName()}' must map to a StarRocks PRIMARY KEY table; configure HasStarRocksPrimaryKey() or use HasNoKey() for a read-only mapping."
+            );
+        }
+
+        string[]? keyColumns = DotRocksTableShapeAnnotations.CoerceColumnList(
+            tableType.FindAnnotation(DotRocksAnnotationNames.KeyColumns)?.Value,
+            "table key",
+            entityType.DisplayName()
+        );
+        var table = StoreObjectIdentifier.Table(tableName, entityType.GetSchema());
+        if (
+            keyColumns is null
+            || !primaryKey
+                .Properties.Select(property => property.GetColumnName(table))
+                .SequenceEqual(keyColumns, StringComparer.Ordinal)
+        )
+        {
+            throw new NotSupportedException(
+                $"DotRocks EF Core writable entity type '{entityType.DisplayName()}' must have EF primary key store columns matching the StarRocks PRIMARY KEY columns in the same order."
+            );
+        }
     }
 
     private static void ValidateEntityType(IEntityType entityType)

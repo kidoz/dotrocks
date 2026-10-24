@@ -93,6 +93,7 @@ public sealed class DotRocksRawSqlQueryTests
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             modelBuilder.Entity<Widget>().ToTable("widgets", "unit_db").HasKey(widget => widget.Id);
+            modelBuilder.Entity<Widget>().HasStarRocksPrimaryKey("Id");
             modelBuilder.Entity<Widget>().Property(widget => widget.Id).ValueGeneratedNever();
         }
     }

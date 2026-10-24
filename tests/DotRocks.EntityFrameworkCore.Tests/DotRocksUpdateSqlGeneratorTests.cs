@@ -170,6 +170,7 @@ public sealed class DotRocksUpdateSqlGeneratorTests
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             modelBuilder.Entity<UnitWidget>().ToTable("widgets").HasKey(widget => widget.Id);
+            modelBuilder.Entity<UnitWidget>().HasStarRocksPrimaryKey("Id");
             modelBuilder.Entity<UnitWidget>().Property(widget => widget.Id).ValueGeneratedNever();
         }
     }

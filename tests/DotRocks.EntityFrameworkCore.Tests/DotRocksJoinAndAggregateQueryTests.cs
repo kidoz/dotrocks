@@ -160,11 +160,13 @@ public sealed class DotRocksJoinAndAggregateQueryTests
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             modelBuilder.Entity<Widget>().ToTable("widgets", "unit_db").HasKey(widget => widget.Id);
+            modelBuilder.Entity<Widget>().HasStarRocksPrimaryKey("Id");
             modelBuilder.Entity<Widget>().Property(widget => widget.Id).ValueGeneratedNever();
             modelBuilder
                 .Entity<WidgetDetail>()
                 .ToTable("widget_details", "unit_db")
                 .HasKey(detail => detail.Id);
+            modelBuilder.Entity<WidgetDetail>().HasStarRocksPrimaryKey("Id");
             modelBuilder.Entity<WidgetDetail>().Property(detail => detail.Id).ValueGeneratedNever();
         }
     }

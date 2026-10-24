@@ -361,6 +361,7 @@ public sealed class DotRocksModelValidationTests
             modelBuilder
                 .Entity<CompositeKeyEntity>()
                 .HasKey(entity => new { entity.Id, entity.Category });
+            modelBuilder.Entity<CompositeKeyEntity>().HasStarRocksPrimaryKey("Id", "Category");
             modelBuilder
                 .Entity<CompositeKeyEntity>()
                 .Property(entity => entity.Id)
@@ -554,6 +555,7 @@ public sealed class DotRocksModelValidationTests
             modelBuilder.Entity<SharedTableBase>(entity =>
             {
                 entity.ToTable("shared_properties_entities", "unit_db");
+                entity.HasStarRocksPrimaryKey("id");
                 entity.HasKey(value => value.Id);
                 entity.Property(value => value.Id).ValueGeneratedNever().HasColumnName("id");
                 entity.HasDiscriminator<string>("kind");
@@ -590,6 +592,7 @@ public sealed class DotRocksModelValidationTests
             modelBuilder.Entity<TableShapeEntity>(entity =>
             {
                 entity.ToTable("full_table_shape_entities", "unit_db");
+                entity.HasStarRocksPrimaryKey("id");
                 entity.HasKey(value => value.Id);
                 entity.Property(value => value.Id).ValueGeneratedNever().HasColumnName("id");
                 entity.HasStarRocksRandomDistribution(3);

@@ -334,6 +334,7 @@ public sealed class FlightSqlIntegrationTests
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             modelBuilder.Entity<Widget>().ToTable("widgets", database).HasKey(widget => widget.Id);
+            modelBuilder.Entity<Widget>().HasStarRocksPrimaryKey("Id");
             modelBuilder.Entity<Widget>().Property(widget => widget.Id).ValueGeneratedNever();
         }
     }

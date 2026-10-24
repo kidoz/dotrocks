@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using DotRocks.EntityFrameworkCore.Infrastructure;
+using DotRocks.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Migrations;
 
@@ -85,24 +86,26 @@ internal sealed class CreateEfSampleWidgets : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)
     {
-        migrationBuilder.CreateTable(
-            name: "ef_sample_widgets",
-            columns: table => new
-            {
-                Id = table.Column<int>(name: "id", nullable: false),
-                Name = table.Column<string>(name: "name", type: "varchar(64)", nullable: false),
-                Active = table.Column<bool>(name: "active", nullable: false),
-                Amount = table.Column<decimal>(
-                    name: "amount",
-                    type: "decimal(10, 2)",
-                    nullable: false
-                ),
-            },
-            constraints: table =>
-            {
-                table.PrimaryKey("PK_ef_sample_widgets", row => row.Id);
-            }
-        );
+        migrationBuilder
+            .CreateTable(
+                name: "ef_sample_widgets",
+                columns: table => new
+                {
+                    Id = table.Column<int>(name: "id", nullable: false),
+                    Name = table.Column<string>(name: "name", type: "varchar(64)", nullable: false),
+                    Active = table.Column<bool>(name: "active", nullable: false),
+                    Amount = table.Column<decimal>(
+                        name: "amount",
+                        type: "decimal(10, 2)",
+                        nullable: false
+                    ),
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_ef_sample_widgets", row => row.Id);
+                }
+            )
+            .Annotation("DotRocks:KeyModel", DotRocksTableKeyModel.PrimaryKey);
     }
 
     protected override void Down(MigrationBuilder migrationBuilder)

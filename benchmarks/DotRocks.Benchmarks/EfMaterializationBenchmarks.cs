@@ -73,7 +73,7 @@ public class EfMaterializationBenchmarks
             modelBuilder.Entity<BenchmarkRow>(entity =>
             {
                 entity.ToTable("ef_materialization_rows");
-                entity.HasKey(row => row.Id);
+                entity.HasNoKey();
                 entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
                 entity.Property(row => row.Value).HasColumnName("value");
             });

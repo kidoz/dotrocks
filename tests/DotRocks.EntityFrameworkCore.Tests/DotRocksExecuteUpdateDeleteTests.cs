@@ -355,6 +355,7 @@ public sealed class DotRocksExecuteUpdateDeleteTests
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             modelBuilder.Entity<Widget>().ToTable("widgets", "unit_db").HasKey(widget => widget.Id);
+            modelBuilder.Entity<Widget>().HasStarRocksPrimaryKey("id");
             modelBuilder
                 .Entity<Widget>()
                 .Property(widget => widget.Id)
@@ -371,6 +372,7 @@ public sealed class DotRocksExecuteUpdateDeleteTests
                 .Entity<Category>()
                 .ToTable("categories", "unit_db")
                 .HasKey(category => category.Id);
+            modelBuilder.Entity<Category>().HasStarRocksPrimaryKey("Id");
             modelBuilder.Entity<Category>().Property(category => category.Id).ValueGeneratedNever();
         }
     }

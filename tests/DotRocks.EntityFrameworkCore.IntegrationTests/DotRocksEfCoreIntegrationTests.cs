@@ -3115,7 +3115,7 @@ public sealed class DotRocksEfCoreIntegrationTests
             modelBuilder
                 .Entity<HighPrecisionRow>()
                 .ToTable("high_precision_values", LinqDatabaseName)
-                .HasKey(row => row.Id);
+                .HasNoKey();
             modelBuilder.Entity<HighPrecisionRow>().Property(row => row.Id).ValueGeneratedNever();
             modelBuilder
                 .Entity<HighPrecisionRow>()
@@ -3156,7 +3156,7 @@ public sealed class DotRocksEfCoreIntegrationTests
             modelBuilder
                 .Entity<DotRocksWidget>()
                 .ToTable(WidgetTableName, LinqDatabaseName)
-                .HasKey(widget => widget.Id);
+                .HasNoKey();
             modelBuilder
                 .Entity<DotRocksWidget>()
                 .Property(widget => widget.Id)
@@ -3185,6 +3185,7 @@ public sealed class DotRocksEfCoreIntegrationTests
                 .Entity<EfWriteWidget>()
                 .ToTable(WriteWidgetTableName, LinqDatabaseName)
                 .HasKey(widget => widget.Id);
+            modelBuilder.Entity<EfWriteWidget>().HasStarRocksPrimaryKey("Id");
             modelBuilder
                 .Entity<EfWriteWidget>()
                 .Property(widget => widget.Id)
@@ -3197,6 +3198,7 @@ public sealed class DotRocksEfCoreIntegrationTests
                 .Entity<EfCompositeWriteWidget>()
                 .ToTable(CompositeWriteWidgetTableName, LinqDatabaseName)
                 .HasKey(widget => new { widget.TenantId, widget.Id });
+            modelBuilder.Entity<EfCompositeWriteWidget>().HasStarRocksPrimaryKey("tenant_id", "Id");
             modelBuilder
                 .Entity<EfCompositeWriteWidget>()
                 .Property(widget => widget.TenantId)
@@ -3229,6 +3231,7 @@ public sealed class DotRocksEfCoreIntegrationTests
                 .Entity<EfMigrationWidget>()
                 .ToTable(MigrationWidgetTableName, LinqDatabaseName)
                 .HasKey(widget => widget.Id);
+            modelBuilder.Entity<EfMigrationWidget>().HasStarRocksPrimaryKey("id");
             modelBuilder
                 .Entity<EfMigrationWidget>()
                 .Property(widget => widget.Id)
@@ -3285,6 +3288,7 @@ public sealed class DotRocksEfCoreIntegrationTests
                 .Entity<EfMigrationWidget>()
                 .ToTable(EnsureSchemaMigrationWidgetTableName, EnsureSchemaMigrationDatabaseName)
                 .HasKey(widget => widget.Id);
+            modelBuilder.Entity<EfMigrationWidget>().HasStarRocksPrimaryKey("id");
             modelBuilder
                 .Entity<EfMigrationWidget>()
                 .Property(widget => widget.Id)
@@ -3315,6 +3319,7 @@ public sealed class DotRocksEfCoreIntegrationTests
                 .Entity<EfMigrationWidget>()
                 .ToTable(UnsupportedMigrationWidgetTableName, LinqDatabaseName)
                 .HasKey(widget => widget.Id);
+            modelBuilder.Entity<EfMigrationWidget>().HasStarRocksPrimaryKey("id");
             modelBuilder
                 .Entity<EfMigrationWidget>()
                 .Property(widget => widget.Id)
@@ -3345,6 +3350,7 @@ public sealed class DotRocksEfCoreIntegrationTests
                 .Entity<EfMigrationWidget>()
                 .ToTable(UnsupportedDownMigrationWidgetTableName, LinqDatabaseName)
                 .HasKey(widget => widget.Id);
+            modelBuilder.Entity<EfMigrationWidget>().HasStarRocksPrimaryKey("id");
             modelBuilder
                 .Entity<EfMigrationWidget>()
                 .Property(widget => widget.Id)
@@ -3369,19 +3375,25 @@ public sealed class DotRocksEfCoreIntegrationTests
     {
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.CreateTable(
-                name: MigrationWidgetTableName,
-                schema: LinqDatabaseName,
-                columns: table => new
-                {
-                    Id = table.Column<int>(name: "id", nullable: false),
-                    Name = table.Column<string>(name: "name", type: "varchar(64)", nullable: false),
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_ef_migration_widgets", row => row.Id);
-                }
-            );
+            migrationBuilder
+                .CreateTable(
+                    name: MigrationWidgetTableName,
+                    schema: LinqDatabaseName,
+                    columns: table => new
+                    {
+                        Id = table.Column<int>(name: "id", nullable: false),
+                        Name = table.Column<string>(
+                            name: "name",
+                            type: "varchar(64)",
+                            nullable: false
+                        ),
+                    },
+                    constraints: table =>
+                    {
+                        table.PrimaryKey("PK_ef_migration_widgets", row => row.Id);
+                    }
+                )
+                .Annotation("DotRocks:KeyModel", DotRocksTableKeyModel.PrimaryKey);
         }
 
         protected override void Down(MigrationBuilder migrationBuilder)
@@ -3447,19 +3459,25 @@ public sealed class DotRocksEfCoreIntegrationTests
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.EnsureSchema(EnsureSchemaMigrationDatabaseName);
-            migrationBuilder.CreateTable(
-                name: EnsureSchemaMigrationWidgetTableName,
-                schema: EnsureSchemaMigrationDatabaseName,
-                columns: table => new
-                {
-                    Id = table.Column<int>(name: "id", nullable: false),
-                    Name = table.Column<string>(name: "name", type: "varchar(64)", nullable: false),
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_ef_ensure_schema_widgets", row => row.Id);
-                }
-            );
+            migrationBuilder
+                .CreateTable(
+                    name: EnsureSchemaMigrationWidgetTableName,
+                    schema: EnsureSchemaMigrationDatabaseName,
+                    columns: table => new
+                    {
+                        Id = table.Column<int>(name: "id", nullable: false),
+                        Name = table.Column<string>(
+                            name: "name",
+                            type: "varchar(64)",
+                            nullable: false
+                        ),
+                    },
+                    constraints: table =>
+                    {
+                        table.PrimaryKey("PK_ef_ensure_schema_widgets", row => row.Id);
+                    }
+                )
+                .Annotation("DotRocks:KeyModel", DotRocksTableKeyModel.PrimaryKey);
         }
 
         protected override void Down(MigrationBuilder migrationBuilder)
@@ -3482,19 +3500,25 @@ public sealed class DotRocksEfCoreIntegrationTests
     {
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.CreateTable(
-                name: UnsupportedMigrationWidgetTableName,
-                schema: LinqDatabaseName,
-                columns: table => new
-                {
-                    Id = table.Column<int>(name: "id", nullable: false),
-                    Name = table.Column<string>(name: "name", type: "varchar(64)", nullable: false),
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_ef_unsupported_migration_widgets", row => row.Id);
-                }
-            );
+            migrationBuilder
+                .CreateTable(
+                    name: UnsupportedMigrationWidgetTableName,
+                    schema: LinqDatabaseName,
+                    columns: table => new
+                    {
+                        Id = table.Column<int>(name: "id", nullable: false),
+                        Name = table.Column<string>(
+                            name: "name",
+                            type: "varchar(64)",
+                            nullable: false
+                        ),
+                    },
+                    constraints: table =>
+                    {
+                        table.PrimaryKey("PK_ef_unsupported_migration_widgets", row => row.Id);
+                    }
+                )
+                .Annotation("DotRocks:KeyModel", DotRocksTableKeyModel.PrimaryKey);
             migrationBuilder.AddColumn<int>(
                 name: "unsupported_value",
                 schema: LinqDatabaseName,
@@ -3524,19 +3548,25 @@ public sealed class DotRocksEfCoreIntegrationTests
     {
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.CreateTable(
-                name: UnsupportedDownMigrationWidgetTableName,
-                schema: LinqDatabaseName,
-                columns: table => new
-                {
-                    Id = table.Column<int>(name: "id", nullable: false),
-                    Name = table.Column<string>(name: "name", type: "varchar(64)", nullable: false),
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_ef_unsupported_down_widgets", row => row.Id);
-                }
-            );
+            migrationBuilder
+                .CreateTable(
+                    name: UnsupportedDownMigrationWidgetTableName,
+                    schema: LinqDatabaseName,
+                    columns: table => new
+                    {
+                        Id = table.Column<int>(name: "id", nullable: false),
+                        Name = table.Column<string>(
+                            name: "name",
+                            type: "varchar(64)",
+                            nullable: false
+                        ),
+                    },
+                    constraints: table =>
+                    {
+                        table.PrimaryKey("PK_ef_unsupported_down_widgets", row => row.Id);
+                    }
+                )
+                .Annotation("DotRocks:KeyModel", DotRocksTableKeyModel.PrimaryKey);
         }
 
         protected override void Down(MigrationBuilder migrationBuilder)

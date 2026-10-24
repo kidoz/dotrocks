@@ -1016,6 +1016,7 @@ public sealed class DotRocksMigrationsTests
                 .Entity<UnitWidget>()
                 .ToTable("widgets", "unit_db")
                 .HasKey(widget => widget.Id);
+            modelBuilder.Entity<UnitWidget>().HasStarRocksPrimaryKey("Id");
             modelBuilder.Entity<UnitWidget>().Property(widget => widget.Id).ValueGeneratedNever();
         }
     }
@@ -1059,6 +1060,7 @@ public sealed class DotRocksMigrationsTests
                 entity.ToTable("random_shape_widgets", "unit_db");
                 entity.HasKey(widget => widget.Id);
                 entity.Property(widget => widget.Id).ValueGeneratedNever().HasColumnName("id");
+                entity.HasStarRocksPrimaryKey("id");
                 entity.HasStarRocksRandomDistribution(3);
                 entity.HasStarRocksSortKey("id");
                 entity.HasStarRocksProperty("compression", "LZ4");

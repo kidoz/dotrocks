@@ -317,6 +317,7 @@ public sealed class DotRocksTranslatorTests
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             modelBuilder.Entity<Event>().ToTable("events", "unit_db").HasKey(e => e.Id);
+            modelBuilder.Entity<Event>().HasStarRocksPrimaryKey("Id");
             modelBuilder.Entity<Event>().Property(e => e.Id).ValueGeneratedNever();
         }
     }
