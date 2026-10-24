@@ -2,6 +2,7 @@ using System.Data;
 using System.Data.Common;
 using System.Diagnostics;
 using DotRocks.Data.Diagnostics;
+using DotRocks.Data.Protocol.Commands;
 
 namespace DotRocks.Data;
 
@@ -41,7 +42,11 @@ public sealed class DotRocksTransaction : DbTransaction
     {
         EnsureActive();
         await _connection
-            .ExecuteTransactionCommandAsync("COMMIT WORK", this, cancellationToken)
+            .ExecuteTransactionCommandAsync(
+                TransactionControlCommand.Commit,
+                this,
+                cancellationToken
+            )
             .ConfigureAwait(false);
         MarkCompleted();
         RecordDuration("committed");
@@ -56,7 +61,11 @@ public sealed class DotRocksTransaction : DbTransaction
     {
         EnsureActive();
         await _connection
-            .ExecuteTransactionCommandAsync("ROLLBACK WORK", this, cancellationToken)
+            .ExecuteTransactionCommandAsync(
+                TransactionControlCommand.Rollback,
+                this,
+                cancellationToken
+            )
             .ConfigureAwait(false);
         MarkCompleted();
         RecordDuration("rolledback");

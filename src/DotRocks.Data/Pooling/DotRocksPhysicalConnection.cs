@@ -327,6 +327,49 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
         );
     }
 
+    public async ValueTask<QueryResult> ExecuteTransactionControlAsync(
+        TransactionControlCommand command,
+        CancellationToken cancellationToken
+    )
+    {
+        string commandText = command switch
+        {
+            TransactionControlCommand.Begin => "START TRANSACTION",
+            TransactionControlCommand.Commit => "COMMIT WORK",
+            TransactionControlCommand.Rollback => "ROLLBACK WORK",
+            _ => throw new ArgumentOutOfRangeException(nameof(command)),
+        };
+        // The logical connection tracks the lifetime of provider-managed transactions and
+        // discards outstanding ones on close. Skip raw-SQL dirtiness only for these fixed
+        // controls; ordinary commands inside a transaction still set their own dirty state.
+        try
+        {
+            QueryResult result = await ExecuteExchangeAsync(
+                    QueryCommandBuilder.Build(commandText),
+                    "I/O failed while executing the StarRocks transaction control command.",
+                    static (firstPayload, reader, ct) =>
+                        TextResultParser.ReadAsync(firstPayload, reader, connectionId: null, ct),
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+            if (result.HasResultSet)
+            {
+                throw new DotRocksException(
+                    "StarRocks returned a result set for a transaction control command."
+                );
+            }
+
+            return result;
+        }
+        catch
+        {
+            // A later successful rollback must not make a session reusable after an
+            // unsuccessful control exchange left its transaction state uncertain.
+            _sessionMayBeDirty = true;
+            throw;
+        }
+    }
+
     /// <summary>
     /// Sends one command payload and parses its response with <paramref name="parseResponse"/>.
     /// Owns the shared exchange preamble (write the request, continue the packet sequence into the

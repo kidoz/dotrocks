@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using DotRocks.Data.Diagnostics;
 using DotRocks.Data.Pooling;
+using DotRocks.Data.Protocol.Commands;
 using DotRocks.Data.Protocol.Results;
 
 namespace DotRocks.Data;
@@ -284,10 +285,24 @@ public sealed class DotRocksConnection : DbConnection, ICloneable
         }
 
         var transaction = new DotRocksTransaction(this, isolationLevel);
-        await ExecuteTransactionCommandAsync("START TRANSACTION", transaction, cancellationToken)
-            .ConfigureAwait(false);
+        // Track START before dispatch so a concurrent close cannot return a lease with a
+        // transaction whose successful response has not yet resumed this method.
         _activeTransaction = transaction;
-        return transaction;
+        try
+        {
+            await ExecuteTransactionCommandAsync(
+                    TransactionControlCommand.Begin,
+                    transaction,
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+            return transaction;
+        }
+        catch
+        {
+            transaction.MarkCompleted();
+            throw;
+        }
     }
 
     /// <summary>
@@ -469,7 +484,7 @@ public sealed class DotRocksConnection : DbConnection, ICloneable
     }
 
     internal async ValueTask ExecuteTransactionCommandAsync(
-        string commandText,
+        TransactionControlCommand command,
         DotRocksTransaction transaction,
         CancellationToken cancellationToken
     )
@@ -482,14 +497,10 @@ public sealed class DotRocksConnection : DbConnection, ICloneable
             );
         }
 
-        QueryResult result = await ExecuteQueryAsync(commandText, cancellationToken)
+        _ = await ExecuteOnPhysicalAsync(physical =>
+                physical.ExecuteTransactionControlAsync(command, cancellationToken)
+            )
             .ConfigureAwait(false);
-        if (result.HasResultSet)
-        {
-            throw new DotRocksException(
-                "StarRocks returned a result set for a transaction control command."
-            );
-        }
     }
 
     internal void ClearActiveTransaction(DotRocksTransaction transaction)
@@ -535,7 +546,7 @@ public sealed class DotRocksConnection : DbConnection, ICloneable
         try
         {
             await ExecuteTransactionCommandAsync(
-                    "ROLLBACK WORK",
+                    TransactionControlCommand.Rollback,
                     transaction,
                     CancellationToken.None
                 )
