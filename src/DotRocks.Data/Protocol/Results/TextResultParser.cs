@@ -192,7 +192,7 @@ internal static class TextResultParser
 
         if (firstPayload[0] == ResultPacket.LocalInFileHeader)
         {
-            throw new DotRocksException(
+            throw new UnsupportedProtocolException(
                 "StarRocks requested LOCAL INFILE, which DotRocks does not support."
             );
         }
@@ -257,7 +257,7 @@ internal static class TextResultParser
 
         if (firstPayload[0] == ResultPacket.LocalInFileHeader)
         {
-            throw new DotRocksException(
+            throw new UnsupportedProtocolException(
                 "StarRocks requested LOCAL INFILE, which DotRocks does not support."
             );
         }

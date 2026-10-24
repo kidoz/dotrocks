@@ -5,6 +5,7 @@ using System.Net.Sockets;
 using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
 using DotRocks.Data;
+using DotRocks.Data.Protocol;
 using DotRocks.Data.Protocol.Commands;
 using DotRocks.Data.Protocol.Framing;
 using DotRocks.Data.Protocol.Handshake;
@@ -750,7 +751,11 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
     /// a broken socket, or a closed stream — after which the connection cannot be reused.
     /// </summary>
     internal static bool IsTransportFailure(Exception exception) =>
-        exception is MalformedPacketException or IOException or ObjectDisposedException;
+        exception
+            is MalformedPacketException
+                or UnsupportedProtocolException
+                or IOException
+                or ObjectDisposedException;
 
     /// <summary>
     /// Wraps a transport-level failure in the public exception model. The command execute path
@@ -765,6 +770,7 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
     ) =>
         exception switch
         {
+            UnsupportedProtocolException unsupported => unsupported,
             MalformedPacketException malformed => new DotRocksException(
                 DescribeMalformedPacket(malformed),
                 serverErrorCode: null,

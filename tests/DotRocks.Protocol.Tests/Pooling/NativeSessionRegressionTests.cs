@@ -84,4 +84,62 @@ public sealed class NativeSessionRegressionTests
         }
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task LocalInfileRequest_ClosesAndRetiresTheConnection(bool asynchronous)
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using var server = FakeStarRocksServer.Start(async stream =>
+        {
+            await FakeStarRocksServer.CompleteAuthenticationAsync(stream).ConfigureAwait(true);
+            var reader = new PacketReader(stream);
+            reader.ResetSequence(0);
+            _ = await reader.ReadPayloadAsync(ct).ConfigureAwait(true);
+            var writer = new PacketWriter(stream);
+            writer.ResetSequence(reader.SequenceId);
+            await writer
+                .WritePayloadAsync(
+                    new byte[]
+                    {
+                        0xFB,
+                        (byte)'s',
+                        (byte)'e',
+                        (byte)'c',
+                        (byte)'r',
+                        (byte)'e',
+                        (byte)'t',
+                    },
+                    ct
+                )
+                .ConfigureAwait(true);
+            Assert.Equal(0, await stream.ReadAsync(new byte[1], ct).ConfigureAwait(true));
+        });
+        string connectionString = server.ConnectionString + ";Pooling=true;Maximum Pool Size=1";
+        DotRocksConnectionOptions options = DotRocksConnectionOptions.Parse(connectionString);
+        DotRocksConnectionPool pool = DotRocksConnectionPool.GetPool(options);
+        try
+        {
+            using var connection = new DotRocksConnection(connectionString);
+            await connection.OpenAsync(ct).ConfigureAwait(true);
+            using DbCommand command = connection.CreateCommand();
+            command.CommandText = "SELECT 1";
+            DotRocksException exception = asynchronous
+                ? await Assert
+                    .ThrowsAnyAsync<DotRocksException>(() => command.ExecuteNonQueryAsync(ct))
+                    .ConfigureAwait(true)
+                : Assert.ThrowsAny<DotRocksException>(() => command.ExecuteNonQuery());
+
+            Assert.Contains("LOCAL INFILE", exception.Message, StringComparison.Ordinal);
+            Assert.DoesNotContain("secret", exception.ToString(), StringComparison.Ordinal);
+            Assert.Equal(ConnectionState.Closed, connection.State);
+            Assert.Equal(0, pool.ActiveLeaseCount);
+            Assert.Equal(0, pool.IdleCount);
+        }
+        finally
+        {
+            DotRocksConnectionPool.Clear(options);
+        }
+    }
+
 }
