@@ -95,6 +95,41 @@ public sealed partial class FlightSqlTransportTests
     }
 
     [Fact]
+    public async Task Transaction_PreCanceledCompletionRemainsActive()
+    {
+        using IHost host = CreateHost();
+        CancellationToken token = TestContext.Current.CancellationToken;
+        await host.StartAsync(token).ConfigureAwait(true);
+        try
+        {
+            var options = new DotRocksFlightSqlOptions(GetServerAddress(host), "root", "secret")
+            {
+                AllowInsecureTransport = true,
+            };
+            await using var source = new DotRocksFlightSqlDataSource(options);
+            await using var transaction = await source
+                .BeginTransactionAsync(token)
+                .ConfigureAwait(true);
+            using var canceled = new CancellationTokenSource();
+            await canceled.CancelAsync().ConfigureAwait(true);
+            await Assert
+                .ThrowsAnyAsync<OperationCanceledException>(() =>
+                    transaction.CommitAsync(canceled.Token)
+                )
+                .ConfigureAwait(true);
+            Assert.False(transaction.IsInDoubt);
+            Assert.False(transaction.IsCompleted);
+            Assert.Equal(0, GetQueryCapture(host).EndTransactions);
+            await transaction.RollbackAsync(token).ConfigureAwait(true);
+            Assert.True(transaction.IsCompleted);
+        }
+        finally
+        {
+            await host.StopAsync(token).ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
     public async Task Clone_PreservesCredentialsWithIndependentFlightSession()
     {
         using IHost host = CreateHost();

@@ -97,6 +97,7 @@ public sealed class DotRocks.FlightSql.DotRocksFlightSqlDbConnection System.Data
 
 public sealed class DotRocks.FlightSql.DotRocksFlightSqlDbTransaction System.Data.Common.DbTransaction
   protected property System.Data.Common.DbConnection DbConnection { get; }
+  public property System.Boolean IsInDoubt { get; }
   public property System.Data.IsolationLevel IsolationLevel { get; }
   protected virtual method System.Void Dispose(System.Boolean disposing)
   public virtual method System.Threading.Tasks.Task CommitAsync(System.Threading.CancellationToken cancellationToken)
@@ -128,6 +129,7 @@ public sealed class DotRocks.FlightSql.DotRocksFlightSqlResult
 
 public sealed class DotRocks.FlightSql.DotRocksFlightSqlTransaction System.IAsyncDisposable
   public property System.Boolean IsCompleted { get; }
+  public property System.Boolean IsInDoubt { get; }
   public method System.Threading.Tasks.Task CommitAsync(System.Threading.CancellationToken cancellationToken)
   public method System.Threading.Tasks.Task RollbackAsync(System.Threading.CancellationToken cancellationToken)
   public method System.Threading.Tasks.Task<DotRocks.FlightSql.DotRocksFlightSqlResult> ExecuteQueryAsync(System.String sql, System.Threading.CancellationToken cancellationToken)

@@ -551,13 +551,14 @@ public sealed partial class FlightSqlTransportTests
         }
     }
 
-    [Fact]
-    public async Task Transaction_StaysActiveWhenTheServerRejectsCompletion()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Transaction_DispatchedCompletionFailureIsInDoubt(bool commit)
     {
         using IHost host = CreateHost();
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         await host.StartAsync(cancellationToken).ConfigureAwait(true);
-
         try
         {
             var options = new DotRocksFlightSqlOptions(GetServerAddress(host), "root", "secret")
@@ -569,17 +570,39 @@ public sealed partial class FlightSqlTransportTests
                 .BeginTransactionAsync(cancellationToken)
                 .ConfigureAwait(true);
             QueryCapture capture = GetQueryCapture(host);
-            capture.FailEndTransaction = true;
-
+            capture.FailEndAfterApply = true;
             await Assert
-                .ThrowsAsync<RpcException>(() => transaction.CommitAsync(cancellationToken))
+                .ThrowsAsync<RpcException>(() =>
+                    commit
+                        ? transaction.CommitAsync(cancellationToken)
+                        : transaction.RollbackAsync(cancellationToken)
+                )
                 .ConfigureAwait(true);
-
-            // A commit the server never confirmed must leave the transaction recoverable.
+            Assert.True(transaction.IsInDoubt);
             Assert.False(transaction.IsCompleted);
-            capture.FailEndTransaction = false;
-            await transaction.CommitAsync(cancellationToken).ConfigureAwait(true);
-            Assert.True(transaction.IsCompleted);
+            Assert.Equal(commit ? 1 : 0, capture.CommittedTransactions);
+            await Assert
+                .ThrowsAsync<InvalidOperationException>(() =>
+                    transaction.CommitAsync(cancellationToken)
+                )
+                .ConfigureAwait(true);
+            await Assert
+                .ThrowsAsync<InvalidOperationException>(() =>
+                    transaction.RollbackAsync(cancellationToken)
+                )
+                .ConfigureAwait(true);
+            await Assert
+                .ThrowsAsync<InvalidOperationException>(() =>
+                    transaction.ExecuteQueryAsync("SELECT 1", cancellationToken)
+                )
+                .ConfigureAwait(true);
+            await Assert
+                .ThrowsAsync<InvalidOperationException>(() =>
+                    transaction.ExecuteUpdateAsync("INSERT INTO t VALUES (1)", cancellationToken)
+                )
+                .ConfigureAwait(true);
+            await transaction.DisposeAsync().ConfigureAwait(true);
+            Assert.Equal(1, capture.EndTransactions);
         }
         finally
         {
@@ -611,9 +634,10 @@ public sealed partial class FlightSqlTransportTests
             await Assert
                 .ThrowsAsync<RpcException>(() => failedCommit.CommitAsync(cancellationToken))
                 .ConfigureAwait(true);
+            Assert.True(((DotRocksFlightSqlDbTransaction)failedCommit).IsInDoubt);
             capture.FailEndTransaction = false;
-            await failedCommit.CommitAsync(cancellationToken).ConfigureAwait(true);
             await failedCommit.DisposeAsync().ConfigureAwait(true);
+            Assert.Equal(1, capture.EndTransactions);
 
             DbTransaction failedRollback = await connection
                 .BeginTransactionAsync(cancellationToken)
@@ -926,6 +950,7 @@ public sealed partial class FlightSqlTransportTests
             }
             else if (request.Type == "EndTransaction")
             {
+                Interlocked.Increment(ref _capture.EndTransactions);
                 ThrowIfSensitiveFailure("end");
                 ActionEndTransactionRequest end = Any
                     .Parser.ParseFrom(request.Body)
@@ -935,6 +960,16 @@ public sealed partial class FlightSqlTransportTests
                 {
                     throw new RpcException(
                         new Status(StatusCode.Internal, "End transaction failed.")
+                    );
+                }
+                if ((int)end.Action == 1)
+                {
+                    Interlocked.Increment(ref _capture.CommittedTransactions);
+                }
+                if (_capture.FailEndAfterApply)
+                {
+                    throw new RpcException(
+                        new Status(StatusCode.Unavailable, "Completion applied but response lost.")
                     );
                 }
             }
@@ -1026,6 +1061,12 @@ public sealed partial class FlightSqlTransportTests
         public int LastEndTransactionAction { get; set; }
 
         public bool FailEndTransaction { get; set; }
+
+        public bool FailEndAfterApply { get; set; }
+
+        public int CommittedTransactions;
+
+        public int EndTransactions;
     }
 
     private sealed class FlightContext(DbContextOptions<FlightContext> options) : DbContext(options)

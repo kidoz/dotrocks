@@ -7,8 +7,8 @@ namespace DotRocks.FlightSql;
 /// Represents an ADO.NET transaction executed through Arrow Flight SQL.
 /// </summary>
 /// <remarks>
-/// Completion is recorded only after the server confirms it. A failed <see cref="CommitAsync" />
-/// therefore leaves the transaction usable so that the caller can retry or roll back.
+/// Completion is recorded only after the server confirms it. A dispatched completion failure
+/// leaves the transaction in doubt and prevents further use of its server handle.
 /// </remarks>
 public sealed class DotRocksFlightSqlDbTransaction : DbTransaction
 {
@@ -26,6 +26,11 @@ public sealed class DotRocksFlightSqlDbTransaction : DbTransaction
         _transaction = transaction;
         IsolationLevel = isolationLevel;
     }
+
+    /// <summary>
+    /// Gets whether completion was dispatched without a confirmed server outcome.
+    /// </summary>
+    public bool IsInDoubt => _transaction.IsInDoubt;
 
     /// <inheritdoc />
     public override IsolationLevel IsolationLevel { get; }

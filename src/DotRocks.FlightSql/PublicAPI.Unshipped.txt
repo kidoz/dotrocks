@@ -119,3 +119,5 @@ override DotRocks.FlightSql.DotRocksFlightSqlDbTransaction.IsolationLevel.get ->
 override DotRocks.FlightSql.DotRocksFlightSqlDbTransaction.Rollback() -> void
 override DotRocks.FlightSql.DotRocksFlightSqlDbTransaction.RollbackAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
 override DotRocks.FlightSql.DotRocksFlightSqlOptions.ToString() -> string!
+DotRocks.FlightSql.DotRocksFlightSqlDbTransaction.IsInDoubt.get -> bool
+DotRocks.FlightSql.DotRocksFlightSqlTransaction.IsInDoubt.get -> bool

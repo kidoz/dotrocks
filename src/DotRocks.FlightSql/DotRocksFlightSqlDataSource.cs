@@ -275,13 +275,15 @@ public sealed class DotRocksFlightSqlDataSource : IDisposable, IAsyncDisposable
 
     internal Task CommitTransactionAsync(
         Transaction transaction,
-        CancellationToken cancellationToken
-    ) => CompleteTransactionAsync(transaction, commit: true, cancellationToken);
+        CancellationToken cancellationToken,
+        Action? onDispatched = null
+    ) => CompleteTransactionAsync(transaction, commit: true, onDispatched, cancellationToken);
 
     internal Task RollbackTransactionAsync(
         Transaction transaction,
-        CancellationToken cancellationToken
-    ) => CompleteTransactionAsync(transaction, commit: false, cancellationToken);
+        CancellationToken cancellationToken,
+        Action? onDispatched = null
+    ) => CompleteTransactionAsync(transaction, commit: false, onDispatched, cancellationToken);
 
     /// <inheritdoc />
     public void Dispose() => DisposeAsync().AsTask().GetAwaiter().GetResult();
@@ -461,6 +463,7 @@ public sealed class DotRocksFlightSqlDataSource : IDisposable, IAsyncDisposable
     private async Task CompleteTransactionAsync(
         Transaction transaction,
         bool commit,
+        Action? onDispatched,
         CancellationToken cancellationToken
     )
     {
@@ -481,6 +484,8 @@ public sealed class DotRocksFlightSqlDataSource : IDisposable, IAsyncDisposable
                 Action = (ActionEndTransactionRequest.Types.EndTransaction)(commit ? 1 : 2),
             };
             var action = new FlightAction(EndTransactionAction, Any.Pack(request).ToByteArray());
+            timeout.Token.ThrowIfCancellationRequested();
+            onDispatched?.Invoke();
             using AsyncServerStreamingCall<FlightResult> call = connection.Client.DoAction(
                 action,
                 headers,

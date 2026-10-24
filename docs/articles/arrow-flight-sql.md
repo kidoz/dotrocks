@@ -129,8 +129,11 @@ result streaming until the reader is exhausted or disposed. A token passed to an
 `OperationCanceledException`, not as a gRPC `RpcException`. `CloseAsync` rolls back an active
 Flight transaction asynchronously before closing the logical connection.
 
-A Flight transaction is marked completed only once the server confirms it, so a `CommitAsync` or
-`RollbackAsync` that fails leaves the transaction active and lets the caller retry or roll back.
+A Flight transaction is completed only after the server confirms it. If a completion request was
+dispatched and then failed, `IsInDoubt` is true: the server may have committed even though the
+response was lost. The handle rejects subsequent queries, updates, commits, and rollbacks;
+disposal sends no further completion request. Reconcile the outcome with the server before
+retrying the work. A cancellation or failure before dispatch leaves the transaction active.
 
 StarRocks decimal columns declared with more precision than `System.Decimal` can represent (up to
 `DECIMAL(38, s)`) are reported and materialized as `DotRocks.Data.DotRocksDecimal`. `GetDecimal`

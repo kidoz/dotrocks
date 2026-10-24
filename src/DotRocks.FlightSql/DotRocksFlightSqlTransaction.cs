@@ -6,14 +6,15 @@ namespace DotRocks.FlightSql;
 /// Represents a Flight SQL transaction owned by a <see cref="DotRocksFlightSqlDataSource" />.
 /// </summary>
 /// <remarks>
-/// A transaction is marked completed only after the server confirms completion, so a failed commit
-/// or rollback leaves it active and still recoverable.
+/// A dispatched completion whose response is lost leaves the transaction in doubt. Reconcile its
+/// outcome with the server before taking further action; the handle cannot be reused or rolled back.
 /// </remarks>
 public sealed class DotRocksFlightSqlTransaction : IAsyncDisposable
 {
     private const int Active = 0;
     private const int Completing = 1;
     private const int Completed = 2;
+    private const int InDoubt = 3;
 
     private readonly DotRocksFlightSqlDataSource _dataSource;
     private readonly Transaction _transaction;
@@ -32,6 +33,11 @@ public sealed class DotRocksFlightSqlTransaction : IAsyncDisposable
     /// Gets whether the server has confirmed completion of this transaction.
     /// </summary>
     public bool IsCompleted => Volatile.Read(ref _state) == Completed;
+
+    /// <summary>
+    /// Gets whether completion was dispatched without a confirmed outcome.
+    /// </summary>
+    public bool IsInDoubt => Volatile.Read(ref _state) == InDoubt;
 
     /// <summary>
     /// Executes a query in this transaction.
@@ -68,8 +74,8 @@ public sealed class DotRocksFlightSqlTransaction : IAsyncDisposable
     /// Commits the transaction.
     /// </summary>
     /// <remarks>
-    /// The transaction stays active when the server does not confirm the commit, so the caller can
-    /// retry or roll back.
+    /// A failure after dispatch marks the transaction in doubt. Do not retry completion or attempt
+    /// rollback; reconcile the outcome with the server.
     /// </remarks>
     public Task CommitAsync(CancellationToken cancellationToken = default) =>
         CompleteAsync(commit: true, cancellationToken);
@@ -78,8 +84,7 @@ public sealed class DotRocksFlightSqlTransaction : IAsyncDisposable
     /// Rolls back the transaction.
     /// </summary>
     /// <remarks>
-    /// The transaction stays active when the server does not confirm the rollback, so the caller
-    /// can retry.
+    /// A failure after dispatch marks the transaction in doubt and prevents further operations.
     /// </remarks>
     public Task RollbackAsync(CancellationToken cancellationToken = default) =>
         CompleteAsync(commit: false, cancellationToken);
@@ -92,18 +97,24 @@ public sealed class DotRocksFlightSqlTransaction : IAsyncDisposable
             return;
         }
 
+        bool dispatched = false;
         try
         {
             await _dataSource
-                .RollbackTransactionAsync(_transaction, CancellationToken.None)
+                .RollbackTransactionAsync(
+                    _transaction,
+                    CancellationToken.None,
+                    () => dispatched = true
+                )
                 .ConfigureAwait(false);
         }
-        finally
+        catch
         {
-            // Disposal is the last chance to reach the server; a failed rollback still ends the
-            // client-side transaction rather than leaving an unusable handle behind.
-            Volatile.Write(ref _state, Completed);
+            Volatile.Write(ref _state, dispatched ? InDoubt : Active);
+            throw;
         }
+
+        Volatile.Write(ref _state, Completed);
     }
 
     internal Transaction FlightTransaction
@@ -117,29 +128,48 @@ public sealed class DotRocksFlightSqlTransaction : IAsyncDisposable
 
     private async Task CompleteAsync(bool commit, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (Interlocked.CompareExchange(ref _state, Completing, Active) != Active)
         {
             throw new InvalidOperationException(
-                "The Flight SQL transaction is already completed or completing."
+                "The Flight SQL transaction is completed, completing, or in doubt."
             );
         }
 
+        bool dispatched = false;
         try
         {
             Task completion = commit
-                ? _dataSource.CommitTransactionAsync(_transaction, cancellationToken)
-                : _dataSource.RollbackTransactionAsync(_transaction, cancellationToken);
+                ? _dataSource.CommitTransactionAsync(
+                    _transaction,
+                    cancellationToken,
+                    () => dispatched = true
+                )
+                : _dataSource.RollbackTransactionAsync(
+                    _transaction,
+                    cancellationToken,
+                    () => dispatched = true
+                );
             await completion.ConfigureAwait(false);
         }
         catch
         {
-            Volatile.Write(ref _state, Active);
+            Volatile.Write(ref _state, dispatched ? InDoubt : Active);
             throw;
         }
 
         Volatile.Write(ref _state, Completed);
     }
 
-    private void ThrowIfNotActive() =>
+    private void ThrowIfNotActive()
+    {
+        if (IsInDoubt)
+        {
+            throw new InvalidOperationException(
+                "The Flight SQL transaction outcome is in doubt; reconcile it with the server."
+            );
+        }
+
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _state) != Active, this);
+    }
 }
