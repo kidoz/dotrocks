@@ -108,7 +108,27 @@ public sealed class HandshakeResponseBuilderTests
         Assert.DoesNotContain("secret", exception.ToString(), StringComparison.Ordinal);
     }
 
-    private static ServerHandshake BuildHandshake(string authPluginName, bool supportsTls = false)
+    [Fact]
+    public void Build_RejectsDatabaseWithoutConnectWithDbCapability()
+    {
+        DotRocksConnectionOptions options = DotRocksConnectionOptions.Parse("Database=warehouse");
+        ServerHandshake handshake = BuildHandshake(
+            MySqlNativePassword.PluginName,
+            supportsDatabase: false
+        );
+
+        DotRocksException exception = Assert.Throws<DotRocksException>(() =>
+            HandshakeResponseBuilder.Build(options, handshake)
+        );
+
+        Assert.Contains("selecting a database", exception.Message, StringComparison.Ordinal);
+    }
+
+    private static ServerHandshake BuildHandshake(
+        string authPluginName,
+        bool supportsTls = false,
+        bool supportsDatabase = true
+    )
     {
         CapabilityFlags capabilities =
             CapabilityFlags.LongPassword
@@ -116,8 +136,11 @@ public sealed class HandshakeResponseBuilderTests
             | CapabilityFlags.Protocol41
             | CapabilityFlags.SecureConnection
             | CapabilityFlags.PluginAuth
-            | CapabilityFlags.ConnectWithDb
             | CapabilityFlags.Transactions;
+        if (supportsDatabase)
+        {
+            capabilities |= CapabilityFlags.ConnectWithDb;
+        }
         if (supportsTls)
         {
             capabilities |= CapabilityFlags.Ssl;

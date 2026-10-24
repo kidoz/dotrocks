@@ -111,6 +111,16 @@ internal static class HandshakeResponseBuilder
             | CapabilityFlags.PluginAuth
             | CapabilityFlags.Transactions;
 
+        if (
+            options.Database.Length > 0
+            && !handshake.Capabilities.HasFlag(CapabilityFlags.ConnectWithDb)
+        )
+        {
+            throw new DotRocksException(
+                "The StarRocks server does not support selecting a database during authentication."
+            );
+        }
+
         if (options.Database.Length > 0)
         {
             capabilities |= CapabilityFlags.ConnectWithDb;
