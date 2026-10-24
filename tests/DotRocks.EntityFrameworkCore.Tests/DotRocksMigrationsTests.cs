@@ -630,6 +630,65 @@ public sealed class DotRocksMigrationsTests
         );
     }
 
+    [Fact]
+    public void HistoryRepository_MigrationLock_RequiresExternalSerialization()
+    {
+        using var context = CreateContext();
+        var history = context.GetService<IHistoryRepository>();
+
+        Assert.Throws<NotSupportedException>(() => history.AcquireDatabaseLock());
+    }
+
+    [Fact]
+    public void HistoryRepository_ExternalMigrationLockPolicy_ProducesToken()
+    {
+        var optionsBuilder = new DbContextOptionsBuilder<UnitContext>();
+        optionsBuilder.UseStarRocks(
+            "Server=127.0.0.1;User ID=root",
+            starRocks => starRocks.ExternallySerializedMigrations()
+        );
+        using var context = new UnitContext(optionsBuilder.Options);
+        var history = context.GetService<IHistoryRepository>();
+
+        using IMigrationsDatabaseLock synchronous = history.AcquireDatabaseLock();
+        Assert.Same(
+            history,
+            Assert.IsType<DotRocksMigrationDatabaseLock>(synchronous).HistoryRepository
+        );
+    }
+
+    [Fact]
+    public async Task HistoryRepository_AsyncMigrationLock_RequiresExternalSerialization()
+    {
+        using var context = CreateContext();
+        var history = context.GetService<IHistoryRepository>();
+        await Assert.ThrowsAsync<NotSupportedException>(() =>
+            history.AcquireDatabaseLockAsync(TestContext.Current.CancellationToken)
+        );
+    }
+
+    [Fact]
+    public async Task HistoryRepository_ExternalMigrationLockPolicy_HonorsAsyncDisposalAndCancellation()
+    {
+        var optionsBuilder = new DbContextOptionsBuilder<UnitContext>();
+        optionsBuilder.UseStarRocks(
+            "Server=127.0.0.1;User ID=root",
+            starRocks => starRocks.ExternallySerializedMigrations()
+        );
+        using var context = new UnitContext(optionsBuilder.Options);
+        var history = context.GetService<IHistoryRepository>();
+        IMigrationsDatabaseLock token = await history
+            .AcquireDatabaseLockAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+        await using var tokenScope = token.ConfigureAwait(true);
+        Assert.Same(history, Assert.IsType<DotRocksMigrationDatabaseLock>(token).HistoryRepository);
+        using var cancellation = new CancellationTokenSource();
+        await cancellation.CancelAsync().ConfigureAwait(true);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            history.AcquireDatabaseLockAsync(cancellation.Token)
+        );
+    }
+
     [Theory]
     [InlineData(1049, true)]
     [InlineData(1045, false)]

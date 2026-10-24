@@ -6,14 +6,20 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 string connectionString =
     Environment.GetEnvironmentVariable("DOTROCKS_CONNECTION_STRING")
-    ?? "Server=127.0.0.1;Port=9030;User ID=root;Database=dotrocks_sample";
+    ?? "Server=127.0.0.1;Port=9030;User ID=root;Ssl Mode=Disabled;Database=dotrocks_sample";
 
 var optionsBuilder = new DbContextOptionsBuilder<SampleContext>();
 optionsBuilder.UseStarRocks(
     connectionString,
-    // Pin the target StarRocks version. Building the options never contacts the server;
+    // Record version metadata (it does not change SQL or transport capabilities).
+    // Building the options never contacts the server;
     // use StarRocksServerVersion.DetectAsync(connectionString) to discover it once at startup.
-    starRocks => starRocks.ServerVersion(new StarRocksServerVersion(4, 0, 7))
+    starRocks =>
+        starRocks
+            .ServerVersion(new StarRocksServerVersion(4, 0, 7))
+            // This single-process sample runs migrations itself. Production deployments must hold
+            // an external lock across all migrators before invoking MigrateAsync.
+            .ExternallySerializedMigrations()
 );
 DbContextOptions<SampleContext> options = optionsBuilder.Options;
 

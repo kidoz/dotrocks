@@ -2,13 +2,16 @@
 
 public sealed class DotRocks.EntityFrameworkCore.Infrastructure.DotRocksDbContextOptionsBuilder Microsoft.EntityFrameworkCore.Infrastructure.RelationalDbContextOptionsBuilder<DotRocks.EntityFrameworkCore.Infrastructure.DotRocksDbContextOptionsBuilder, DotRocks.EntityFrameworkCore.Infrastructure.DotRocksOptionsExtension>
   public DotRocks.EntityFrameworkCore.Infrastructure.DotRocksDbContextOptionsBuilder(Microsoft.EntityFrameworkCore.DbContextOptionsBuilder optionsBuilder)
+  public method DotRocks.EntityFrameworkCore.Infrastructure.DotRocksDbContextOptionsBuilder ExternallySerializedMigrations()
   public method DotRocks.EntityFrameworkCore.Infrastructure.DotRocksDbContextOptionsBuilder ServerVersion(DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion serverVersion)
 
 public sealed class DotRocks.EntityFrameworkCore.Infrastructure.DotRocksOptionsExtension Microsoft.EntityFrameworkCore.Infrastructure.RelationalOptionsExtension
   public DotRocks.EntityFrameworkCore.Infrastructure.DotRocksOptionsExtension()
   public property Microsoft.EntityFrameworkCore.Infrastructure.DbContextOptionsExtensionInfo Info { get; }
+  public property System.Boolean MigrationsExternallySerialized { get; }
   public property DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion ServerVersion { get; }
   protected virtual method Microsoft.EntityFrameworkCore.Infrastructure.RelationalOptionsExtension Clone()
+  public method DotRocks.EntityFrameworkCore.Infrastructure.DotRocksOptionsExtension WithExternallySerializedMigrations()
   public method DotRocks.EntityFrameworkCore.Infrastructure.DotRocksOptionsExtension WithServerVersion(DotRocks.EntityFrameworkCore.Infrastructure.StarRocksServerVersion serverVersion)
   public virtual method System.Void ApplyServices(Microsoft.Extensions.DependencyInjection.IServiceCollection services)
 

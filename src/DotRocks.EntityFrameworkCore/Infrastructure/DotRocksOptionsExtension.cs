@@ -19,13 +19,25 @@ public sealed class DotRocksOptionsExtension : RelationalOptionsExtension
         : base(copyFrom)
     {
         _serverVersion = copyFrom._serverVersion;
+        MigrationsExternallySerialized = copyFrom.MigrationsExternallySerialized;
     }
 
     /// <inheritdoc />
     public override DbContextOptionsExtensionInfo Info => _info ??= new ExtensionInfo(this);
 
-    /// <summary>Gets the explicitly configured StarRocks server version, if any.</summary>
+    /// <summary>Gets the recorded StarRocks version metadata, if any; it does not control SQL or transport capabilities.</summary>
     public StarRocksServerVersion? ServerVersion => _serverVersion;
+
+    /// <summary>Gets whether the application supplies deployment-wide migration serialization.</summary>
+    public bool MigrationsExternallySerialized { get; private set; }
+
+    /// <summary>Returns a copy declaring that the application holds an external migration lock.</summary>
+    public DotRocksOptionsExtension WithExternallySerializedMigrations()
+    {
+        var clone = (DotRocksOptionsExtension)Clone();
+        clone.MigrationsExternallySerialized = true;
+        return clone;
+    }
 
     /// <summary>Returns a copy of this extension with the given StarRocks server version.</summary>
     public DotRocksOptionsExtension WithServerVersion(StarRocksServerVersion serverVersion)

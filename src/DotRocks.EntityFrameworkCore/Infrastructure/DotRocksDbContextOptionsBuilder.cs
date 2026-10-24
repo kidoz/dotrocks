@@ -12,11 +12,22 @@ public sealed class DotRocksDbContextOptionsBuilder(DbContextOptionsBuilder opti
     )
 {
     /// <summary>
-    /// Configures the StarRocks server version the provider targets. The version is recorded
-    /// in the options only; constructing the options never contacts the server. Discover it once
+    /// Declares that the application serializes migrations across every process and instance,
+    /// using an external lock held for the entire migration. StarRocks has no verified database
+    /// migration lock; without this declaration runtime migration execution fails explicitly.
+    /// This method does not acquire a lock.
+    /// </summary>
+    /// <returns>The same builder so calls can be chained.</returns>
+    public DotRocksDbContextOptionsBuilder ExternallySerializedMigrations() =>
+        WithOption(extension => extension.WithExternallySerializedMigrations());
+
+    /// <summary>
+    /// Records a StarRocks server version as provider metadata and service-provider cache identity.
+    /// This setting does not change SQL generation or transport capability policy. Constructing
+    /// the options never contacts the server. Discover the version once
     /// with <see cref="StarRocksServerVersion.DetectAsync(string, System.Threading.CancellationToken)"/>.
     /// </summary>
-    /// <param name="serverVersion">The StarRocks server version to target.</param>
+    /// <param name="serverVersion">The StarRocks server version to record.</param>
     /// <returns>The same builder so calls can be chained.</returns>
     public DotRocksDbContextOptionsBuilder ServerVersion(StarRocksServerVersion serverVersion)
     {

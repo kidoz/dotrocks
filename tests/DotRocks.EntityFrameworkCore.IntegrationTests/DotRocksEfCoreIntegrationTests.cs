@@ -2744,7 +2744,10 @@ public sealed class DotRocksEfCoreIntegrationTests
     )
     {
         var optionsBuilder = new DbContextOptionsBuilder<DotRocksTestContext>();
-        optionsBuilder.UseStarRocks(connectionString);
+        optionsBuilder.UseStarRocks(
+            connectionString,
+            starRocks => starRocks.ExternallySerializedMigrations()
+        );
         if (interceptors.Length > 0)
         {
             optionsBuilder.AddInterceptors(interceptors);
@@ -2770,7 +2773,10 @@ public sealed class DotRocksEfCoreIntegrationTests
         where TContext : DbContext
     {
         var optionsBuilder = new DbContextOptionsBuilder<TContext>();
-        optionsBuilder.UseStarRocks(connectionString);
+        optionsBuilder.UseStarRocks(
+            connectionString,
+            starRocks => starRocks.ExternallySerializedMigrations()
+        );
         if (interceptors.Length > 0)
         {
             optionsBuilder.AddInterceptors(interceptors);

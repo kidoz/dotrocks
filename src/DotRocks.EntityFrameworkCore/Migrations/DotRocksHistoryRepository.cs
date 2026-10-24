@@ -2,7 +2,9 @@ using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using DotRocks.Data;
+using DotRocks.EntityFrameworkCore.Infrastructure;
 using DotRocks.EntityFrameworkCore.Storage;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Microsoft.EntityFrameworkCore.Migrations;
 
@@ -39,15 +41,26 @@ internal sealed class DotRocksHistoryRepository(HistoryRepositoryDependencies de
         + " ORDER BY "
         + SqlGenerationHelper.DelimitIdentifier(MigrationIdColumnName);
 
-    public override IMigrationsDatabaseLock AcquireDatabaseLock() =>
-        new DotRocksMigrationDatabaseLock(this);
+    public override IMigrationsDatabaseLock AcquireDatabaseLock()
+    {
+        DotRocksOptionsExtension? options =
+            Dependencies.Options.FindExtension<DotRocksOptionsExtension>();
+        if (options?.MigrationsExternallySerialized != true)
+        {
+            throw new NotSupportedException(
+                "StarRocks has no verified database migration lock. Hold an external lock across all migrators and configure ExternallySerializedMigrations(), or generate a migration script for a serialized deployment."
+            );
+        }
+
+        return new DotRocksMigrationDatabaseLock(this);
+    }
 
     public override Task<IMigrationsDatabaseLock> AcquireDatabaseLockAsync(
         CancellationToken cancellationToken = default
     )
     {
         cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult<IMigrationsDatabaseLock>(new DotRocksMigrationDatabaseLock(this));
+        return Task.FromResult(AcquireDatabaseLock());
     }
 
     // EF Core wraps the whole migration in an explicit transaction, but StarRocks rejects every
@@ -64,7 +77,7 @@ internal sealed class DotRocksHistoryRepository(HistoryRepositoryDependencies de
     )]
     public override bool Exists()
     {
-        using DotRocksConnection connection = CreateNonTransactionalConnection();
+        using DbConnection connection = CreateNonTransactionalConnection();
         if (!TryOpen(connection))
         {
             return false;

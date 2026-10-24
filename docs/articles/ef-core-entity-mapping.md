@@ -150,6 +150,27 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
 }
 ```
 
+### Runtime migration serialization
+
+StarRocks has no verified database-wide migration lock. `Database.Migrate()` and
+`MigrateAsync()` therefore fail explicitly by default when EF requests the migration lock.
+Generate a migration script for a serialized deployment, or hold an external lock across
+all processes and instances for the entire migration, and declare that policy:
+
+```csharp
+optionsBuilder.UseStarRocks(connectionString,
+    starRocks => starRocks.ExternallySerializedMigrations());
+
+// The deployment coordinator must already hold its external lock before this call.
+await context.Database.MigrateAsync(cancellationToken);
+```
+
+`ExternallySerializedMigrations()` does not acquire or release that external lock. A
+process-local semaphore alone cannot coordinate multiple application instances. History
+reads use independent, credential-preserving clones of the configured connection, including
+Flight SQL connections; custom connections must implement `ICloneable` with equivalent
+credentials and transport configuration and return a new closed connection.
+
 ### Composite primary keys
 
 A writable entity may declare a multi-column key. Pass the same store columns, in the same

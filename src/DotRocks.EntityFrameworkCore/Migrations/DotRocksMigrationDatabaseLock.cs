@@ -11,6 +11,8 @@ namespace DotRocks.EntityFrameworkCore.Migrations;
 internal sealed class DotRocksMigrationDatabaseLock(IHistoryRepository historyRepository)
     : IMigrationsDatabaseLock
 {
+    // This token is created only after the caller explicitly declares an external lock. Its
+    // lifetime belongs to that external coordinator; disposing EF's token must not release it.
     public IHistoryRepository HistoryRepository { get; } = historyRepository;
 
     public void Dispose() { }

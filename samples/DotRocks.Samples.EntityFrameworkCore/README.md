@@ -19,3 +19,9 @@ The sample demonstrates:
 Current unsupported EF behavior includes generated values, composite keys, navigations,
 owned types, concurrency tokens, binary/varbinary mapping, idempotent migration scripts,
 and migration schema mutations beyond conservative table creation/drop.
+
+The sample assumes one process and explicitly declares `ExternallySerializedMigrations()`.
+In a deployment, hold an external lock across all processes and instances for the whole
+migration, or apply a generated migration script through a serialized deployment job.
+The provider fails runtime migrations by default because StarRocks has no verified
+database migration lock.
