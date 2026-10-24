@@ -153,9 +153,15 @@ public sealed class ConnectionIntegrationTests
                 .ConfigureAwait(true);
             Assert.Contains(
                 "prepared statement",
+                exception.ServerMessage,
+                StringComparison.OrdinalIgnoreCase
+            );
+            Assert.DoesNotContain(
+                "prepared statement",
                 exception.Message,
                 StringComparison.OrdinalIgnoreCase
             );
+            Assert.DoesNotContain(database, exception.ToString(), StringComparison.Ordinal);
         }
         finally
         {

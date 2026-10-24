@@ -42,18 +42,17 @@ internal static class ResultPacket
 
         string message = SanitizeServerMessage(Encoding.UTF8.GetString(reader.ReadToEnd()));
         return new DotRocksException(
-            string.IsNullOrWhiteSpace(message) ? "StarRocks returned an error." : message,
+            "StarRocks returned an error. Inspect ServerErrorCode and SqlState for details.",
             errorCode,
             sqlState,
             isTransient: false,
-            connectionId
+            connectionId,
+            serverMessage: message
         );
     }
 
-    // The server error message is untrusted text that flows into DotRocksException.Message and, from
-    // there, into whatever logging a consumer wires up. Replace control characters (CR, LF, escape,
-    // etc.) with spaces so a hostile or buggy server cannot forge log lines or smuggle terminal
-    // escape sequences through the message.
+    // Server text is opt-in diagnostic data and can contain secrets. Even there, replace control
+    // characters so copying it into diagnostic output cannot forge lines or terminal escapes.
     private static string SanitizeServerMessage(string message)
     {
         int controlIndex = -1;

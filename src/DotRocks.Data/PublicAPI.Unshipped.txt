@@ -1,4 +1,5 @@
 #nullable enable
+DotRocks.Data.DotRocksException.ServerMessage.get -> string?
 DotRocks.Data.DotRocksConnectionStringBuilder.StreamLoadRedirectOrigins.get -> string!
 DotRocks.Data.DotRocksConnectionStringBuilder.StreamLoadRedirectOrigins.set -> void
 DotRocks.Data.DotRocksCommand.ParameterMode.get -> DotRocks.Data.DotRocksParameterMode

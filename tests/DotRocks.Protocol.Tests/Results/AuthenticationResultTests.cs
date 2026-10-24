@@ -32,7 +32,7 @@ public sealed class AuthenticationResultTests
         Assert.Equal("28000", exception.SqlState);
         Assert.Equal(99u, exception.ConnectionId);
         Assert.False(exception.IsTransient);
-        Assert.Contains("Access denied", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("Access denied", exception.ServerMessage, StringComparison.Ordinal);
     }
 
     [Fact]

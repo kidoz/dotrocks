@@ -270,7 +270,8 @@ public sealed class TextResultParserTests
         Assert.Equal(1064, exception.ServerErrorCode);
         Assert.Equal("42000", exception.SqlState);
         Assert.Equal(42u, exception.ConnectionId);
-        Assert.Contains("syntax error", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("syntax error", exception.ServerMessage, StringComparison.Ordinal);
+        Assert.DoesNotContain("syntax error", exception.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -312,8 +313,26 @@ public sealed class TextResultParserTests
         Assert.DoesNotContain('\r', exception.Message);
         Assert.DoesNotContain('\n', exception.Message);
         Assert.DoesNotContain('\t', exception.Message);
-        Assert.Contains("line1", exception.Message, StringComparison.Ordinal);
-        Assert.Contains("FAKE LOG ENTRY", exception.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain('\r', exception.ServerMessage!);
+        Assert.DoesNotContain('\n', exception.ServerMessage!);
+        Assert.DoesNotContain('\t', exception.ServerMessage!);
+        Assert.Contains("line1", exception.ServerMessage, StringComparison.Ordinal);
+        Assert.Contains("FAKE LOG ENTRY", exception.ServerMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ReadError_ServerEchoesSqlAndParameterValues_OrdinaryExceptionIsRedacted()
+    {
+        const string serverText = "SELECT * FROM users WHERE token = 'super-secret-token'";
+        DotRocksException exception = ResultPacket.ReadError(
+            StarRocksPacketFactory.Error(serverText),
+            connectionId: 42
+        );
+
+        Assert.Equal(serverText, exception.ServerMessage);
+        Assert.DoesNotContain("super-secret-token", exception.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("SELECT", exception.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("super-secret-token", exception.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]

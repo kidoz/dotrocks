@@ -78,6 +78,9 @@ credentials off the wire in cleartext, DotRocks enforces HTTPS by default.
 - **Basic credentials are only forwarded over HTTPS** (or when insecure load is opted in).
   An HTTPS→HTTP redirect is refused even when insecure load is allowed, since it would
   forward credentials in cleartext.
+- Redirects can receive credentials only at the configured endpoint origin or an exact origin
+  listed in `Stream Load Redirect Origins`. List trusted BE origins explicitly, including
+  their scheme and port; a public HTTPS host alone does not establish trust.
 
 ```csharp
 using var client = new DotRocksStreamLoadClient(

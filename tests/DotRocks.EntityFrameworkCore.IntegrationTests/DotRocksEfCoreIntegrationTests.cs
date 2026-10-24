@@ -290,7 +290,11 @@ public sealed class DotRocksEfCoreIntegrationTests
                     )
                 )
                 .ConfigureAwait(true);
-            Assert.Contains("whole-number count", fractional.Message, StringComparison.Ordinal);
+            Assert.Contains(
+                "whole-number count",
+                fractional.ServerMessage!,
+                StringComparison.Ordinal
+            );
 
             // An inlined DateTime constant reaches StarRocks as a DATETIME literal it can parse.
             Assert.Equal(
@@ -1438,7 +1442,7 @@ public sealed class DotRocksEfCoreIntegrationTests
                 // Rejected (newer StarRocks): the multi-DML-in-one-transaction limitation.
                 Assert.Contains(
                     "subjected to DML operations before",
-                    inner.Message,
+                    inner.ServerMessage!,
                     StringComparison.OrdinalIgnoreCase
                 );
             }

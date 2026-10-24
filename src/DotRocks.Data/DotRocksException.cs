@@ -32,7 +32,8 @@ public class DotRocksException : Exception
         string? sqlState,
         bool isTransient,
         uint? connectionId,
-        Exception? innerException = null
+        Exception? innerException = null,
+        string? serverMessage = null
     )
         : base(message, innerException)
     {
@@ -40,6 +41,7 @@ public class DotRocksException : Exception
         SqlState = sqlState;
         IsTransient = isTransient;
         ConnectionId = connectionId;
+        ServerMessage = serverMessage;
     }
 
     /// <summary>
@@ -61,4 +63,11 @@ public class DotRocksException : Exception
     /// Gets the non-secret server connection identifier, when one was available.
     /// </summary>
     public uint? ConnectionId { get; }
+
+    /// <summary>
+    /// Gets the untrusted server error text with control characters removed, when available.
+    /// This can contain SQL and parameter values; access it only for deliberate diagnostics
+    /// and do not include it in ordinary logs.
+    /// </summary>
+    public string? ServerMessage { get; }
 }

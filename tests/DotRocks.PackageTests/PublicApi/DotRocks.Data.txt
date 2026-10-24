@@ -181,6 +181,7 @@ public class DotRocks.Data.DotRocksException System.Exception
   public property System.UInt32? ConnectionId { get; }
   public property System.Boolean IsTransient { get; }
   public property System.Int32? ServerErrorCode { get; }
+  public property System.String ServerMessage { get; }
   public property System.String SqlState { get; }
 
 public sealed class DotRocks.Data.DotRocksFactory System.Data.Common.DbProviderFactory
