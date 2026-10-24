@@ -1,5 +1,8 @@
+using System.Data;
 using System.Data.Common;
 using DotRocks.Data;
+using DotRocks.Data.Pooling;
+using DotRocks.Protocol.Tests.TestInfrastructure;
 using Xunit;
 
 namespace DotRocks.Protocol.Tests.Loading;
@@ -71,16 +74,201 @@ public sealed class DotRocksDataSourceTests
     }
 
     [Fact]
-    public void CreateCommand_AttachesClosedDotRocksConnection()
+    public void CreateCommand_OwnsItsConnection()
     {
         using var dataSource = new DotRocksDataSource("Host=starrocks.local;User=alice");
-
         using DbCommand command = dataSource.CreateCommand("SELECT 1");
 
-        Assert.IsType<DotRocksCommand>(command);
         Assert.Equal("SELECT 1", command.CommandText);
-        Assert.IsType<DotRocksConnection>(command.Connection);
-        Assert.Equal(dataSource.ConnectionString, command.Connection.ConnectionString);
+        Assert.Throws<NotSupportedException>(() => command.Connection);
+        Assert.Throws<NotSupportedException>(() => command.Transaction);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Usage",
+        "CA1849:Call async methods when in an async method",
+        Justification = "The theory deliberately verifies synchronous and asynchronous ADO.NET execution paths."
+    )]
+    public async Task CreateCommand_ExecutesAndReturnsConnectionAfterEveryOperation(
+        bool asynchronous
+    )
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        var release = new TaskCompletionSource();
+        using var server = FakeStarRocksServer.Start(async stream =>
+        {
+            await FakeStarRocksServer
+                .CompleteAuthenticationVerifyingScrambleAsync(stream)
+                .ConfigureAwait(true);
+            _ = await FakeStarRocksServer.ReadCommandAndReplyOkAsync(stream).ConfigureAwait(true);
+            _ = await FakeStarRocksServer
+                .ReadCommandAndReplyResultSetAsync(stream, "scalar")
+                .ConfigureAwait(true);
+            _ = await FakeStarRocksServer
+                .ReadCommandAndReplyResultSetAsync(stream, "row")
+                .ConfigureAwait(true);
+            await release.Task.WaitAsync(ct).ConfigureAwait(true);
+        });
+        string connectionString = server.ConnectionString + ";Pooling=true;Maximum Pool Size=1";
+        DotRocksConnectionOptions options = DotRocksConnectionOptions.Parse(connectionString);
+        DotRocksConnectionPool pool = DotRocksConnectionPool.GetPool(options);
+        try
+        {
+            using var dataSource = new DotRocksDataSource(connectionString);
+            DbCommand command = dataSource.CreateCommand("SELECT 1");
+            await using (command.ConfigureAwait(true))
+            {
+                Assert.Equal(
+                    0,
+                    asynchronous
+                        ? await command.ExecuteNonQueryAsync(ct).ConfigureAwait(true)
+                        : command.ExecuteNonQuery()
+                );
+                Assert.Equal(0, pool.ActiveLeaseCount);
+                Assert.Equal(1, pool.IdleCount);
+                Assert.Equal(
+                    "scalar",
+                    asynchronous
+                        ? await command.ExecuteScalarAsync(ct).ConfigureAwait(true)
+                        : command.ExecuteScalar()
+                );
+                Assert.Equal(0, pool.ActiveLeaseCount);
+
+                DbDataReader reader = asynchronous
+                    ? await command.ExecuteReaderAsync(ct).ConfigureAwait(true)
+                    : command.ExecuteReader();
+                Assert.Equal(1, pool.ActiveLeaseCount);
+                if (asynchronous)
+                {
+                    Assert.True(await reader.ReadAsync(ct).ConfigureAwait(true));
+                    Assert.Equal("row", reader.GetString(0));
+                    await reader.DisposeAsync().ConfigureAwait(true);
+                }
+                else
+                {
+                    Assert.True(reader.Read());
+                    Assert.Equal("row", reader.GetString(0));
+                    reader.Dispose();
+                }
+
+                Assert.Equal(0, pool.ActiveLeaseCount);
+                Assert.Equal(1, pool.IdleCount);
+            }
+            Assert.Equal(1, server.ConnectionCount);
+        }
+        finally
+        {
+            DotRocksConnectionPool.Clear(options);
+            release.TrySetResult();
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CreateCommand_DisposalReleasesAnActiveReaderConnection(bool asynchronous)
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        var release = new TaskCompletionSource();
+        using var server = FakeStarRocksServer.Start(async stream =>
+        {
+            await FakeStarRocksServer.CompleteAuthenticationAsync(stream).ConfigureAwait(true);
+            _ = await FakeStarRocksServer
+                .ReadCommandAndReplyResultSetAsync(stream, "row")
+                .ConfigureAwait(true);
+            await release.Task.WaitAsync(ct).ConfigureAwait(true);
+        });
+        string connectionString = server.ConnectionString + ";Pooling=true;Maximum Pool Size=1";
+        DotRocksConnectionOptions options = DotRocksConnectionOptions.Parse(connectionString);
+        DotRocksConnectionPool pool = DotRocksConnectionPool.GetPool(options);
+        try
+        {
+            using var dataSource = new DotRocksDataSource(connectionString);
+            DbCommand command = dataSource.CreateCommand("SELECT 1");
+            using DbDataReader reader = await command.ExecuteReaderAsync(ct).ConfigureAwait(true);
+            Assert.Equal(1, pool.ActiveLeaseCount);
+            if (asynchronous)
+            {
+                await command.DisposeAsync().ConfigureAwait(true);
+            }
+            else
+            {
+                command.Dispose();
+            }
+
+            Assert.Equal(0, pool.ActiveLeaseCount);
+            Assert.Equal(0, pool.IdleCount);
+            Assert.True(reader.IsClosed);
+        }
+        finally
+        {
+            DotRocksConnectionPool.Clear(options);
+            release.TrySetResult();
+        }
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task CreateCommand_ExecutionFailureReturnsItsConnection(
+        bool reader,
+        bool asynchronous
+    )
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        var release = new TaskCompletionSource();
+        using var server = FakeStarRocksServer.Start(async stream =>
+        {
+            await FakeStarRocksServer.CompleteAuthenticationAsync(stream).ConfigureAwait(true);
+            _ = await FakeStarRocksServer
+                .ReadCommandAndReplyErrorAsync(stream)
+                .ConfigureAwait(true);
+            await release.Task.WaitAsync(ct).ConfigureAwait(true);
+        });
+        string connectionString = server.ConnectionString + ";Pooling=true;Maximum Pool Size=1";
+        DotRocksConnectionOptions options = DotRocksConnectionOptions.Parse(connectionString);
+        DotRocksConnectionPool pool = DotRocksConnectionPool.GetPool(options);
+        try
+        {
+            using var dataSource = new DotRocksDataSource(connectionString);
+            using DbCommand command = dataSource.CreateCommand("SELECT broken");
+            if (asynchronous)
+            {
+                if (reader)
+                {
+                    await Assert
+                        .ThrowsAsync<DotRocksException>(() => command.ExecuteReaderAsync(ct))
+                        .ConfigureAwait(true);
+                }
+                else
+                {
+                    await Assert
+                        .ThrowsAsync<DotRocksException>(() => command.ExecuteNonQueryAsync(ct))
+                        .ConfigureAwait(true);
+                }
+            }
+            else if (reader)
+            {
+                Assert.Throws<DotRocksException>(() => command.ExecuteReader());
+            }
+            else
+            {
+                Assert.Throws<DotRocksException>(() => command.ExecuteNonQuery());
+            }
+
+            Assert.Equal(0, pool.ActiveLeaseCount);
+            Assert.Equal(1, pool.IdleCount);
+        }
+        finally
+        {
+            DotRocksConnectionPool.Clear(options);
+            release.TrySetResult();
+        }
     }
 
     [Fact]

@@ -81,7 +81,9 @@ public sealed class DotRocksDataSource : DbDataSource
     protected override DbCommand CreateDbCommand(string? commandText = null)
     {
         ThrowIfDisposed();
-        return new DotRocksCommand(commandText ?? string.Empty, CreateDotRocksConnection());
+        // The BCL wrapper owns the connection, opens it for each execution, and returns it
+        // when execution (or the reader) completes. A bare provider command cannot do that.
+        return base.CreateDbCommand(commandText);
     }
 
     /// <inheritdoc />
