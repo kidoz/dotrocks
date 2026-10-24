@@ -124,6 +124,20 @@ public sealed class HandshakeResponseBuilderTests
         Assert.Contains("selecting a database", exception.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Build_UnsupportedPlugin_DoesNotEchoUntrustedText()
+    {
+        ServerHandshake handshake = BuildHandshake("evil\r\nFORGED\u001b");
+        DotRocksException exception = Assert.Throws<DotRocksException>(() =>
+            HandshakeResponseBuilder.Build(DotRocksConnectionOptions.Default, handshake)
+        );
+
+        Assert.DoesNotContain("FORGED", exception.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain('\r', exception.Message);
+        Assert.DoesNotContain('\n', exception.Message);
+        Assert.DoesNotContain('\u001b', exception.Message);
+    }
+
     private static ServerHandshake BuildHandshake(
         string authPluginName,
         bool supportsTls = false,

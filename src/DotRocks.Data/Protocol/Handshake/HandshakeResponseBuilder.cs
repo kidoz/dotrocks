@@ -71,7 +71,7 @@ internal static class HandshakeResponseBuilder
         )
         {
             throw new DotRocksException(
-                $"Unsupported StarRocks authentication plugin '{handshake.AuthPluginName ?? "(none)"}'."
+                "Unsupported StarRocks authentication plugin. DotRocks requires mysql_native_password."
             );
         }
 
