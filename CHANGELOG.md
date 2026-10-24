@@ -8,6 +8,22 @@ version is derived from the release tag at publish time.
 
 ## [Unreleased]
 
+## [1.6.1] - 2026-10-25
+
+### Fixed
+- Report a connection-open timeout as a transient connect error. The physical connection's
+  own timeout can fire before the connection-level timer, previously surfacing
+  `OperationCanceledException` instead of `DotRocksException` on Windows.
+- Restore compatibility with 1.5.5 EF Core existing-table mappings: `HasKey(...)` no longer
+  requires `HasStarRocksPrimaryKey(...)`. Explicit non-primary table models and primary-key
+  column/order mismatches remain rejected. The application must still ensure the existing
+  table uses the matching StarRocks `PRIMARY KEY`. Migration DDL defaults are unchanged;
+  use `HasStarRocksPrimaryKey(...)` to generate a `PRIMARY KEY` table.
+- Restore `Ssl Mode=Preferred` as the SQL protocol default, matching 1.5.5. Connection
+  strings without `Ssl Mode` use TLS when advertised and otherwise allow plaintext.
+  Explicit `Required` and `Disabled` modes, certificate validation, and rejection of
+  unknown SSL modes are unchanged. Set `Ssl Mode=Required` to prevent plaintext fallback.
+
 ## [1.6.0] - 2026-10-24
 
 ### Changed
@@ -668,7 +684,8 @@ version is derived from the release tag at publish time.
 - Stream Load refuses to forward credentials over a downgraded (HTTPS→HTTP) redirect.
 - NuGet vulnerability auditing and CodeQL analysis in CI.
 
-[Unreleased]: https://github.com/kidoz/dotrocks/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/kidoz/dotrocks/compare/v1.6.1...HEAD
+[1.6.1]: https://github.com/kidoz/dotrocks/compare/v1.6.0...v1.6.1
 [1.6.0]: https://github.com/kidoz/dotrocks/compare/v1.5.5...v1.6.0
 [1.5.5]: https://github.com/kidoz/dotrocks/compare/v1.5.4...v1.5.5
 [1.5.4]: https://github.com/kidoz/dotrocks/compare/v1.5.3...v1.5.4
