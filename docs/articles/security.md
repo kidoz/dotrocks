@@ -27,9 +27,9 @@ or Flight SQL unless those endpoints are also TLS. See
 See [Connection strings](connection-strings.md#tls-modes) for the full `DotRocksSslMode`
 reference. The essentials:
 
-- **Default is `Required`** — TLS negotiation and certificate validation must succeed.
-  Plaintext-only development servers require an explicit `Ssl Mode=Disabled` or
-  `Ssl Mode=Preferred` opt-in; `Preferred` permits active downgrade to plaintext:
+- **Default is `Preferred`** — use TLS when the server advertises support, otherwise
+  continue in plaintext. This preserves compatibility with plaintext-only servers but
+  permits active downgrade. Set `Ssl Mode=Required` to require TLS and certificate validation:
 
   ```ini
   Server=starrocks.example.com;User ID=app;Ssl Mode=Required

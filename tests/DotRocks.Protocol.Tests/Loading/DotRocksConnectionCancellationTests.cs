@@ -341,27 +341,17 @@ public sealed class DotRocksConnectionCancellationTests
     }
 
     [Fact]
-    public async Task OpenAsync_DefaultTlsRejectsServerWithoutTlsSupport()
+    public async Task OpenAsync_DefaultTlsConnectsToServerWithoutTlsSupport()
     {
-        using FakeStarRocksServer server = FakeStarRocksServer.Start(async stream =>
-        {
-            var writer = new PacketWriter(stream);
-            await writer
-                .WritePayloadAsync(
-                    StarRocksPacketFactory.Handshake(MySqlNativePassword.PluginName),
-                    TestContext.Current.CancellationToken
-                )
-                .ConfigureAwait(true);
-        });
+        using var server = FakeStarRocksServer.Start(
+            FakeStarRocksServer.HandleOpenOnlyConnectionAsync
+        );
         var builder = new DotRocksConnectionStringBuilder(server.ConnectionString);
         builder.Remove("Ssl Mode");
         using var connection = new DotRocksConnection(builder.ConnectionString);
-        await Assert
-            .ThrowsAsync<DotRocksException>(() =>
-                connection.OpenAsync(TestContext.Current.CancellationToken)
-            )
-            .ConfigureAwait(true);
-        Assert.Equal(ConnectionState.Closed, connection.State);
+        await connection.OpenAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+        Assert.Equal(ConnectionState.Open, connection.State);
+        await connection.CloseAsync().ConfigureAwait(true);
     }
 
     [Fact]
@@ -480,8 +470,12 @@ public sealed class DotRocksConnectionCancellationTests
         await connection.CloseAsync().ConfigureAwait(true);
     }
 
-    [Fact]
-    public async Task OpenAsync_SslModePreferredWithServerSupport_NegotiatesTlsAndValidatesCertificate()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task OpenAsync_SslModePreferredWithServerSupport_NegotiatesTlsAndValidatesCertificate(
+        bool explicitMode
+    )
     {
         using var server = FakeStarRocksServer.Start(
             FakeStarRocksServer.HandleTlsRejectingConnectionAsync
@@ -491,7 +485,13 @@ public sealed class DotRocksConnectionCancellationTests
         // validation; the self-signed cert is rejected (proving it negotiated TLS rather than
         // silently falling back to plaintext). Trust Server Certificate is not allowed under
         // Preferred, so this is the only way to exercise the upgrade path here.
-        string connectionString = server.ConnectionString + ";Ssl Mode=Preferred";
+        var builder = new DotRocksConnectionStringBuilder(server.ConnectionString);
+        builder.Remove("Ssl Mode");
+        if (explicitMode)
+        {
+            builder.SslMode = DotRocksSslMode.Preferred;
+        }
+        string connectionString = builder.ConnectionString;
         using var connection = new DotRocksConnection(connectionString);
 
         DotRocksException exception = await Assert

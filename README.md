@@ -60,7 +60,7 @@ driver, and it is not a general-purpose MySQL driver.
 ## ADO.NET usage
 
 Create connections directly when you need a short-lived provider object. These local-development
-examples explicitly disable SQL TLS for a plaintext Docker fixture; production defaults to
+examples explicitly disable SQL TLS for a plaintext Docker fixture; for production, select
 required TLS:
 
 ```csharp
@@ -120,9 +120,10 @@ await using DbDataSource dataSource = factory.CreateDataSource(builder.Connectio
 await using DbConnection connection = await dataSource.OpenConnectionAsync();
 ```
 
-For SQL protocol TLS, `Ssl Mode` defaults to `Required`: connections fail when TLS cannot be
-negotiated. Plaintext development servers require explicit `Preferred` (opportunistic TLS,
-which permits an active downgrade) or `Disabled` (always plaintext).
+For SQL protocol TLS, `Ssl Mode` defaults to `Preferred`: use TLS when the server advertises
+support, otherwise continue in plaintext. This preserves compatibility with plaintext-only
+deployments but permits an active downgrade. Set `Ssl Mode=Required` to require TLS and fail
+when it cannot be negotiated, or `Disabled` for always-plaintext connections.
 DotRocks uses platform certificate validation (chain and host name) by default and checks
 revocation in offline mode to avoid a blocking OCSP/CRL fetch during the handshake;
 `Trust Server Certificate=true` disables validation and is intended only for controlled

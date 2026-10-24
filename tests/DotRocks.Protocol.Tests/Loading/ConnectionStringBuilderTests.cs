@@ -9,6 +9,32 @@ namespace DotRocks.Protocol.Tests.Loading;
 public sealed class ConnectionStringBuilderTests
 {
     [Fact]
+    public void SslMode_DefaultsToPreferredAcrossConstructionAndParsing()
+    {
+        Assert.Equal(DotRocksSslMode.Preferred, DotRocksConnectionOptions.Default.SslMode);
+        Assert.Equal(
+            DotRocksSslMode.Preferred,
+            DotRocksConnectionOptions.Parse(null as string).SslMode
+        );
+        Assert.Equal(
+            DotRocksSslMode.Preferred,
+            DotRocksConnectionOptions.Parse("Server=h").SslMode
+        );
+        Assert.Equal(DotRocksSslMode.Preferred, new DotRocksConnectionStringBuilder().SslMode);
+
+        var builder = new DotRocksConnectionStringBuilder("Server=h");
+        Assert.Equal(DotRocksSslMode.Preferred, builder.SslMode);
+        builder.SslMode = DotRocksSslMode.Required;
+        builder.Remove("Ssl Mode");
+        Assert.Equal(DotRocksSslMode.Preferred, builder.SslMode);
+        Assert.Equal(DotRocksSslMode.Preferred, DotRocksConnectionOptions.Parse(builder).SslMode);
+        Assert.Equal(
+            DotRocksSslMode.Preferred,
+            DotRocksConnectionOptions.Parse(builder.ConnectionString).SslMode
+        );
+    }
+
+    [Fact]
     public void StreamLoadEndpoint_QueryAndFragment_AreRedactedFromDiagnosticStrings()
     {
         const string connectionString =
@@ -156,7 +182,7 @@ public sealed class ConnectionStringBuilderTests
         Assert.Equal(0, builder.MinimumPoolSize);
         Assert.Equal(100, builder.MaximumPoolSize);
         Assert.Equal(300, builder.ConnectionIdleTimeout);
-        Assert.Equal(DotRocksSslMode.Required, builder.SslMode);
+        Assert.Equal(DotRocksSslMode.Preferred, builder.SslMode);
         Assert.False(builder.TrustServerCertificate);
         Assert.False(builder.AllowInsecureStreamLoad);
         Assert.Equal("http://starrocks.local:8030/", builder.StreamLoadEndpoint);
@@ -616,6 +642,6 @@ public sealed class ConnectionStringBuilderTests
         );
 
         Assert.Equal("x;Ssl Mode=Disabled", reparsed.Database);
-        Assert.Equal(DotRocksSslMode.Required, reparsed.SslMode);
+        Assert.Equal(DotRocksSslMode.Preferred, reparsed.SslMode);
     }
 }

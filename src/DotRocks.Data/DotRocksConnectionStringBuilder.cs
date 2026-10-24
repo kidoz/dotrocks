@@ -50,7 +50,7 @@ public sealed class DotRocksConnectionStringBuilder
         MinimumPoolSize = DotRocksConnectionOptions.DefaultMinimumPoolSize;
         MaximumPoolSize = DotRocksConnectionOptions.DefaultMaximumPoolSize;
         ConnectionIdleTimeout = DotRocksConnectionOptions.DefaultConnectionIdleTimeoutSeconds;
-        SslMode = DotRocksSslMode.Required;
+        SslMode = DotRocksConnectionOptions.DefaultSslMode;
         TrustServerCertificate = false;
         SslRevocationCheck = DotRocksConnectionOptions.DefaultSslRevocationMode;
         AllowInsecureStreamLoad = false;
@@ -200,7 +200,7 @@ public sealed class DotRocksConnectionStringBuilder
     /// </summary>
     public DotRocksSslMode SslMode
     {
-        get => GetEnum(SslModeKeyword, DotRocksSslMode.Required);
+        get => GetEnum(SslModeKeyword, DotRocksConnectionOptions.DefaultSslMode);
         set
         {
             // Reject an undefined value (e.g. (DotRocksSslMode)99) at the setter so a security
