@@ -23,7 +23,7 @@ For columnar analytical reads over gRPC, see [Arrow Flight SQL](arrow-flight-sql
 
 ```csharp
 await using var connection = new DotRocksConnection(
-    "Server=127.0.0.1;Port=9030;User ID=root"
+    "Server=127.0.0.1;Port=9030;User ID=root;Ssl Mode=Disabled"
 );
 await connection.OpenAsync();
 
@@ -32,7 +32,8 @@ command.CommandText = "SELECT 1";
 object? value = await command.ExecuteScalarAsync();
 ```
 
-For a non-local server, enable TLS with `Ssl Mode=Required`.
+This example explicitly disables SQL TLS for a plaintext local fixture. TLS is required by
+default; use a trusted certificate and omit the override for production.
 
 ## Entity Framework Core
 
@@ -42,7 +43,7 @@ using DotRocks.EntityFrameworkCore.Infrastructure;
 
 DbContextOptions<AppDbContext> options = new DbContextOptionsBuilder<AppDbContext>()
     .UseStarRocks(
-        "Server=127.0.0.1;Port=9030;User ID=root",
+        "Server=127.0.0.1;Port=9030;User ID=root;Ssl Mode=Disabled",
         starRocks => starRocks.ServerVersion(new StarRocksServerVersion(4, 0, 7)))
     .Options;
 

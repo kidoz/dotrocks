@@ -6,7 +6,7 @@ using DotRocks.Data.Loading;
 // gives all-or-nothing bulk ingestion across multiple load calls under a single idempotent label.
 string connectionString =
     Environment.GetEnvironmentVariable("DOTROCKS_CONNECTION_STRING")
-    ?? "Server=127.0.0.1;Port=9030;User ID=root;Stream Load Endpoint=https://127.0.0.1:8030";
+    ?? "Server=127.0.0.1;Port=9030;User ID=root;Ssl Mode=Disabled;Stream Load Endpoint=https://127.0.0.1:8030";
 
 using var client = new DotRocksStreamLoadClient(connectionString);
 

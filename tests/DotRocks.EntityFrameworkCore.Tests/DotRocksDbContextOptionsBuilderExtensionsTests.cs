@@ -72,7 +72,9 @@ public sealed class DotRocksDbContextOptionsBuilderExtensionsTests
     [Theory]
     [InlineData("Server=127.0.0.1;Port=notanumber;User ID=root")]
     [InlineData("Server=127.0.0.1;Port=0;User ID=root")]
-    [InlineData("Server=127.0.0.1;Port=9030;User ID=root;Trust Server Certificate=true")]
+    [InlineData(
+        "Server=127.0.0.1;Port=9030;User ID=root;Ssl Mode=Disabled;Trust Server Certificate=true"
+    )]
     // A misspelled security keyword must fail at registration, not silently fall back to the
     // default Ssl Mode (fail open).
     [InlineData("Server=127.0.0.1;Port=9030;User ID=root;Ssl Mdoe=Required")]

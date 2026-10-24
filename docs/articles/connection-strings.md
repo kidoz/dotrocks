@@ -40,7 +40,7 @@ the canonical spaced forms (`User ID`, `Ssl Mode`).
 | `Connection Lifetime` | `ConnectionLifetime`, `Lifetime` | int (seconds) | `0` (unlimited) | ≥ 0 |
 | `Connection Retries` | `ConnectionRetries`, `Connect Retry Count` | int | `0` | ≥ 0 |
 | `Connection Retry Delay` | `ConnectionRetryDelay`, `Retry Delay` | int (ms) | `200` | ≥ 0 |
-| `Ssl Mode` | `SSL Mode`, `SslMode` | `DotRocksSslMode` | `Preferred` | defined member |
+| `Ssl Mode` | `SSL Mode`, `SslMode` | `DotRocksSslMode` | `Required` (default) | defined member |
 | `Trust Server Certificate` | `TrustServerCertificate` | bool | `false` | requires `Ssl Mode=Required` |
 | `Ssl Revocation Check` | `SSL Revocation Check`, `SslRevocationCheck`, `Revocation` | `X509RevocationMode` | `Offline` | defined member |
 | `Stream Load Endpoint` | `StreamLoadEndpoint`, `Stream Load URL`, `Http Endpoint` | absolute Uri | `http://{Server}:8030` | http/https; no embedded user info |
@@ -61,8 +61,8 @@ wire protocol on port 9030). Stream Load uses a separate HTTP transport — see
 | `DotRocksSslMode` | Behavior |
 |---|---|
 | `Disabled` | Never request TLS. Plaintext only. |
-| `Required` | Require TLS and **fail** when the server cannot negotiate it. Use this for any non-local server to resist an active downgrade. |
-| `Preferred` (default) | Use TLS when the server advertises it, otherwise continue in plaintext. Secure against a passive eavesdropper on a TLS-capable server, compatible with plaintext-only deployments. Does **not** defend against an active attacker who strips the server's TLS capability to force a downgrade. |
+| `Required` (default) | Require TLS and **fail** when the server cannot negotiate it. Use this for any non-local server to resist an active downgrade. |
+| `Preferred` (explicit opt-in) | Use TLS when the server advertises it, otherwise continue in plaintext. Secure against a passive eavesdropper on a TLS-capable server, compatible with plaintext-only deployments. Does **not** defend against an active attacker who strips the server's TLS capability to force a downgrade. |
 
 ```ini
 Server=starrocks.example.com;User ID=loader;Password=secret;Ssl Mode=Required

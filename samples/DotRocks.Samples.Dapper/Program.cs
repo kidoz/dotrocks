@@ -5,7 +5,7 @@ using DotRocks.Data;
 // standard Dapper extension methods with named parameters.
 string connectionString =
     Environment.GetEnvironmentVariable("DOTROCKS_CONNECTION_STRING")
-    ?? "Server=127.0.0.1;Port=9030;User ID=root;Database=dotrocks_sample";
+    ?? "Server=127.0.0.1;Port=9030;User ID=root;Ssl Mode=Disabled;Database=dotrocks_sample";
 
 await using var connection = new DotRocksConnection(connectionString);
 await connection.OpenAsync();

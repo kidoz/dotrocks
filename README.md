@@ -59,11 +59,13 @@ driver, and it is not a general-purpose MySQL driver.
 
 ## ADO.NET usage
 
-Create connections directly when you need a short-lived provider object:
+Create connections directly when you need a short-lived provider object. These local-development
+examples explicitly disable SQL TLS for a plaintext Docker fixture; production defaults to
+required TLS:
 
 ```csharp
 await using var connection = new DotRocksConnection(
-    "Server=127.0.0.1;Port=9030;User ID=root"
+    "Server=127.0.0.1;Port=9030;User ID=root;Ssl Mode=Disabled"
 );
 await connection.OpenAsync();
 
@@ -100,7 +102,7 @@ Use `DotRocksDataSource` for shared configuration and DotRocks pooling:
 
 ```csharp
 await using var dataSource = new DotRocksDataSource(
-    "Server=127.0.0.1;Port=9030;User ID=root;Pooling=true"
+    "Server=127.0.0.1;Port=9030;User ID=root;Ssl Mode=Disabled;Pooling=true"
 );
 
 await using DbConnection connection = await dataSource.OpenConnectionAsync();
@@ -112,16 +114,15 @@ Provider-agnostic ADO.NET code can use `DotRocksFactory`:
 DbProviderFactory factory = DotRocksFactory.Instance;
 
 using DbConnectionStringBuilder builder = factory.CreateConnectionStringBuilder()!;
-builder.ConnectionString = "Server=127.0.0.1;Port=9030;User ID=root";
+builder.ConnectionString = "Server=127.0.0.1;Port=9030;User ID=root;Ssl Mode=Disabled";
 
 await using DbDataSource dataSource = factory.CreateDataSource(builder.ConnectionString);
 await using DbConnection connection = await dataSource.OpenConnectionAsync();
 ```
 
-For SQL protocol TLS, `Ssl Mode` defaults to `Preferred`: the connection upgrades to TLS
-when the server advertises support and falls back to plaintext otherwise. Set `Required` to
-fail the connection when TLS cannot be negotiated (the only mode that resists an active
-downgrade attacker), or `Disabled` to never request TLS.
+For SQL protocol TLS, `Ssl Mode` defaults to `Required`: connections fail when TLS cannot be
+negotiated. Plaintext development servers require explicit `Preferred` (opportunistic TLS,
+which permits an active downgrade) or `Disabled` (always plaintext).
 DotRocks uses platform certificate validation (chain and host name) by default and checks
 revocation in offline mode to avoid a blocking OCSP/CRL fetch during the handshake;
 `Trust Server Certificate=true` disables validation and is intended only for controlled
@@ -155,7 +156,7 @@ using Microsoft.EntityFrameworkCore;
 
 DbContextOptions<AppDbContext> options = new DbContextOptionsBuilder<AppDbContext>()
     .UseStarRocks(
-        "Server=127.0.0.1;Port=9030;User ID=root",
+        "Server=127.0.0.1;Port=9030;User ID=root;Ssl Mode=Disabled",
         starRocks => starRocks.ServerVersion(new StarRocksServerVersion(4, 0, 7)))
     .Options;
 

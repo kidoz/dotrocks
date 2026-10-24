@@ -171,7 +171,7 @@ explicit mode:
 ```csharp
 await using var connection = new DotRocksFlightSqlDbConnection(
     options,
-    "Server=127.0.0.1;Port=9030;User ID=root;Password=...",
+    "Server=127.0.0.1;Port=9030;User ID=root;Ssl Mode=Disabled;Password=...",
     DotRocksFlightSqlFallbackMode.ReadQueries |
         DotRocksFlightSqlFallbackMode.WriteCommands);
 ```

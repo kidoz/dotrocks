@@ -202,7 +202,7 @@ public sealed class DotRocksConnectionCancellationTests
         string connectionString =
             $"Server=127.0.0.1;Port={port};User ID={FakeStarRocksServer.UserName};"
             + $"Password={FakeStarRocksServer.Secret};Connection Timeout=5;"
-            + "Connection Retries=2;Connection Retry Delay=50";
+            + "Ssl Mode=Disabled;Connection Retries=2;Connection Retry Delay=50";
         using var connection = new DotRocksConnection(connectionString);
 
         await connection.OpenAsync(ct).ConfigureAwait(true);
@@ -337,6 +337,30 @@ public sealed class DotRocksConnectionCancellationTests
         Assert.Equal(ConnectionState.Closed, connection.State);
         Assert.Contains("malformed protocol bytes", exception.Message, StringComparison.Ordinal);
         AssertSanitized(exception, connectionString);
+    }
+
+    [Fact]
+    public async Task OpenAsync_DefaultTlsRejectsServerWithoutTlsSupport()
+    {
+        using FakeStarRocksServer server = FakeStarRocksServer.Start(async stream =>
+        {
+            var writer = new PacketWriter(stream);
+            await writer
+                .WritePayloadAsync(
+                    StarRocksPacketFactory.Handshake(MySqlNativePassword.PluginName),
+                    TestContext.Current.CancellationToken
+                )
+                .ConfigureAwait(true);
+        });
+        var builder = new DotRocksConnectionStringBuilder(server.ConnectionString);
+        builder.Remove("Ssl Mode");
+        using var connection = new DotRocksConnection(builder.ConnectionString);
+        await Assert
+            .ThrowsAsync<DotRocksException>(() =>
+                connection.OpenAsync(TestContext.Current.CancellationToken)
+            )
+            .ConfigureAwait(true);
+        Assert.Equal(ConnectionState.Closed, connection.State);
     }
 
     [Fact]

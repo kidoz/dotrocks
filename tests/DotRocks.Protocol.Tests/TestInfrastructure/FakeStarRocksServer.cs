@@ -53,7 +53,7 @@ internal sealed class FakeStarRocksServer : IDisposable
 
     /// <summary>A plaintext connection string targeting this server with the fake credentials.</summary>
     public string ConnectionString =>
-        $"Server=127.0.0.1;Port={Port};User ID={UserName};Password={Secret};Connection Timeout=5";
+        $"Server=127.0.0.1;Port={Port};User ID={UserName};Password={Secret};Connection Timeout=5;Ssl Mode=Disabled";
 
     public static FakeStarRocksServer Start(params Func<NetworkStream, Task>[] handlers)
     {

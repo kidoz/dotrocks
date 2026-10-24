@@ -27,9 +27,9 @@ or Flight SQL unless those endpoints are also TLS. See
 See [Connection strings](connection-strings.md#tls-modes) for the full `DotRocksSslMode`
 reference. The essentials:
 
-- **Default is `Preferred`** — opportunistic TLS. Secure against a passive eavesdropper,
-  but an active attacker can strip the server's advertised TLS capability to force
-  plaintext. Use `Required` for any non-local server:
+- **Default is `Required`** — TLS negotiation and certificate validation must succeed.
+  Plaintext-only development servers require an explicit `Ssl Mode=Disabled` or
+  `Ssl Mode=Preferred` opt-in; `Preferred` permits active downgrade to plaintext:
 
   ```ini
   Server=starrocks.example.com;User ID=app;Ssl Mode=Required

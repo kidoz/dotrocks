@@ -5,7 +5,7 @@ using DotRocks.Data;
 // retry transient open failures. Pooling is off by default; enable and size it on the data source.
 var builder = new DotRocksConnectionStringBuilder(
     Environment.GetEnvironmentVariable("DOTROCKS_CONNECTION_STRING")
-        ?? "Server=127.0.0.1;Port=9030;User ID=root;Database=dotrocks_sample"
+        ?? "Server=127.0.0.1;Port=9030;User ID=root;Ssl Mode=Disabled;Database=dotrocks_sample"
 )
 {
     Pooling = true,

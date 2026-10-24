@@ -3,7 +3,7 @@
 Run with a StarRocks 4.0.7+ server and a database selected in the connection string:
 
 ```bash
-DOTROCKS_CONNECTION_STRING="Server=127.0.0.1;Port=9030;User ID=root;Database=dotrocks_sample" \
+DOTROCKS_CONNECTION_STRING="Server=127.0.0.1;Port=9030;User ID=root;Ssl Mode=Disabled;Database=dotrocks_sample" \
 dotnet run --project samples/DotRocks.Samples.EntityFrameworkCore
 ```
 

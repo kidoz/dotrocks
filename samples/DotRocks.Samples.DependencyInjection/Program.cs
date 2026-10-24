@@ -7,7 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 // register the data source as a singleton and resolve scoped connections from it.
 string connectionString =
     Environment.GetEnvironmentVariable("DOTROCKS_CONNECTION_STRING")
-    ?? "Server=127.0.0.1;Port=9030;User ID=root;Database=dotrocks_sample";
+    ?? "Server=127.0.0.1;Port=9030;User ID=root;Ssl Mode=Disabled;Database=dotrocks_sample";
 
 var services = new ServiceCollection();
 services.AddSingleton<DbDataSource>(_ => new DotRocksDataSource(connectionString));

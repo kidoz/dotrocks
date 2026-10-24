@@ -29,6 +29,8 @@ internal static class FlightSqlIntegrationEnvironment
                 UserId = Environment.GetEnvironmentVariable("DOTROCKS_USER") ?? "root",
                 Password = Environment.GetEnvironmentVariable("DOTROCKS_PASSWORD") ?? string.Empty,
                 ConnectionTimeout = 30,
+                // The isolated Docker fixture has no SQL TLS listener.
+                SslMode = DotRocksSslMode.Disabled,
             };
             if (
                 int.TryParse(
