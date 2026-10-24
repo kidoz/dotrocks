@@ -1,0 +1,5 @@
+# Check text files out with LF on every platform. CSharpier is configured with
+# endOfLine=lf and .editorconfig requires end_of_line = lf, so a CRLF checkout (the
+# default on Windows runners) fails formatting. Binary files are detected by text=auto
+# and are not affected by eol.
+* text=auto eol=lf
