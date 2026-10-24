@@ -205,6 +205,9 @@ the begin on earlier lines. Each `LoadCsvAsync`/`LoadJsonAsync` overload takes a
 table name for multi-table use.
 
 If version detection fails or returns an unrecognized version, the server enforces support.
+That unknown outcome is cached for the client lifetime, and concurrent multi-table begins share
+one probe. Recreate the client to probe again after changing the server or connectivity. A probe
+interrupted by cancellation is retried on a later begin.
 
 ### In-doubt transactions
 

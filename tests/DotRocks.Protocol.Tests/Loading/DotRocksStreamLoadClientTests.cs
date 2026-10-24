@@ -1692,6 +1692,213 @@ public sealed class DotRocksStreamLoadClientTests
     }
 
     [Fact]
+    public async Task BeginTransactionAsync_MultiTableUnknownProbe_IsCachedAcrossBegins()
+    {
+        int probes = 0;
+        int begins = 0;
+        using var handler = new RecordingHandler(
+            (_, _) =>
+            {
+                begins++;
+                return Task.FromResult(TransactionResponse());
+            }
+        );
+        using var httpClient = new HttpClient(handler);
+        using DotRocksStreamLoadClient client = CreateClient(
+            httpClient,
+            (_, _) =>
+            {
+                probes++;
+                return ValueTask.FromResult<DotRocksServerCapabilities?>(null);
+            }
+        );
+        for (int index = 0; index < 2; index++)
+        {
+            _ = await client
+                .BeginTransactionAsync(
+                    "warehouse",
+                    "events",
+                    new DotRocksStreamLoadTransactionOptions
+                    {
+                        Label = "tx_label",
+                        IsMultiTable = true,
+                    },
+                    TestContext.Current.CancellationToken
+                )
+                .ConfigureAwait(true);
+        }
+        Assert.Equal(1, probes);
+        Assert.Equal(2, begins);
+    }
+
+    [Fact]
+    public async Task BeginTransactionAsync_ConcurrentMultiTableBegins_ShareUnknownProbe()
+    {
+        int probes = 0;
+        var probeResult = new TaskCompletionSource<DotRocksServerCapabilities?>(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        using var handler = new RecordingHandler(
+            static (_, _) => Task.FromResult(TransactionResponse())
+        );
+        using var httpClient = new HttpClient(handler);
+        using DotRocksStreamLoadClient client = CreateClient(
+            httpClient,
+            (_, _) =>
+            {
+                probes++;
+                return new ValueTask<DotRocksServerCapabilities?>(probeResult.Task);
+            }
+        );
+        var options = new DotRocksStreamLoadTransactionOptions
+        {
+            Label = "tx_label",
+            IsMultiTable = true,
+        };
+        Task<DotRocksStreamLoadTransaction> first = client.BeginTransactionAsync(
+            "warehouse",
+            "events",
+            options,
+            TestContext.Current.CancellationToken
+        );
+        Task<DotRocksStreamLoadTransaction> second = client.BeginTransactionAsync(
+            "warehouse",
+            "events",
+            options,
+            TestContext.Current.CancellationToken
+        );
+        probeResult.SetResult(null);
+        await Task.WhenAll(first, second).ConfigureAwait(true);
+        Assert.Equal(1, probes);
+    }
+
+    [Fact]
+    public async Task BeginTransactionAsync_CanceledProbe_IsRetriedOnNextBegin()
+    {
+        int probes = 0;
+        using var cancellation = new CancellationTokenSource();
+        using var handler = new RecordingHandler(
+            static (_, _) => Task.FromResult(TransactionResponse())
+        );
+        using var httpClient = new HttpClient(handler);
+        using DotRocksStreamLoadClient client = CreateClient(
+            httpClient,
+            async (_, token) =>
+            {
+                if (++probes == 1)
+                {
+                    await Task.Delay(Timeout.InfiniteTimeSpan, token).ConfigureAwait(true);
+                }
+                return null;
+            }
+        );
+        var options = new DotRocksStreamLoadTransactionOptions
+        {
+            Label = "tx_label",
+            IsMultiTable = true,
+        };
+        Task<DotRocksStreamLoadTransaction> first = client.BeginTransactionAsync(
+            "warehouse",
+            "events",
+            options,
+            cancellation.Token
+        );
+        await cancellation.CancelAsync().ConfigureAwait(true);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => first).ConfigureAwait(true);
+        _ = await client
+            .BeginTransactionAsync(
+                "warehouse",
+                "events",
+                options,
+                TestContext.Current.CancellationToken
+            )
+            .ConfigureAwait(true);
+        Assert.Equal(2, probes);
+    }
+
+    [Fact]
+    public async Task BeginTransactionAsync_SharedProbeOwnerCancellation_DoesNotCancelAnotherBegin()
+    {
+        int probes = 0;
+        using var owner = new CancellationTokenSource();
+        using var handler = new RecordingHandler(
+            static (_, _) => Task.FromResult(TransactionResponse())
+        );
+        using var httpClient = new HttpClient(handler);
+        using DotRocksStreamLoadClient client = CreateClient(
+            httpClient,
+            async (_, token) =>
+            {
+                if (++probes == 1)
+                {
+                    await Task.Delay(Timeout.InfiniteTimeSpan, token).ConfigureAwait(true);
+                }
+                return null;
+            }
+        );
+        var options = new DotRocksStreamLoadTransactionOptions
+        {
+            Label = "tx_label",
+            IsMultiTable = true,
+        };
+        Task<DotRocksStreamLoadTransaction> first = client.BeginTransactionAsync(
+            "warehouse",
+            "events",
+            options,
+            owner.Token
+        );
+        Task<DotRocksStreamLoadTransaction> second = client.BeginTransactionAsync(
+            "warehouse",
+            "events",
+            options,
+            TestContext.Current.CancellationToken
+        );
+        await owner.CancelAsync().ConfigureAwait(true);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => first).ConfigureAwait(true);
+        _ = await second.ConfigureAwait(true);
+        Assert.Equal(2, probes);
+    }
+
+    [Fact]
+    public async Task BeginTransactionAsync_ControlConnectionTimeout_CachesUnknownCapabilities()
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        using var server = FakeStarRocksServer.Start(async stream =>
+        {
+            // The control connection receives no handshake and hits its own one-second timeout.
+            Assert.Equal(0, await stream.ReadAsync(new byte[1], ct).ConfigureAwait(true));
+        });
+        DotRocksConnectionOptions connectionOptions = DotRocksConnectionOptions.Parse(
+            server.ConnectionString + ";Connection Timeout=1;Allow Insecure Stream Load=true"
+        );
+        using var handler = new RecordingHandler(
+            static (_, _) => Task.FromResult(TransactionResponse())
+        );
+        using var httpClient = new HttpClient(handler);
+        using var client = new DotRocksStreamLoadClient(
+            connectionOptions,
+            httpClient,
+            disposeHttpClient: false
+        );
+        for (int index = 0; index < 2; index++)
+        {
+            _ = await client
+                .BeginTransactionAsync(
+                    "warehouse",
+                    "events",
+                    new DotRocksStreamLoadTransactionOptions
+                    {
+                        Label = "tx_label",
+                        IsMultiTable = true,
+                    },
+                    ct
+                )
+                .ConfigureAwait(true);
+        }
+        Assert.Equal(1, server.ConnectionCount);
+    }
+
+    [Fact]
     public async Task BeginTransactionAsync_SingleTable_DoesNotProbe()
     {
         using var handler = new RecordingHandler(

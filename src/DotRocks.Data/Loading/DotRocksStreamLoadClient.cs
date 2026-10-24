@@ -26,7 +26,12 @@ public sealed class DotRocksStreamLoadClient : IDisposable
         CancellationToken,
         ValueTask<DotRocksServerCapabilities?>
     > _capabilityProbe;
-    private DotRocksServerCapabilities? _capabilities;
+    private readonly Lock _capabilityProbeSync = new();
+
+    // A completed task also caches a null (unknown) result. Sharing the in-flight task
+    // avoids opening several control connections for concurrent multi-table begins.
+    private Task<DotRocksServerCapabilities?>? _capabilityProbeTask;
+    private CancellationToken _capabilityProbeToken;
     private bool _isDisposed;
 
     // Classification of a connect target. A connection is refused if ANY resolved address is
@@ -172,15 +177,53 @@ public sealed class DotRocksStreamLoadClient : IDisposable
         CancellationToken cancellationToken
     )
     {
-        _capabilities ??= await _capabilityProbe(_options, cancellationToken).ConfigureAwait(false);
+        DotRocksServerCapabilities? capabilities;
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Task<DotRocksServerCapabilities?> probe;
+            CancellationToken probeToken;
+            lock (_capabilityProbeSync)
+            {
+                if (
+                    _capabilityProbeTask is null
+                    || _capabilityProbeTask.IsCanceled
+                    || _capabilityProbeTask.IsFaulted
+                    || (
+                        !_capabilityProbeTask.IsCompleted
+                        && _capabilityProbeToken.IsCancellationRequested
+                    )
+                )
+                {
+                    // A canceled probe is not a resolved capability result and may be retried.
+                    _capabilityProbeToken = cancellationToken;
+                    _capabilityProbeTask = _capabilityProbe(_options, cancellationToken).AsTask();
+                }
+                probe = _capabilityProbeTask;
+                probeToken = _capabilityProbeToken;
+            }
+            try
+            {
+                capabilities = await probe.WaitAsync(cancellationToken).ConfigureAwait(false);
+                break;
+            }
+            catch (OperationCanceledException)
+                when (!cancellationToken.IsCancellationRequested
+                    && probeToken.IsCancellationRequested
+                )
+            {
+                // The caller that started the shared probe canceled. Other begins retain
+                // their own cancellation semantics and resolve capabilities with a fresh probe.
+            }
+        }
 
         if (
-            _capabilities is
+            capabilities is
             { EffectiveVersion.IsStarRocks: true, SupportsMultiTableStreamLoadTransaction: false }
         )
         {
             throw new DotRocksStreamLoadException(
-                $"Multi-table Stream Load transactions require StarRocks 4.0 or later; the effective StarRocks version is '{_capabilities.EffectiveVersion.Raw}'. Use single-table transactions on this server."
+                $"Multi-table Stream Load transactions require StarRocks 4.0 or later; the effective StarRocks version is '{capabilities.EffectiveVersion.Raw}'. Use single-table transactions on this server."
             );
         }
     }
@@ -207,6 +250,12 @@ public sealed class DotRocksStreamLoadClient : IDisposable
                 .QueryServerVersionAsync(cancellationToken)
                 .ConfigureAwait(false);
             return version.IsStarRocks ? DotRocksServerCapabilities.For(version) : null;
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            // The control connection's own timeout means unknown capabilities, not caller
+            // cancellation. Cache that unknown outcome just like other probe failures.
+            return null;
         }
         catch (DotRocksException)
         {
