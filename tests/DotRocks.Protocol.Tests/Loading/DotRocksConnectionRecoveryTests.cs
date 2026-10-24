@@ -54,6 +54,9 @@ public sealed class DotRocksConnectionRecoveryTests
     {
         CancellationToken ct = TestContext.Current.CancellationToken;
         var commands = new List<string>();
+        var commandsRecorded = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
         using var server = FakeStarRocksServer.Start(async stream =>
         {
             await FakeStarRocksServer.CompleteAuthenticationAsync(stream).ConfigureAwait(true);
@@ -65,6 +68,7 @@ public sealed class DotRocksConnectionRecoveryTests
             commands.Add(
                 await FakeStarRocksServer.ReadCommandAndReplyOkAsync(stream).ConfigureAwait(true)
             );
+            commandsRecorded.SetResult();
         });
 
         using var connection = new DotRocksConnection(server.ConnectionString);
@@ -89,6 +93,8 @@ public sealed class DotRocksConnectionRecoveryTests
         next.CommandText = "SELECT 1";
         _ = await next.ExecuteNonQueryAsync(ct).ConfigureAwait(true);
 
+        // Receiving the response can precede the server handler recording its command.
+        await commandsRecorded.Task.WaitAsync(TimeSpan.FromSeconds(5), ct).ConfigureAwait(true);
         Assert.Equal(["SELECT value FROM t", "SELECT 1"], commands);
     }
 

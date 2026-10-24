@@ -31,7 +31,9 @@ public sealed class NativeSessionRegressionTests
     )
     {
         CancellationToken ct = TestContext.Current.CancellationToken;
-        var firstClosed = new TaskCompletionSource();
+        var firstClosed = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
         using var server = FakeStarRocksServer.Start(
             async stream =>
             {
@@ -146,7 +148,7 @@ public sealed class NativeSessionRegressionTests
     public async Task BatchTimeout_UsesCommandTimeoutErrorModel()
     {
         CancellationToken ct = TestContext.Current.CancellationToken;
-        var release = new TaskCompletionSource();
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var server = FakeStarRocksServer.Start(async stream =>
         {
             await FakeStarRocksServer.CompleteAuthenticationAsync(stream).ConfigureAwait(true);
