@@ -144,7 +144,6 @@ public sealed class DotRocksTranslatorTests
     [InlineData("Abs", "abs(")]
     [InlineData("Ceiling", "ceil(")]
     [InlineData("Floor", "floor(")]
-    [InlineData("Round", "round(")]
     [InlineData("Sqrt", "sqrt(")]
     public void MathMethod_TranslatesToFunction(string method, string expectedFunction)
     {
@@ -155,7 +154,6 @@ public sealed class DotRocksTranslatorTests
             "Abs" => context.Events.Where(e => Math.Abs(e.Score) > 1).ToQueryString(),
             "Ceiling" => context.Events.Where(e => Math.Ceiling(e.Score) > 1).ToQueryString(),
             "Floor" => context.Events.Where(e => Math.Floor(e.Score) > 1).ToQueryString(),
-            "Round" => context.Events.Where(e => Math.Round(e.Score) > 1).ToQueryString(),
             _ => context.Events.Where(e => Math.Sqrt(e.Score) > 1).ToQueryString(),
         };
 
@@ -163,13 +161,26 @@ public sealed class DotRocksTranslatorTests
     }
 
     [Fact]
-    public void MathRoundWithDigits_TranslatesToRoundWithTwoArguments()
+    public void MathRound_DefaultMidpointSemantics_IsNotTranslated()
     {
         using var context = CreateContext();
 
-        string sql = context.Events.Where(e => Math.Round(e.Score, 2) > 1).ToQueryString();
+        Assert.Throws<InvalidOperationException>(() =>
+            context.Events.Where(e => Math.Round(e.Score) > 1).ToQueryString()
+        );
+    }
 
-        Assert.Contains("round(", sql, StringComparison.OrdinalIgnoreCase);
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(0)]
+    [InlineData(2)]
+    public void MathRoundWithDigits_IsNotTranslated(int digits)
+    {
+        using var context = CreateContext();
+
+        Assert.Throws<InvalidOperationException>(() =>
+            context.Events.Where(e => Math.Round(e.Score, digits) > 1).ToQueryString()
+        );
     }
 
     [Fact]

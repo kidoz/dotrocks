@@ -189,7 +189,7 @@ expands this list with emitted SQL and NULL-semantics notes):
 - Conditional aggregation: `Sum(x => x.Kind == "bet" ? x.Amount : (decimal?)null)` translates
   to `SUM(CASE WHEN ... END)`, `??` over an aggregate result to `COALESCE(...)`, and
   `Math.Abs` to `abs(...)`, so multi-measure analytical queries run in one scan.
-- `Math` methods: `Abs`, `Ceiling`, `Floor`, `Round` (including a digit count), `Sqrt`,
+- `Math` methods: `Abs`, `Ceiling`, `Floor`, `Sqrt`,
   `Exp`, `Log`, `Sign`, and `Pow` translate to the matching StarRocks numeric functions.
 - Date/time members and methods: `Year`/`Month`/`Day`/`Hour`/`Minute`/`Second`/`DayOfYear`/
   `.Date` translate to `year()`…`dayofyear()`/`date()`, and `AddYears`…`AddSeconds` to

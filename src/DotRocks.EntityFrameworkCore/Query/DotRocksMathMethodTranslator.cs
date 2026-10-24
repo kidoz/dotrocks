@@ -21,7 +21,6 @@ internal sealed class DotRocksMathMethodTranslator(ISqlExpressionFactory sqlExpr
             [nameof(Math.Abs)] = "abs",
             [nameof(Math.Ceiling)] = "ceil",
             [nameof(Math.Floor)] = "floor",
-            [nameof(Math.Round)] = "round",
             [nameof(Math.Sqrt)] = "sqrt",
             [nameof(Math.Exp)] = "exp",
             [nameof(Math.Log)] = "ln",
@@ -42,18 +41,9 @@ internal sealed class DotRocksMathMethodTranslator(ISqlExpressionFactory sqlExpr
             return null;
         }
 
-        // Two-argument forms: Round(value, digits) and Pow(x, y). Only translate Round when the
-        // second argument is the digit count; Round(value, MidpointRounding) has no StarRocks
-        // equivalent, so fall back to EF's normal translation failure rather than emit wrong SQL.
-        if (
-            arguments.Count == 2
-            && string.Equals(method.Name, nameof(Math.Round), StringComparison.Ordinal)
-        )
-        {
-            return arguments[1].Type == typeof(int) || arguments[1].Type == typeof(long)
-                ? Function("round", arguments, method.ReturnType)
-                : null;
-        }
+        // Math.Round defaults to midpoint-to-even. StarRocks ROUND rounds midpoints away from
+        // zero and also accepts negative digit counts that .NET rejects. Do not claim equivalent
+        // CLR semantics for any Round overload until it has a verified exact translation.
 
         if (
             arguments.Count == 2

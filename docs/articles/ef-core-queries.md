@@ -24,15 +24,15 @@ For mapping entities to tables, see [EF Core entity mapping](ef-core-entity-mapp
 | Aggregates | `Min`, `Max`, `Sum`, `Average`, plus conditional aggregation | See [Conditional aggregation](#conditional-aggregation) |
 | Grouping | `GroupBy` with key projection, `HAVING` predicates | |
 | Joins | `Join`, `GroupJoin`/`SelectMany` + `DefaultIfEmpty`, cross joins | `INNER JOIN` / `LEFT JOIN` / `CROSS JOIN` |
-| Math | `Abs`, `Ceiling`, `Floor`, `Round`, `Sqrt`, `Exp`, `Log`, `Sign`, `Pow` | → `abs`, `ceil`, `floor`, `round`, `sqrt`, `exp`, `ln`, `sign`, `power` |
+| Math | `Abs`, `Ceiling`, `Floor`, `Sqrt`, `Exp`, `Log`, `Sign`, `Pow` | → `abs`, `ceil`, `floor`, `sqrt`, `exp`, `ln`, `sign`, `power` |
 | Date/time members | `Year`, `Month`, `Day`, `Hour`, `Minute`, `Second`, `DayOfYear`, `.Date` | → `year()` … `dayofyear()`, `date()`; `DateOnly` supports the date components |
 | Date/time arithmetic | `AddYears` … `AddSeconds` | → `years_add` … `seconds_add` (plain-argument form, no `INTERVAL` syntax); `DateOnly` supports years/months/days |
 | Extrema | `EF.Functions.Greatest`/`Least`, `Math.Max`/`Math.Min`, inline-collection `Max()`/`Min()` | → `greatest()` / `least()`; see [NULL semantics](#greatest--least-and-mysql-null-semantics) |
 | Projection | Anonymous objects and simple DTOs | |
 | Set-based writes | `ExecuteUpdate`, `ExecuteDelete` | Single-table `UPDATE` / `DELETE` without a table alias; see [Bulk updates and deletes](#bulk-updates-and-deletes) |
 
-Two translations fall back to EF's normal "could not be translated" failure rather than emit
-wrong SQL: `Math.Round(value, MidpointRounding)` (StarRocks has no equivalent) and the
+Two translation families fall back to EF's normal "could not be translated" failure:
+all `Math.Round` overloads and the
 `AddX(double)` overloads with a fractional constant (the StarRocks `*_add` functions take a
 whole-number count). A count that is only known at execution time — a parameter, including an
 `int` variable, which EF passes as a `double` parameter, or a column — is guarded with
@@ -40,6 +40,15 @@ whole-number count). A count that is only known at execution time — a paramete
 on the server with a clear message instead of being truncated or producing `NULL`. Whole-number
 `AddMinutes` and `AddSeconds` constants outside that range are decomposed into a `days_add` plus
 an in-range remainder, preserving valid large operations such as `AddSeconds(3_000_000_000d)`.
+
+`Math.Round` is evaluated on the client only where EF permits client projection; it is
+unsupported inside server predicates. [.NET defaults to midpoint-to-even rounding](https://learn.microsoft.com/dotnet/api/system.math.round),
+whereas the [StarRocks 4.1.6 implementation](https://github.com/StarRocks/starrocks/blob/4.1.6/be/src/exprs/math_functions.cpp)
+rounds halfway values away from zero. StarRocks also accepts [negative digit counts](https://docs.starrocks.io/docs/sql-reference/sql-functions/math-functions/round/)
+that .NET rejects. A live check on StarRocks 4.1.6 returned `3`, `-3`, `130`, and `140` for
+`ROUND(CAST(2.5 AS DOUBLE))`, `ROUND(CAST(-2.5 AS DOUBLE))`,
+`ROUND(CAST(125 AS DOUBLE), -1)`, and `ROUND(CAST(135 AS DOUBLE), -1)`.
+Use explicit SQL when StarRocks rounding semantics are desired.
 
 Constants that EF inlines into SQL (`EF.Constant(...)`, or an inline array in `Contains`) use the
 StarRocks literal forms: `DATE '…'`, `DATETIME '…'` with microsecond precision, and a plain
