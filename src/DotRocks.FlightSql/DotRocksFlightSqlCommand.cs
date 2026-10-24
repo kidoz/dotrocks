@@ -200,6 +200,19 @@ public sealed class DotRocksFlightSqlCommand : DbCommand
     {
         DotRocksFlightSqlDbConnection connection = EnsureExecutable();
         string commandText = BindCommandText();
+        if (SqlStatementClassifier.IsReadOnlyQuery(commandText))
+        {
+            DbDataReader reader = await ExecuteDbDataReaderAsync(
+                    CommandBehavior.Default,
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+            await using (reader.ConfigureAwait(false))
+            {
+                return reader.RecordsAffected;
+            }
+        }
+
         using ExecutionScope operation = BeginExecution(cancellationToken);
 
         if (

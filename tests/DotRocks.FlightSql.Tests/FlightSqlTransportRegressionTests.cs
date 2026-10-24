@@ -62,6 +62,38 @@ public sealed partial class FlightSqlTransportTests
         }
     }
 
+    [Theory]
+    [InlineData(DotRocksFlightSqlFallbackMode.None)]
+    [InlineData(DotRocksFlightSqlFallbackMode.WriteCommands)]
+    public async Task NonQuery_ReadsUseFlightQueryPath(DotRocksFlightSqlFallbackMode fallbackMode)
+    {
+        using IHost host = CreateHost();
+        CancellationToken token = TestContext.Current.CancellationToken;
+        await host.StartAsync(token).ConfigureAwait(true);
+        try
+        {
+            await using var connection =
+                fallbackMode == DotRocksFlightSqlFallbackMode.None
+                    ? new DotRocksFlightSqlDbConnection(
+                        new DotRocksFlightSqlOptions(GetServerAddress(host), "root", "secret")
+                        {
+                            AllowInsecureTransport = true,
+                        }
+                    )
+                    : CreateFallbackConnection(host, fallbackMode);
+            await connection.OpenAsync(token).ConfigureAwait(true);
+            await using var command = connection.CreateCommand();
+            command.CommandText = "SELECT value FROM test";
+            Assert.Equal(-1, await command.ExecuteNonQueryAsync(token).ConfigureAwait(true));
+            Assert.Equal("SELECT value FROM test", GetQueryCapture(host).LastQuery);
+            Assert.Empty(GetQueryCapture(host).LastUpdate);
+        }
+        finally
+        {
+            await host.StopAsync(token).ConfigureAwait(true);
+        }
+    }
+
     [Fact]
     public async Task Clone_PreservesCredentialsWithIndependentFlightSession()
     {
