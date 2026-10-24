@@ -210,9 +210,12 @@ public sealed class DotRocksConnection : DbConnection, ICloneable
         }
         catch (Exception ex)
         {
-            // Never attach the raw exception message to the span; classify it instead.
+            // Never attach the raw exception message to the span; classify it instead. The
+            // physical open has its own connection-timeout token, so an OCE can arrive before
+            // this layer's timer fires; with a live caller token it is still an internal timeout.
             bool timedOut =
-                timeout.IsCancellationRequested && !cancellationToken.IsCancellationRequested;
+                !cancellationToken.IsCancellationRequested
+                && (timeout.IsCancellationRequested || ex is OperationCanceledException);
             (string errorType, string? statusCode) = DotRocksTelemetryTags.Classify(ex);
             DotRocksTelemetryTags.TagError(
                 activity,
