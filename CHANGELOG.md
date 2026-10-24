@@ -13,6 +13,8 @@ version is derived from the release tag at publish time.
   10.0.13, Dapper 2.1.89, gRPC 2.84.0, Microsoft.NET.Test.Sdk 18.11.0, xUnit 4.0.2,
   the Visual Studio xUnit runner 4.0.1, and coverlet.collector 10.1.0.
 - Update the pinned DocFX local tool to 2.81.0.
+- Test the latest stable StarRocks patch in each supported branch: 3.5.21, 4.0.16, and
+  4.1.6. Use 4.1.6 as the local Docker default.
 
 ## [1.5.5] - 2026-10-04
 

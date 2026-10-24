@@ -28,8 +28,8 @@ README tracks `main`, and unreleased changes are listed in
 [CHANGELOG.md](https://github.com/kidoz/dotrocks/blob/main/CHANGELOG.md).
 The ADO.NET driver (`DotRocks.Data`), EF Core provider (`DotRocks.EntityFrameworkCore`),
 Flight SQL transport (`DotRocks.FlightSql`), and analyzer suite (`DotRocks.Analyzers`) are
-validated against live StarRocks 3.5.21 and 4.1.4 in CI. Supported features are implemented and
-tested; unsupported behavior fails explicitly.
+validated against live StarRocks 3.5.21, 4.0.16, and 4.1.6 in CI. Supported features are
+implemented and tested; unsupported behavior fails explicitly.
 
 DotRocks implements **its own** managed StarRocks client protocol. It takes no runtime
 dependency on MySqlConnector, Oracle MySQL Connector/NET, Pomelo, or any other MySQL

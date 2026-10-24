@@ -3,7 +3,8 @@
 Source snapshot: 2026-06-25. Live validation: 2026-06-25 against
 `starrocks/allin1-ubuntu:3.5.5` and `4.0.7` (sections marked "verified live" reflect
 observed image behavior, which in places differs from the published docs); re-validated
-2026-09-03 against `3.5.21` and `4.1.4`, which is the current CI matrix.
+2026-09-03 against `3.5.21` and `4.1.4`. The current CI matrix pins
+`3.5.21`, `4.0.16`, and `4.1.6` (latest stable patches per supported branch).
 
 This document summarizes StarRocks 3.x behavior that matters when building and
 maintaining DotRocks against older lines. It is research guidance, not a

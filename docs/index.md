@@ -36,7 +36,7 @@ README and changelog for unreleased behavior.
 
 ## Compatibility
 
-The live integration matrix runs against StarRocks 3.5.21 and 4.1.4. Version-specific
+The live integration matrix runs against StarRocks 3.5.21, 4.0.16, and 4.1.6. Version-specific
 behavior is gated from `SELECT current_version()` or the `Server Compatibility Level`
 connection-string override.
 

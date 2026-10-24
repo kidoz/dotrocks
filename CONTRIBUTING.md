@@ -24,6 +24,16 @@ Integration tests require a live StarRocks and run via `just integration-test` (
 `integration.yml` workflow) with `DOTROCKS_RUN_INTEGRATION=1`. Without it they are skipped,
 not silently passed.
 
+Use the latest stable patch release in each supported StarRocks branch: 3.5, 4.0, and 4.1.
+Check the official [3.5](https://docs.starrocks.io/releasenotes/release-3.5/),
+[4.0](https://docs.starrocks.io/releasenotes/release-4.0/), and
+[4.1](https://docs.starrocks.io/releasenotes/release-4.1/) release notes when updating the
+exact pins in `.github/workflows/integration.yml`. Keep the local defaults in
+`dev/docker-compose.yml` and `dev/Dockerfile.starrocks-flight` on the newest branch.
+To test a matrix version locally, run `STARROCKS_VERSION=<version> just starrocks-up`,
+then `just integration-test`. Stop the container with `just starrocks-down` before switching
+versions so each version starts with fresh server data.
+
 ## Conventions
 
 - **Formatting:** CSharpier is the only formatter; CI fails on unformatted files.
