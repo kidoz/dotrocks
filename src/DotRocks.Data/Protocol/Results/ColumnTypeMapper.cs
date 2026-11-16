@@ -107,6 +107,39 @@ internal static class ColumnTypeMapper
 
         try
         {
+            if (
+                columnType
+                    is ColumnType.Date
+                        or ColumnType.NewDate
+                        or ColumnType.DateTime
+                        or ColumnType.Timestamp
+                && bytes.StartsWith("0000-"u8)
+            )
+            {
+                // Year zero is valid StarRocks data. Validate the other components using an
+                // equivalent leap year, then defer the CLR representation error to the accessor.
+                string supportedYear = "2000" + Encoding.UTF8.GetString(bytes[4..]);
+                if (columnType is ColumnType.Date or ColumnType.NewDate)
+                {
+                    _ = DateTime.ParseExact(
+                        supportedYear,
+                        DateFormat,
+                        CultureInfo.InvariantCulture,
+                        DateTimeStyles.None
+                    );
+                }
+                else
+                {
+                    _ = DateTime.ParseExact(
+                        supportedYear,
+                        DateTimeFormats,
+                        CultureInfo.InvariantCulture,
+                        DateTimeStyles.None
+                    );
+                }
+                return UnsupportedDateValue.Instance;
+            }
+
             // Numeric types parse straight from the UTF-8 bytes (IUtf8SpanParsable), so a wide
             // numeric result set decodes with no per-value string allocation. Only the branches
             // that need culture/format-exact parsing or return text decode the bytes to a string.

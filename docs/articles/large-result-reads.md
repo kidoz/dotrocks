@@ -118,3 +118,23 @@ acceleration.
 - [Arrow Flight SQL](arrow-flight-sql.md) — the columnar transport and its security model
 - [Stream Load](stream-load.md) — the ingestion counterpart to this article
 - [Observability](observability.md) — the metrics and spans emitted while reading
+
+## Closing an unfinished reader
+
+Closing or disposing a streaming reader allows at most one second to drain remaining rows,
+even with an infinite command timeout. A shorter command deadline still applies. If draining
+fails or exceeds that bound, DotRocks closes the socket instead of returning it to the pool.
+Consume all rows when connection reuse matters.
+
+## Date and parameter boundaries
+
+StarRocks can return year-zero dates, outside `System.DateTime`'s range. Reading such a value
+raises `DotRocksUnsupportedFeatureException` from the value accessor, without treating the row
+as a malformed packet or discarding the connection. Select `CAST(column AS STRING)` to preserve
+the server value. On the tested StarRocks 4.1.6 binary protocol, a year-zero `DATE` is sent as
+SQL NULL; use the text protocol or a string cast when this distinction matters.
+
+SQL `DateTime` parameters preserve their calendar fields and do not convert `Kind` to UTC;
+StarRocks DATE/DATETIME values have no timezone. `DateTimeOffset`, `TimeSpan`, `char`, and enums
+are not accepted implicitly. Convert them explicitly to a supported representation with the
+semantics your schema requires.

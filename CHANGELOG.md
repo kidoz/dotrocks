@@ -20,6 +20,8 @@ version is derived from the release tag at publish time.
 - Round fractional Stream Load server timeouts up and expose effective labels on failures;
   retain transaction in-doubt handling and allow unread non-seekable bodies to follow redirects.
 - Distinguish missing databases from connection failures in EF Core `Exists()` checks.
+- Report year-zero dates as unsupported CLR values from reader accessors and bound abandoned
+  reader draining to one second, including commands with an infinite timeout.
 - Restore physical connection pooling after canceling a command and reopening the same
   `DotRocksConnection` instance.
 - Remove the implicit 100-second HTTP timeout from Stream Load uploads and transaction

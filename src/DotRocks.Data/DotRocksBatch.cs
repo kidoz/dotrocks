@@ -132,7 +132,7 @@ public sealed class DotRocksBatch : DbBatch
             return null;
         }
 
-        return first.Rows[0][0] ?? DBNull.Value;
+        return UnsupportedDateValue.GetValue(first.Rows[0][0]);
     }
 
     /// <inheritdoc />

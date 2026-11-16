@@ -9,6 +9,41 @@ namespace DotRocks.Protocol.Tests.Pooling;
 public sealed class DotRocksConnectionCloseRaceTests
 {
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AbandonedReader_WithInfiniteCommandTimeout_HasBoundedDrain(bool asynchronous)
+    {
+        CancellationToken token = TestContext.Current.CancellationToken;
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var server = FakeStarRocksServer.Start(async stream =>
+        {
+            await FakeStarRocksServer.CompleteAuthenticationAsync(stream).ConfigureAwait(true);
+            await FakeStarRocksServer
+                .ReadCommandAndStallMidResultSetAsync(stream, release.Task, "1")
+                .ConfigureAwait(true);
+        });
+        using var connection = new DotRocksConnection(server.ConnectionString);
+        try
+        {
+            await connection.OpenAsync(token).ConfigureAwait(true);
+            using var command = connection.CreateCommand();
+            command.CommandText = "SELECT stalled";
+            command.CommandTimeout = 0;
+            var reader = await command.ExecuteReaderAsync(token).ConfigureAwait(true);
+            Assert.True(await reader.ReadAsync(token).ConfigureAwait(true));
+            Task dispose = asynchronous
+                ? reader.DisposeAsync().AsTask()
+                : Task.Run(reader.Dispose, token);
+            await dispose.WaitAsync(TimeSpan.FromSeconds(3), token).ConfigureAwait(true);
+            Assert.Equal(System.Data.ConnectionState.Closed, connection.State);
+        }
+        finally
+        {
+            release.TrySetResult();
+        }
+    }
+
+    [Theory]
     [InlineData(true)]
     [InlineData(false)]
     public async Task ReopenAfterCancellation_ReusesSubsequentCleanLease(bool pooling)

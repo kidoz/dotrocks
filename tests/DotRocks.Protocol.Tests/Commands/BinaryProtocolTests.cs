@@ -135,6 +135,20 @@ public sealed class BinaryProtocolTests
         Assert.Equal(typeof(int), ColumnTypeMapper.GetFieldType(yearColumn));
     }
 
+    [Theory]
+    [InlineData((byte)0x0A)]
+    [InlineData((byte)0x0C)]
+    public void Decode_YearZeroLeapDay_PreservesOtherColumnsUntilAccess(byte type)
+    {
+        // Header, null bitmap, four-byte date (year zero, February 29), then INT 7.
+        byte[] row = [0, 0, 4, 0, 0, 2, 29, 7, 0, 0, 0];
+        object?[] values = BinaryResultRowDecoder.Decode(row, [Column(type), Column(0x03)]);
+        Assert.Throws<DotRocksUnsupportedFeatureException>(() =>
+            UnsupportedDateValue.GetValue(values[0])
+        );
+        Assert.Equal(7, values[1]);
+    }
+
     [Fact]
     public void Decode_DateTimeWithOutOfRangeComponents_ThrowsMalformedPacket()
     {

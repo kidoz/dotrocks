@@ -8,6 +8,52 @@ namespace DotRocks.Data.IntegrationTests;
 public sealed class ReviewRegressionTests
 {
     [Theory]
+    [InlineData(DotRocksParameterMode.Auto)]
+    [InlineData(DotRocksParameterMode.ServerPrepared)]
+    [SuppressMessage(
+        "Security",
+        "CA2100:Review SQL queries for security vulnerabilities",
+        Justification = "Both branches are fixed test SQL literals."
+    )]
+    public async Task YearZero_IsAnUnsupportedValueWithoutBreakingTheConnection(
+        DotRocksParameterMode mode
+    )
+    {
+        IntegrationTestEnvironment.SkipUnlessEnabled();
+        CancellationToken token = TestContext.Current.CancellationToken;
+        using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
+        await connection.OpenAsync(token).ConfigureAwait(true);
+        using var command = connection.CreateCommand();
+        command.ParameterMode = mode;
+        command.CommandText =
+            mode == DotRocksParameterMode.ServerPrepared
+                ? "SELECT CAST('0000-01-01 12:00:00' AS DATETIME), CAST('0000-01-01 12:00:00' AS DATETIME), 7"
+                : "SELECT CAST('0000-02-29' AS DATE), CAST('0000-01-01 12:00:00' AS DATETIME), 7";
+        using (DbDataReader reader = await command.ExecuteReaderAsync(token).ConfigureAwait(true))
+        {
+            Assert.True(await reader.ReadAsync(token).ConfigureAwait(true));
+            Assert.False(await reader.IsDBNullAsync(0, token).ConfigureAwait(true));
+            Assert.Throws<DotRocksUnsupportedFeatureException>(() => reader.GetValue(0));
+            Assert.Throws<DotRocksUnsupportedFeatureException>(() => reader.GetDateTime(1));
+            Assert.Equal(
+                7,
+                Convert.ToInt32(
+                    reader.GetValue(2),
+                    System.Globalization.CultureInfo.InvariantCulture
+                )
+            );
+        }
+        command.CommandText = "SELECT 1";
+        Assert.Equal(
+            1,
+            Convert.ToInt32(
+                await command.ExecuteScalarAsync(token).ConfigureAwait(true),
+                System.Globalization.CultureInfo.InvariantCulture
+            )
+        );
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task DoubleQuotedEscapes_PreserveLiteralAndParameterBoundaries(bool prepare)

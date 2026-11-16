@@ -416,7 +416,7 @@ public sealed class DotRocksDataReader
         ValidateReadableRow();
         ValidateOrdinal(ordinal);
         object?[] row = _currentRow!;
-        return row[ordinal] ?? DBNull.Value;
+        return UnsupportedDateValue.GetValue(row[ordinal]);
     }
 
     /// <inheritdoc />
@@ -433,7 +433,12 @@ public sealed class DotRocksDataReader
     }
 
     /// <inheritdoc />
-    public override bool IsDBNull(int ordinal) => GetValue(ordinal) == DBNull.Value;
+    public override bool IsDBNull(int ordinal)
+    {
+        ValidateReadableRow();
+        ValidateOrdinal(ordinal);
+        return _currentRow![ordinal] is null or DBNull;
+    }
 
     /// <inheritdoc />
     public ReadOnlyCollection<DbColumn> GetColumnSchema()
@@ -957,9 +962,13 @@ public sealed class DotRocksDataReader
             return true;
         }
 
-        // Draining is only a courtesy that keeps the connection poolable. Bound it by the command
-        // timeout so closing a reader over a huge unread result set cannot block for the whole
-        // remaining stream — on expiry the connection is retired instead.
+        // Draining is a courtesy. Bound the entire drain to one second even when the command
+        // has no timeout; the existing command budget may expire sooner.
+        using var drainTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(1));
+        using CancellationTokenRegistration abort = drainTimeout.Token.UnsafeRegister(
+            static state => ((DotRocksConnection?)state)?.Abort(),
+            _connection
+        );
         _operationScope?.ResumeTimeout();
         try
         {
@@ -997,14 +1006,17 @@ public sealed class DotRocksDataReader
             return true;
         }
 
-        // See TryDrainStreamingRows: the drain is bounded by the command timeout so disposal of a
-        // partially read result set cannot block indefinitely.
+        // See TryDrainStreamingRows: one second bounds disposal even with an infinite command
+        // timeout. An earlier command deadline or cancellation still interrupts the drain.
+        using var drainTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(1));
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(
+            drainTimeout.Token,
+            _operationScope?.Token ?? CancellationToken.None
+        );
         _operationScope?.ResumeTimeout();
         try
         {
-            await _rowReader
-                .DrainAsync(_operationScope?.Token ?? CancellationToken.None)
-                .ConfigureAwait(false);
+            await _rowReader.DrainAsync(linked.Token).ConfigureAwait(false);
             return true;
         }
         catch (DotRocksException)

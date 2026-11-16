@@ -76,12 +76,12 @@ internal static class BinaryResultRowDecoder
         }
     }
 
-    private static DateTime DecodeDateTime(ref ProtocolReader reader)
+    private static object DecodeDateTime(ref ProtocolReader reader)
     {
         byte length = reader.ReadByte();
         if (length == 0)
         {
-            return default;
+            return UnsupportedDateValue.Instance;
         }
 
         int year = (int)reader.ReadFixedInteger(2);
@@ -107,8 +107,8 @@ internal static class BinaryResultRowDecoder
         // protocol error rather than letting the DateTime constructor throw an uncontrolled one.
         try
         {
-            return new DateTime(
-                year,
+            DateTime value = new DateTime(
+                year == 0 ? 2000 : year,
                 month,
                 day,
                 hour,
@@ -116,6 +116,7 @@ internal static class BinaryResultRowDecoder
                 second,
                 DateTimeKind.Unspecified
             ).AddTicks(microseconds * (TimeSpan.TicksPerMillisecond / 1000));
+            return year == 0 ? UnsupportedDateValue.Instance : value;
         }
         catch (ArgumentOutOfRangeException ex)
         {
