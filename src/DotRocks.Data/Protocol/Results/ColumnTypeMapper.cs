@@ -105,6 +105,13 @@ internal static class ColumnTypeMapper
                 return bytes.ToArray();
         }
 
+        // StarRocks DECIMAL has at most 76 digits. Allow modest lexical padding, but
+        // reject hostile wire values before allocating a string or constructing a BigInteger.
+        if (columnType is ColumnType.Decimal or ColumnType.NewDecimal && bytes.Length > 128)
+        {
+            throw new MalformedPacketException("Decimal wire value exceeds the supported length.");
+        }
+
         try
         {
             if (

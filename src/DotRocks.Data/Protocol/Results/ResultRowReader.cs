@@ -70,6 +70,8 @@ internal sealed class ResultRowReader
 
     public bool IsConsumed => _isConsumed;
 
+    public uint? ConnectionId => _connectionId;
+
     public async ValueTask<object?[]?> ReadRowAsync(CancellationToken cancellationToken)
     {
         if (_isConsumed)

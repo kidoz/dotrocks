@@ -267,6 +267,7 @@ public sealed class DotRocksConnectionRecoveryTests
                 )
                 .ConfigureAwait(true);
             Assert.Equal(1064, exception.ServerErrorCode);
+            Assert.Equal(42u, exception.ConnectionId);
         }
 
         // The protocol state is clean after an ERR packet; the connection must remain usable.
@@ -308,6 +309,7 @@ public sealed class DotRocksConnectionRecoveryTests
 
         // The real server error must surface, not a wrapped malformed-packet failure.
         Assert.Equal(1064, exception.ServerErrorCode);
+        Assert.Equal(42u, exception.ConnectionId);
         Assert.Equal(ConnectionState.Open, connection.State);
     }
 

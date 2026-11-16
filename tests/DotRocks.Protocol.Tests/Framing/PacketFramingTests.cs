@@ -7,6 +7,38 @@ namespace DotRocks.Protocol.Tests.Framing;
 public sealed class PacketFramingTests
 {
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task MetadataLimit_RejectsOversizedHeaderBeforeReadingPayload(bool asynchronous)
+    {
+        byte[] bytes = new byte[MySqlPacket.HeaderLength];
+        new PacketHeader(PacketReader.MaxMetadataPayloadLength + 1, 0).WriteTo(bytes);
+        using var stream = new MemoryStream(bytes);
+        var reader = new PacketReader(stream);
+        MalformedPacketException exception;
+        if (asynchronous)
+        {
+            exception = await Assert.ThrowsAsync<MalformedPacketException>(async () =>
+                await reader
+                    .ReadPayloadAsync(
+                        PacketReader.MaxMetadataPayloadLength,
+                        TestContext.Current.CancellationToken
+                    )
+                    .ConfigureAwait(true)
+            );
+        }
+        else
+        {
+#pragma warning disable CA1849 // Exercise the synchronous API separately.
+            exception = Assert.Throws<MalformedPacketException>(() =>
+                reader.ReadPayload(PacketReader.MaxMetadataPayloadLength)
+            );
+#pragma warning restore CA1849
+        }
+        Assert.Contains("maximum", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
     [InlineData(0, 0)]
     [InlineData(1, 5)]
     [InlineData(0xFFFFFF, 255)]

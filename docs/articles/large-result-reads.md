@@ -126,6 +126,10 @@ even with an infinite command timeout. A shorter command deadline still applies.
 fails or exceeds that bound, DotRocks closes the socket instead of returning it to the pool.
 Consume all rows when connection reuse matters.
 
+`DotRocksBatch` buffers all result sets before returning its reader. Its memory use grows with
+the total rows in the batch; use separate streaming commands for large results. Batch execution
+does not currently emit the individual-command activity and metrics.
+
 ## Date and parameter boundaries
 
 StarRocks can return year-zero dates, outside `System.DateTime`'s range. Reading such a value

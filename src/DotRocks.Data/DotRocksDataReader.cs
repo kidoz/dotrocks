@@ -726,7 +726,8 @@ public sealed class DotRocksDataReader
             ReportConnectionCompletion(reusable: false);
             throw DotRocksPhysicalConnection.TranslateTransportFailure(
                 ex,
-                "I/O failed while reading the StarRocks result set."
+                "I/O failed while reading the StarRocks result set.",
+                _rowReader.ConnectionId
             );
         }
         catch (DotRocksException) when (_rowReader.IsConsumed)
@@ -801,7 +802,8 @@ public sealed class DotRocksDataReader
             ReportConnectionCompletion(reusable: false);
             throw DotRocksPhysicalConnection.TranslateTransportFailure(
                 ex,
-                "I/O failed while reading the StarRocks result set."
+                "I/O failed while reading the StarRocks result set.",
+                _rowReader.ConnectionId
             );
         }
         catch (DotRocksException) when (_rowReader.IsConsumed)

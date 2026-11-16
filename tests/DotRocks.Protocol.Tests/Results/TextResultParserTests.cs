@@ -9,6 +9,34 @@ namespace DotRocks.Protocol.Tests.Results;
 
 public sealed class TextResultParserTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task MetadataBlock_RejectsExcessiveAggregateBeforeRows(bool asynchronous)
+    {
+        byte[] column = StarRocksPacketFactory.ColumnDefinition(new string('x', 30000));
+        byte[][] definitions = Enumerable.Repeat(column, 70).ToArray();
+        using MemoryStream stream = StarRocksPacketFactory.PayloadStream(0, definitions);
+        var reader = new PacketReader(stream);
+        if (asynchronous)
+        {
+            await Assert
+                .ThrowsAsync<MalformedPacketException>(async () =>
+                    await TextResultParser
+                        .ReadAsync([70], reader, null, TestContext.Current.CancellationToken)
+                        .ConfigureAwait(true)
+                )
+                .ConfigureAwait(true);
+        }
+        else
+        {
+            Assert.Throws<MalformedPacketException>(() =>
+                TextResultParser.ReadStreaming([70], reader, null)
+            );
+        }
+        Assert.True(stream.Position < stream.Length);
+    }
+
     [Fact]
     public async Task ReadAsync_ParsesSingleColumnTextResult()
     {

@@ -10,9 +10,14 @@ namespace DotRocks.Data.Protocol.Framing;
 /// </summary>
 internal sealed class PacketReader
 {
+    public const int MaxMetadataBlockLength = 4 * 1024 * 1024;
+
+    public const int MaxMetadataPayloadLength = 64 * 1024;
+
     public const int DefaultMaxLogicalPayloadLength = 64 * 1024 * 1024;
 
     private readonly Stream _stream;
+    private readonly byte[] _headerBuffer = new byte[MySqlPacket.HeaderLength];
     private readonly int _maxPayloadPerPacket;
     private readonly int _maxLogicalPayloadLength;
 
@@ -114,8 +119,15 @@ internal sealed class PacketReader
     }
 
     /// <summary>Reads one logical message payload, reassembling continuation packets.</summary>
-    public async ValueTask<byte[]> ReadPayloadAsync(CancellationToken cancellationToken = default)
+    public ValueTask<byte[]> ReadPayloadAsync(CancellationToken cancellationToken = default) =>
+        ReadPayloadAsync(DefaultMaxLogicalPayloadLength, cancellationToken);
+
+    public async ValueTask<byte[]> ReadPayloadAsync(
+        int maximumLength,
+        CancellationToken cancellationToken = default
+    )
     {
+        maximumLength = Math.Min(maximumLength, _maxLogicalPayloadLength);
         PacketHeader header = await ReadCheckedHeaderAsync(cancellationToken).ConfigureAwait(false);
 
         // Fast path: a first packet shorter than the per-packet maximum is the whole logical
@@ -123,9 +135,9 @@ internal sealed class PacketReader
         // ArrayBufferWriter and no trailing copy. This is the common single-packet row case.
         if (header.PayloadLength < _maxPayloadPerPacket)
         {
-            if (header.PayloadLength > _maxLogicalPayloadLength)
+            if (header.PayloadLength > maximumLength)
             {
-                throw LogicalPayloadTooLarge();
+                throw LogicalPayloadTooLarge(maximumLength);
             }
 
             if (header.PayloadLength == 0)
@@ -138,23 +150,26 @@ internal sealed class PacketReader
             return payload;
         }
 
-        return await ContinuePayloadAsync(header, cancellationToken).ConfigureAwait(false);
+        return await ContinuePayloadAsync(header, cancellationToken, maximumLength)
+            .ConfigureAwait(false);
     }
 
     // Reassembles a payload that spans continuation packets, starting from its first header.
     private async ValueTask<byte[]> ContinuePayloadAsync(
         PacketHeader header,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        int maximumLength = DefaultMaxLogicalPayloadLength
     )
     {
+        maximumLength = Math.Min(maximumLength, _maxLogicalPayloadLength);
         var accumulator = new ArrayBufferWriter<byte>();
         while (true)
         {
             if (header.PayloadLength > 0)
             {
-                if (header.PayloadLength > _maxLogicalPayloadLength - accumulator.WrittenCount)
+                if (header.PayloadLength > maximumLength - accumulator.WrittenCount)
                 {
-                    throw LogicalPayloadTooLarge();
+                    throw LogicalPayloadTooLarge(maximumLength);
                 }
 
                 Memory<byte> destination = accumulator.GetMemory(header.PayloadLength)[
@@ -176,14 +191,15 @@ internal sealed class PacketReader
     }
 
     /// <summary>Synchronously reads one logical message payload.</summary>
-    public byte[] ReadPayload()
+    public byte[] ReadPayload(int maximumLength = DefaultMaxLogicalPayloadLength)
     {
+        maximumLength = Math.Min(maximumLength, _maxLogicalPayloadLength);
         PacketHeader header = ReadCheckedHeader();
         if (header.PayloadLength < _maxPayloadPerPacket)
         {
-            if (header.PayloadLength > _maxLogicalPayloadLength)
+            if (header.PayloadLength > maximumLength)
             {
-                throw LogicalPayloadTooLarge();
+                throw LogicalPayloadTooLarge(maximumLength);
             }
 
             if (header.PayloadLength == 0)
@@ -196,20 +212,24 @@ internal sealed class PacketReader
             return payload;
         }
 
-        return ContinuePayload(header);
+        return ContinuePayload(header, maximumLength);
     }
 
     // Synchronous counterpart to ContinuePayloadAsync.
-    private byte[] ContinuePayload(PacketHeader header)
+    private byte[] ContinuePayload(
+        PacketHeader header,
+        int maximumLength = DefaultMaxLogicalPayloadLength
+    )
     {
+        maximumLength = Math.Min(maximumLength, _maxLogicalPayloadLength);
         var accumulator = new ArrayBufferWriter<byte>();
         while (true)
         {
             if (header.PayloadLength > 0)
             {
-                if (header.PayloadLength > _maxLogicalPayloadLength - accumulator.WrittenCount)
+                if (header.PayloadLength > maximumLength - accumulator.WrittenCount)
                 {
-                    throw LogicalPayloadTooLarge();
+                    throw LogicalPayloadTooLarge(maximumLength);
                 }
 
                 Span<byte> destination = accumulator.GetSpan(header.PayloadLength)[
@@ -260,9 +280,9 @@ internal sealed class PacketReader
         return header;
     }
 
-    private MalformedPacketException LogicalPayloadTooLarge() =>
+    private MalformedPacketException LogicalPayloadTooLarge(int? maximumLength = null) =>
         new(
-            $"Logical packet payload exceeded the configured maximum of {_maxLogicalPayloadLength} byte(s)."
+            $"Logical packet payload exceeded the configured maximum of {maximumLength ?? _maxLogicalPayloadLength} byte(s)."
         )
         {
             IsPayloadTooLarge = true,
@@ -270,34 +290,14 @@ internal sealed class PacketReader
 
     private async ValueTask<PacketHeader> ReadHeaderAsync(CancellationToken cancellationToken)
     {
-        byte[] headerBuffer = ArrayPool<byte>.Shared.Rent(MySqlPacket.HeaderLength);
-        try
-        {
-            await ReadExactAsync(
-                    headerBuffer.AsMemory(0, MySqlPacket.HeaderLength),
-                    cancellationToken
-                )
-                .ConfigureAwait(false);
-            return PacketHeader.Parse(headerBuffer.AsSpan(0, MySqlPacket.HeaderLength));
-        }
-        finally
-        {
-            ArrayPool<byte>.Shared.Return(headerBuffer);
-        }
+        await ReadExactAsync(_headerBuffer, cancellationToken).ConfigureAwait(false);
+        return PacketHeader.Parse(_headerBuffer);
     }
 
     private PacketHeader ReadHeader()
     {
-        byte[] headerBuffer = ArrayPool<byte>.Shared.Rent(MySqlPacket.HeaderLength);
-        try
-        {
-            ReadExact(headerBuffer.AsSpan(0, MySqlPacket.HeaderLength));
-            return PacketHeader.Parse(headerBuffer.AsSpan(0, MySqlPacket.HeaderLength));
-        }
-        finally
-        {
-            ArrayPool<byte>.Shared.Return(headerBuffer);
-        }
+        ReadExact(_headerBuffer);
+        return PacketHeader.Parse(_headerBuffer);
     }
 
     private async ValueTask ReadExactAsync(Memory<byte> buffer, CancellationToken cancellationToken)

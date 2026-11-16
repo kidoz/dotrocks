@@ -13,6 +13,15 @@ public sealed class ColumnTypeMapperTests
     private const uint SmallIntLength = 6;
 
     [Fact]
+    public void ParseTextValue_RejectsOversizedDecimalBeforeBigIntegerParsing()
+    {
+        byte[] bytes = Encoding.ASCII.GetBytes(new string('9', 129));
+        Assert.Throws<MalformedPacketException>(() =>
+            ColumnTypeMapper.ParseTextValue(Column((byte)ColumnType.NewDecimal, 80), bytes)
+        );
+    }
+
+    [Fact]
     public void ParseTextValue_TypeMismatch_ThrowsMalformedPacketException()
     {
         byte[] bytes = Encoding.UTF8.GetBytes("not-a-number");

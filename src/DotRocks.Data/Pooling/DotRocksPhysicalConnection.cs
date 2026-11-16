@@ -40,12 +40,14 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
         TcpClient client,
         Stream stream,
         string serverVersion,
+        uint connectionId,
         TimeSpan maxLifetime
     )
     {
         _client = client;
         _stream = stream;
         ServerVersion = serverVersion;
+        ConnectionId = connectionId;
         _maxLifetime = maxLifetime;
         _createdTimestamp = Stopwatch.GetTimestamp();
     }
@@ -56,6 +58,8 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
     /// not be used for capability gating — query <see cref="QueryServerVersionAsync"/> for that.
     /// </summary>
     public string ServerVersion { get; }
+
+    internal uint ConnectionId { get; }
 
     /// <summary>
     /// True when the connection's protocol state is unusable: disposed, or broken mid-command
@@ -125,7 +129,7 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
 
             var reader = new PacketReader(stream);
             byte[] handshakePayload = await reader
-                .ReadPayloadAsync(linked.Token)
+                .ReadPayloadAsync(PacketReader.MaxMetadataPayloadLength, linked.Token)
                 .ConfigureAwait(false);
             ServerHandshake handshake = ServerHandshake.Parse(handshakePayload);
 
@@ -154,7 +158,7 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
 
             reader.ResetSequence(writer.SequenceId);
             byte[] authResultPayload = await reader
-                .ReadPayloadAsync(linked.Token)
+                .ReadPayloadAsync(PacketReader.MaxMetadataPayloadLength, linked.Token)
                 .ConfigureAwait(false);
             AuthenticationResult.Read(authResultPayload, handshake.ConnectionId);
 
@@ -162,6 +166,7 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
                 client,
                 stream,
                 handshake.ServerVersion,
+                handshake.ConnectionId,
                 ComputeJitteredLifetime(options.ConnectionLifetime)
             );
             client = null;
@@ -310,8 +315,8 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
         return ExecuteExchangeAsync(
             QueryCommandBuilder.Build(commandText),
             "I/O failed while executing the StarRocks command.",
-            static (firstPayload, reader, ct) =>
-                TextResultParser.ReadAsync(firstPayload, reader, connectionId: null, ct),
+            static (firstPayload, reader, connectionId, ct) =>
+                TextResultParser.ReadAsync(firstPayload, reader, connectionId: connectionId, ct),
             cancellationToken
         );
     }
@@ -322,8 +327,8 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
         return ExecuteExchange(
             QueryCommandBuilder.Build(commandText),
             "I/O failed while executing the StarRocks command.",
-            static (firstPayload, reader) =>
-                TextResultParser.Read(firstPayload, reader, connectionId: null)
+            static (firstPayload, reader, connectionId) =>
+                TextResultParser.Read(firstPayload, reader, connectionId: connectionId)
         );
     }
 
@@ -347,8 +352,13 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
             QueryResult result = await ExecuteExchangeAsync(
                     QueryCommandBuilder.Build(commandText),
                     "I/O failed while executing the StarRocks transaction control command.",
-                    static (firstPayload, reader, ct) =>
-                        TextResultParser.ReadAsync(firstPayload, reader, connectionId: null, ct),
+                    static (firstPayload, reader, connectionId, ct) =>
+                        TextResultParser.ReadAsync(
+                            firstPayload,
+                            reader,
+                            connectionId: connectionId,
+                            ct
+                        ),
                     cancellationToken
                 )
                 .ConfigureAwait(false);
@@ -379,7 +389,7 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
     private async ValueTask<T> ExecuteExchangeAsync<T>(
         byte[] payload,
         string ioFailureMessage,
-        Func<byte[], PacketReader, CancellationToken, ValueTask<T>> parseResponse,
+        Func<byte[], PacketReader, uint, CancellationToken, ValueTask<T>> parseResponse,
         CancellationToken cancellationToken
     )
     {
@@ -399,9 +409,9 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
             // continues from the writer's next sequence id, not a fixed 1.
             reader.ResetSequence(writer.SequenceId);
             byte[] firstPayload = await reader
-                .ReadPayloadAsync(cancellationToken)
+                .ReadPayloadAsync(PacketReader.MaxMetadataPayloadLength, cancellationToken)
                 .ConfigureAwait(false);
-            return await parseResponse(firstPayload, reader, cancellationToken)
+            return await parseResponse(firstPayload, reader, ConnectionId, cancellationToken)
                 .ConfigureAwait(false);
         }
         catch (OperationCanceledException)
@@ -412,14 +422,14 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
         catch (Exception ex) when (IsTransportFailure(ex))
         {
             MarkBroken();
-            throw TranslateTransportFailure(ex, ioFailureMessage);
+            throw TranslateTransportFailure(ex, ioFailureMessage, ConnectionId);
         }
     }
 
     private T ExecuteExchange<T>(
         byte[] payload,
         string ioFailureMessage,
-        Func<byte[], PacketReader, T> parseResponse
+        Func<byte[], PacketReader, uint, T> parseResponse
     )
     {
         if (_isDisposed)
@@ -435,13 +445,13 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
 
             var reader = new PacketReader(_stream);
             reader.ResetSequence(writer.SequenceId);
-            byte[] firstPayload = reader.ReadPayload();
-            return parseResponse(firstPayload, reader);
+            byte[] firstPayload = reader.ReadPayload(PacketReader.MaxMetadataPayloadLength);
+            return parseResponse(firstPayload, reader, ConnectionId);
         }
         catch (Exception ex) when (IsTransportFailure(ex))
         {
             MarkBroken();
-            throw TranslateTransportFailure(ex, ioFailureMessage);
+            throw TranslateTransportFailure(ex, ioFailureMessage, ConnectionId);
         }
     }
 
@@ -462,8 +472,8 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
         return ExecuteExchangeAsync(
             StatementCommandBuilder.BuildPrepare(commandText),
             "I/O failed while preparing the StarRocks statement.",
-            static (firstPayload, reader, ct) =>
-                ParsePrepareResponseAsync(firstPayload, reader, ct),
+            static (firstPayload, reader, connectionId, ct) =>
+                ParsePrepareResponseAsync(firstPayload, reader, connectionId, ct),
             cancellationToken
         );
     }
@@ -481,12 +491,13 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
     private static async ValueTask<StatementPrepareResult> ParsePrepareResponseAsync(
         byte[] firstPayload,
         PacketReader reader,
+        uint connectionId,
         CancellationToken cancellationToken
     )
     {
         if (ResultPacket.IsError(firstPayload))
         {
-            throw ResultPacket.ReadError(firstPayload, connectionId: null);
+            throw ResultPacket.ReadError(firstPayload, connectionId: connectionId);
         }
 
         var protocolReader = new ProtocolReader(firstPayload);
@@ -518,12 +529,13 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
 
     private static StatementPrepareResult ParsePrepareResponse(
         byte[] firstPayload,
-        PacketReader reader
+        PacketReader reader,
+        uint connectionId
     )
     {
         if (ResultPacket.IsError(firstPayload))
         {
-            throw ResultPacket.ReadError(firstPayload, connectionId: null);
+            throw ResultPacket.ReadError(firstPayload, connectionId: connectionId);
         }
 
         var protocolReader = new ProtocolReader(firstPayload);
@@ -610,11 +622,11 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
         ExecuteExchangeAsync(
             BinaryParameterEncoder.BuildExecute(statementId, parameterValues),
             "I/O failed while executing the prepared StarRocks statement.",
-            static (firstPayload, reader, ct) =>
+            static (firstPayload, reader, connectionId, ct) =>
                 TextResultParser.ReadBinaryStreamingAsync(
                     firstPayload,
                     reader,
-                    connectionId: null,
+                    connectionId: connectionId,
                     ct
                 ),
             cancellationToken
@@ -627,8 +639,12 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
         ExecuteExchange(
             BinaryParameterEncoder.BuildExecute(statementId, parameterValues),
             "I/O failed while executing the prepared StarRocks statement.",
-            static (firstPayload, reader) =>
-                TextResultParser.ReadBinaryStreaming(firstPayload, reader, connectionId: null)
+            static (firstPayload, reader, connectionId) =>
+                TextResultParser.ReadBinaryStreaming(
+                    firstPayload,
+                    reader,
+                    connectionId: connectionId
+                )
         );
 
     /// <summary>Sends <c>COM_STMT_CLOSE</c> for the given statement id. The server sends no reply.</summary>
@@ -693,13 +709,22 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
             return;
         }
 
+        int remainingMetadata = PacketReader.MaxMetadataBlockLength;
         for (int i = 0; i < count; i++)
         {
-            await reader.ReadPayloadAsync(cancellationToken).ConfigureAwait(false);
+            byte[] definition = await reader
+                .ReadPayloadAsync(
+                    Math.Min(PacketReader.MaxMetadataPayloadLength, remainingMetadata),
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+            remainingMetadata -= definition.Length;
         }
 
         // Without CLIENT_DEPRECATE_EOF the definition block is terminated by an EOF packet.
-        byte[] terminator = await reader.ReadPayloadAsync(cancellationToken).ConfigureAwait(false);
+        byte[] terminator = await reader
+            .ReadPayloadAsync(PacketReader.MaxMetadataPayloadLength, cancellationToken)
+            .ConfigureAwait(false);
         if (!ResultPacket.IsEndOfResultSet(terminator))
         {
             throw new MalformedPacketException(
@@ -715,12 +740,16 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
             return;
         }
 
+        int remainingMetadata = PacketReader.MaxMetadataBlockLength;
         for (int i = 0; i < count; i++)
         {
-            reader.ReadPayload();
+            byte[] definition = reader.ReadPayload(
+                Math.Min(PacketReader.MaxMetadataPayloadLength, remainingMetadata)
+            );
+            remainingMetadata -= definition.Length;
         }
 
-        byte[] terminator = reader.ReadPayload();
+        byte[] terminator = reader.ReadPayload(PacketReader.MaxMetadataPayloadLength);
         if (!ResultPacket.IsEndOfResultSet(terminator))
         {
             throw new MalformedPacketException(
@@ -770,8 +799,13 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
         return ExecuteExchangeAsync(
             QueryCommandBuilder.Build(commandText),
             "I/O failed while executing the StarRocks command.",
-            static (firstPayload, reader, ct) =>
-                TextResultParser.ReadStreamingAsync(firstPayload, reader, connectionId: null, ct),
+            static (firstPayload, reader, connectionId, ct) =>
+                TextResultParser.ReadStreamingAsync(
+                    firstPayload,
+                    reader,
+                    connectionId: connectionId,
+                    ct
+                ),
             cancellationToken
         );
     }
@@ -782,8 +816,8 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
         return ExecuteExchange(
             QueryCommandBuilder.Build(commandText),
             "I/O failed while executing the StarRocks command.",
-            static (firstPayload, reader) =>
-                TextResultParser.ReadStreaming(firstPayload, reader, connectionId: null)
+            static (firstPayload, reader, connectionId) =>
+                TextResultParser.ReadStreaming(firstPayload, reader, connectionId: connectionId)
         );
     }
 
@@ -807,9 +841,11 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
     /// </summary>
     /// <param name="exception">A failure for which <see cref="IsTransportFailure"/> is true.</param>
     /// <param name="ioFailureMessage">The message describing the interrupted operation.</param>
+    /// <param name="connectionId">The originating server session, when known.</param>
     internal static DotRocksException TranslateTransportFailure(
         Exception exception,
-        string ioFailureMessage
+        string ioFailureMessage,
+        uint? connectionId = null
     ) =>
         exception switch
         {
@@ -822,7 +858,7 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
                 // malformed-packet error. That is a transient outage (a restarting FE), unlike
                 // genuinely malformed bytes, which stay non-transient.
                 isTransient: malformed.InnerException is EndOfStreamException or IOException,
-                connectionId: null,
+                connectionId: connectionId,
                 innerException: malformed
             ),
             IOException io => new DotRocksException(
@@ -830,7 +866,7 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
                 serverErrorCode: null,
                 sqlState: null,
                 isTransient: true,
-                connectionId: null,
+                connectionId: connectionId,
                 innerException: io
             ),
             ObjectDisposedException disposed => new DotRocksException(
@@ -838,7 +874,7 @@ internal sealed class DotRocksPhysicalConnection : IDisposable
                 serverErrorCode: null,
                 sqlState: null,
                 isTransient: true,
-                connectionId: null,
+                connectionId: connectionId,
                 innerException: disposed
             ),
             _ => throw new ArgumentException(

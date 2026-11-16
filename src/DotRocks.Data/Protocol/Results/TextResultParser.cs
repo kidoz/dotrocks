@@ -199,21 +199,26 @@ internal static class TextResultParser
 
         int columnCount = ReadColumnCount(firstPayload);
         var columns = new List<ColumnDefinition>(columnCount);
+        int remainingMetadata = PacketReader.MaxMetadataBlockLength;
         for (int i = 0; i < columnCount; i++)
         {
             byte[] columnPayload = await reader
-                .ReadPayloadAsync(cancellationToken)
+                .ReadPayloadAsync(
+                    Math.Min(PacketReader.MaxMetadataPayloadLength, remainingMetadata),
+                    cancellationToken
+                )
                 .ConfigureAwait(false);
             if (ResultPacket.IsError(columnPayload))
             {
                 throw ResultPacket.ReadError(columnPayload, connectionId);
             }
 
+            remainingMetadata -= columnPayload.Length;
             columns.Add(ReadColumnDefinition(columnPayload));
         }
 
         byte[] columnsTerminator = await reader
-            .ReadPayloadAsync(cancellationToken)
+            .ReadPayloadAsync(PacketReader.MaxMetadataPayloadLength, cancellationToken)
             .ConfigureAwait(false);
         bool terminated =
             ResultPacket.IsEndOfResultSet(columnsTerminator)
@@ -264,18 +269,22 @@ internal static class TextResultParser
 
         int columnCount = ReadColumnCount(firstPayload);
         var columns = new List<ColumnDefinition>(columnCount);
+        int remainingMetadata = PacketReader.MaxMetadataBlockLength;
         for (int i = 0; i < columnCount; i++)
         {
-            byte[] columnPayload = reader.ReadPayload();
+            byte[] columnPayload = reader.ReadPayload(
+                Math.Min(PacketReader.MaxMetadataPayloadLength, remainingMetadata)
+            );
             if (ResultPacket.IsError(columnPayload))
             {
                 throw ResultPacket.ReadError(columnPayload, connectionId);
             }
 
+            remainingMetadata -= columnPayload.Length;
             columns.Add(ReadColumnDefinition(columnPayload));
         }
 
-        byte[] columnsTerminator = reader.ReadPayload();
+        byte[] columnsTerminator = reader.ReadPayload(PacketReader.MaxMetadataPayloadLength);
         bool terminated =
             ResultPacket.IsEndOfResultSet(columnsTerminator)
             || (okTerminatesColumns && ResultPacket.IsOk(columnsTerminator));

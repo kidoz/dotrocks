@@ -178,6 +178,12 @@ The client parameter lexer follows the tested default StarRocks string-literal s
 and double quotes support backslash escapes and doubled delimiters; backtick identifiers use
 doubled backticks. Alternative SQL modes that change quoting semantics are not modeled.
 
+Protocol metadata packets (handshake, authentication, and column definitions) are limited to
+64 KiB before allocating their bodies; each column/parameter definition block is limited to
+4 MiB in total. Result rows retain the 64 MiB logical-packet bound.
+Wire decimal values are limited to 128 bytes before arbitrary-precision parsing; the public
+`DotRocksDecimal` parser remains available for application-managed values.
+
 Stream Load destination checks also reject shared-address space, multicast, reserved IPv4
 ranges, and special destinations embedded in well-known NAT64 or 6to4 addresses. Public versus
 private endpoint policy still applies after decoding those embedded addresses. These checks use

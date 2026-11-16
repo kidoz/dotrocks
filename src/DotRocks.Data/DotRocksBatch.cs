@@ -12,13 +12,15 @@ namespace DotRocks.Data;
 /// StarRocks executes one text command per round trip, so a batch is executed as the sequence
 /// of its commands; there is no protocol-level single-round-trip batching. Commands run in
 /// order and <see cref="DbDataReader.NextResult"/> advances across their result sets.
+/// Every result set is buffered before execution returns, so memory grows with all returned
+/// rows. Use separate streaming commands for large result sets.
 /// </remarks>
 public sealed class DotRocksBatch : DbBatch
 {
     private readonly ActiveOperationGate _activeOperationGate = new();
     private readonly DotRocksBatchCommandCollection _batchCommands = new();
     private DotRocksConnection? _connection;
-    private DbTransaction? _transaction;
+    private DotRocksTransaction? _transaction;
     private int _timeout = 30;
 
     /// <summary>
@@ -69,7 +71,32 @@ public sealed class DotRocksBatch : DbBatch
     protected override DbTransaction? DbTransaction
     {
         get => _transaction;
-        set => _transaction = value;
+        set
+        {
+            if (value is null)
+            {
+                _transaction = null;
+                return;
+            }
+            if (value is not DotRocksTransaction transaction)
+            {
+                throw new InvalidOperationException(
+                    "DotRocksBatch accepts only DotRocksTransaction instances."
+                );
+            }
+            transaction.EnsureActive();
+            if (
+                _connection is not null
+                && !ReferenceEquals(_connection, transaction.DotRocksConnection)
+            )
+            {
+                throw new InvalidOperationException(
+                    "The batch transaction does not belong to the batch connection."
+                );
+            }
+            _connection ??= transaction.DotRocksConnection;
+            _transaction = transaction;
+        }
     }
 
     /// <inheritdoc />
@@ -163,7 +190,7 @@ public sealed class DotRocksBatch : DbBatch
             throw new InvalidOperationException("Batch requires a DotRocksConnection.");
         }
 
-        _connection.ValidateCommandTransaction((DotRocksTransaction?)_transaction);
+        _connection.ValidateCommandTransaction(_transaction);
 
         using var scope = new ActiveOperationScope(
             _activeOperationGate,
