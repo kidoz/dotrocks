@@ -1,4 +1,3 @@
-using System.Buffers;
 using System.Globalization;
 using System.Text;
 
@@ -6,13 +5,6 @@ namespace DotRocks.Data.Protocol.Commands;
 
 internal static class SqlLiteralFormatter
 {
-    // The characters that need escaping inside a single-quoted StarRocks string literal (NUL,
-    // quote, backslash, LF, CR, and Ctrl-Z). Most parameter strings contain none of them, so one
-    // vectorized scan lets the common case skip the per-character escaping loop entirely.
-    private static readonly SearchValues<char> CharactersRequiringEscape = SearchValues.Create(
-        "\0'\\\n\r\u001A"
-    );
-
     public static string Format(object? value) =>
         value switch
         {
@@ -73,47 +65,7 @@ internal static class SqlLiteralFormatter
         return value.ToString("R", CultureInfo.InvariantCulture);
     }
 
-    private static string FormatString(string value)
-    {
-        // Fast path: no escapable character, so the literal is just the value wrapped in quotes.
-        if (!value.AsSpan().ContainsAny(CharactersRequiringEscape))
-        {
-            return string.Concat("'", value, "'");
-        }
-
-        var builder = new StringBuilder(value.Length + 2);
-        builder.Append('\'');
-        foreach (char character in value)
-        {
-            switch (character)
-            {
-                case '\0':
-                    builder.Append("\\0");
-                    break;
-                case '\'':
-                    builder.Append("''");
-                    break;
-                case '\\':
-                    builder.Append("\\\\");
-                    break;
-                case '\n':
-                    builder.Append("\\n");
-                    break;
-                case '\r':
-                    builder.Append("\\r");
-                    break;
-                case '\u001A':
-                    builder.Append("\\Z");
-                    break;
-                default:
-                    builder.Append(character);
-                    break;
-            }
-        }
-
-        builder.Append('\'');
-        return builder.ToString();
-    }
+    private static string FormatString(string value) => SqlStringLiteral.Generate(value);
 
     private static string FormatBytes(byte[] bytes)
     {
