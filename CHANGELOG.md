@@ -8,6 +8,12 @@ version is derived from the release tag at publish time.
 
 ## [Unreleased]
 
+### Changed
+- Update NuGet dependencies to their latest .NET 10-compatible versions: EF Core and
+  dependency injection 10.0.15, gRPC 2.85.0, Microsoft.NET.Test.Sdk 18.12.0, xUnit 4.0.3,
+  and coverlet.collector 10.1.1. Roslyn analyzer packages remain on 5.9.0 to match the
+  SDK compiler.
+
 ### Fixed
 - Restore physical connection pooling after canceling a command and reopening the same
   `DotRocksConnection` instance.
