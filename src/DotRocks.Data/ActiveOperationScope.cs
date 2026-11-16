@@ -87,7 +87,7 @@ internal sealed class ActiveOperationScope : IDisposable
     // whereas CancellationTokenSource.Token throws.
     private readonly CancellationToken _linkedToken;
     private readonly CancellationToken _operationToken;
-    private bool _disposed;
+    private int _disposed;
 
     public ActiveOperationScope(
         ActiveOperationGate gate,
@@ -182,7 +182,7 @@ internal sealed class ActiveOperationScope : IDisposable
 
     private void TryRescheduleTimeout(TimeSpan timeout)
     {
-        if (_disposed || _timeoutCancellation is null)
+        if (Volatile.Read(ref _disposed) != 0 || _timeoutCancellation is null)
         {
             return;
         }
@@ -200,12 +200,10 @@ internal sealed class ActiveOperationScope : IDisposable
 
     public void Dispose()
     {
-        if (_disposed)
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
         {
             return;
         }
-
-        _disposed = true;
         _gate.Clear(_operationCancellation);
         DisposeSources();
     }
