@@ -72,6 +72,32 @@ public sealed class ParameterBinderFuzzTests
         AssertControlledBind(commandText);
     }
 
+    [Theory]
+    [MemberData(nameof(Seeds))]
+    [SuppressMessage(
+        "Security",
+        "CA5394:Do not use insecure randomness",
+        Justification = "Deterministic fuzz corpus; no security-sensitive randomness."
+    )]
+    public void Bind_DoubleQuotedLiteralNeverSubstitutesEmbeddedPlaceholders(int seed)
+    {
+        var random = new Random(seed);
+        const string alphabet = "ab\\\"'@p\n";
+        string value = new(
+            Enumerable.Range(0, 32).Select(_ => alphabet[random.Next(alphabet.Length)]).ToArray()
+        );
+        string escaped = value
+            .Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("\"", "\\\"", StringComparison.Ordinal);
+        string literal = "\"" + escaped + " @p\"";
+        using var command = new DotRocksCommand();
+        command.Parameters.Add(new DotRocksParameter { ParameterName = "p", Value = 7 });
+        Assert.Equal(
+            "SELECT " + literal + ", 7",
+            CommandTextParameterBinder.Bind("SELECT " + literal + ", @p", command.Parameters)
+        );
+    }
+
     [Fact]
     public void Format_DoesNotCrashOnDiverseValues()
     {

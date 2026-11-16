@@ -1,3 +1,4 @@
+using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
 using Xunit;
 
@@ -6,6 +7,32 @@ namespace DotRocks.Data.IntegrationTests;
 [Collection("StarRocks integration")]
 public sealed class ReviewRegressionTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DoubleQuotedEscapes_PreserveLiteralAndParameterBoundaries(bool prepare)
+    {
+        IntegrationTestEnvironment.SkipUnlessEnabled();
+        CancellationToken token = TestContext.Current.CancellationToken;
+        using var connection = new DotRocksConnection(IntegrationTestEnvironment.ConnectionString);
+        await connection.OpenAsync(token).ConfigureAwait(true);
+        using var command = connection.CreateCommand();
+        command.CommandText = """SELECT "a\"b @p", "a""b", "a\\", @p""";
+        const string value = "\" OR TRUE -- ";
+        command.Parameters.Add(new DotRocksParameter { ParameterName = "p", Value = value });
+        if (prepare)
+        {
+            await command.PrepareAsync(token).ConfigureAwait(true);
+        }
+        using DbDataReader reader = await command.ExecuteReaderAsync(token).ConfigureAwait(true);
+        Assert.True(await reader.ReadAsync(token).ConfigureAwait(true));
+        Assert.Equal("a\"b @p", reader.GetString(0));
+        Assert.Equal("a\"b", reader.GetString(1));
+        Assert.Equal("a\\", reader.GetString(2));
+        Assert.Equal(value, reader.GetString(3));
+        Assert.False(await reader.ReadAsync(token).ConfigureAwait(true));
+    }
+
     [Fact]
     public async Task TemporaryTable_DoesNotCrossPooledLeases()
     {

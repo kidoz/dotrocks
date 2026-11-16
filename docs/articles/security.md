@@ -173,3 +173,7 @@ not a public issue. Include the affected version, a description, and reproductio
 Pooled SQL connections are retired after detected session mutations, including impersonation,
 SQL prepared-statement controls, and temporary-table DDL. Shared Flight data sources reject
 these mutations before dispatch; use a dedicated Flight connection for session changes.
+
+The client parameter lexer follows the tested default StarRocks string-literal syntax: single
+and double quotes support backslash escapes and doubled delimiters; backtick identifiers use
+doubled backticks. Alternative SQL modes that change quoting semantics are not modeled.

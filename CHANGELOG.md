@@ -18,6 +18,8 @@ version is derived from the release tag at publish time.
   temporary-table creation or deletion so session state cannot cross leases.
 - Reject session-mutating SQL on shared Flight SQL data sources, through both the Arrow
   and ADO.NET APIs. Use a dedicated `DotRocksFlightSqlDbConnection(options)` for session changes.
+- Honor backslash escapes and doubled delimiters in double-quoted SQL literals during
+  parameter binding, including cached client-side preparation.
 
 ## [1.6.1] - 2026-10-25
 

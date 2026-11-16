@@ -38,19 +38,19 @@ internal static class CommandTextParameterBinder
             char current = commandText[index];
             if (current == '\'')
             {
-                SkipSingleQuotedLiteral(commandText, ref index);
+                SkipQuotedRegion(commandText, ref index, '\'', backslashEscapes: true);
                 continue;
             }
 
             if (current == '"')
             {
-                SkipQuotedRegion(commandText, ref index, '"');
+                SkipQuotedRegion(commandText, ref index, '"', backslashEscapes: true);
                 continue;
             }
 
             if (current == '`')
             {
-                SkipQuotedRegion(commandText, ref index, '`');
+                SkipQuotedRegion(commandText, ref index, '`', backslashEscapes: false);
                 continue;
             }
 
@@ -280,39 +280,33 @@ internal static class CommandTextParameterBinder
         return normalized;
     }
 
-    private static void SkipSingleQuotedLiteral(string commandText, ref int index)
+    private static void SkipQuotedRegion(
+        string commandText,
+        ref int index,
+        char quote,
+        bool backslashEscapes
+    )
     {
         while (++index < commandText.Length)
         {
-            if (commandText[index] == '\\' && index + 1 < commandText.Length)
+            if (backslashEscapes && commandText[index] == '\\' && index + 1 < commandText.Length)
             {
                 index++;
                 continue;
             }
 
-            if (commandText[index] != '\'')
+            if (commandText[index] != quote)
             {
                 continue;
             }
 
-            if (IsNext(commandText, index, '\''))
+            if (IsNext(commandText, index, quote))
             {
                 index++;
                 continue;
             }
 
             break;
-        }
-    }
-
-    private static void SkipQuotedRegion(string commandText, ref int index, char quote)
-    {
-        while (++index < commandText.Length)
-        {
-            if (commandText[index] == quote)
-            {
-                break;
-            }
         }
     }
 

@@ -45,6 +45,35 @@ public sealed class CommandTextParameterBinderTests
         Assert.Equal("SELECT '@value', `@value`, 7 -- @value\n/* @value */", sql);
     }
 
+    [Theory]
+    [InlineData("SELECT \"a\\\"b\", @p", "SELECT \"a\\\"b\", 7")]
+    [InlineData("SELECT \"a\\\\\", @p", "SELECT \"a\\\\\", 7")]
+    [InlineData("SELECT \"a\"\"b @p\", @p", "SELECT \"a\"\"b @p\", 7")]
+    [InlineData("SELECT `a``b @p`, @p", "SELECT `a``b @p`, 7")]
+    public void Bind_RespectsDoubleQuotedEscapes(string sql, string expected)
+    {
+        using var command = new DotRocksCommand();
+        Add(command, "p", 7);
+        Assert.Equal(expected, CommandTextParameterBinder.Bind(sql, command.Parameters));
+        Assert.Equal(
+            expected,
+            CommandTextParameterBinder.BindPrepared(
+                CommandTextParameterBinder.Prepare(sql, command.Parameters),
+                command.Parameters
+            )
+        );
+    }
+
+    [Fact]
+    public void Bind_DoesNotSubstituteInsideEscapedDoubleQuotedLiteral()
+    {
+        using var command = new DotRocksCommand();
+        Add(command, "p", "\" OR TRUE -- ");
+        Assert.Throws<InvalidOperationException>(() =>
+            CommandTextParameterBinder.Bind("SELECT \"a\\\"b @p\"", command.Parameters)
+        );
+    }
+
     [Fact]
     public void Bind_RejectsMissingParameters()
     {
