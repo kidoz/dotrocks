@@ -408,6 +408,52 @@ public sealed class DotRocksStreamLoadClient : IDisposable
         CancellationToken cancellationToken
     )
     {
+        headers.TryGetValue("label", out string? label);
+        try
+        {
+            return await SendRequestCoreAsync(
+                    method,
+                    requestUri,
+                    headers,
+                    payload,
+                    mediaType,
+                    onRequestDispatch,
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+        }
+        catch (DotRocksStreamLoadException exception)
+        {
+            exception.Label = label;
+            throw;
+        }
+        catch (OperationCanceledException exception)
+        {
+            exception.Data["DotRocks.StreamLoad.Label"] = label;
+            throw;
+        }
+        catch (Exception exception) when (exception is HttpRequestException or IOException)
+        {
+            throw new DotRocksStreamLoadException(
+                "StarRocks Stream Load transport failed. The load outcome may be unknown; reconcile the label before retrying."
+            )
+            {
+                Label = label,
+                IsTransportFailure = true,
+            };
+        }
+    }
+
+    private async Task<DotRocksStreamLoadResult> SendRequestCoreAsync(
+        HttpMethod method,
+        Uri requestUri,
+        IReadOnlyDictionary<string, string> headers,
+        Stream? payload,
+        string? mediaType,
+        Action? onRequestDispatch,
+        CancellationToken cancellationToken
+    )
+    {
         cancellationToken.ThrowIfCancellationRequested();
         long initialPosition = payload?.CanSeek == true ? payload.Position : 0;
 
@@ -418,7 +464,14 @@ public sealed class DotRocksStreamLoadClient : IDisposable
                 payload.Position = initialPosition;
             }
 
-            using var request = CreateRequest(method, requestUri, payload, headers, mediaType);
+            using var request = CreateRequest(
+                method,
+                requestUri,
+                payload,
+                headers,
+                mediaType,
+                out NonDisposingStream? bodyStream
+            );
             HttpResponseMessage response;
             onRequestDispatch?.Invoke();
             try
@@ -440,7 +493,7 @@ public sealed class DotRocksStreamLoadClient : IDisposable
             {
                 if (IsRedirect(response))
                 {
-                    if (payload is not null && !payload.CanSeek)
+                    if (payload is not null && !payload.CanSeek && bodyStream?.HasBeenRead == true)
                     {
                         throw new DotRocksStreamLoadException(
                             "StarRocks Stream Load redirected a non-seekable payload stream. Use a seekable stream or send the load directly to the final endpoint."
@@ -558,9 +611,11 @@ public sealed class DotRocksStreamLoadClient : IDisposable
         Uri requestUri,
         Stream? payload,
         IReadOnlyDictionary<string, string> headers,
-        string? mediaType
+        string? mediaType,
+        out NonDisposingStream? bodyStream
     )
     {
+        bodyStream = null;
         var request = new HttpRequestMessage(method, requestUri);
         if (ShouldSendCredentials(requestUri))
         {
@@ -580,7 +635,7 @@ public sealed class DotRocksStreamLoadClient : IDisposable
             // The body is never disposed here: it is the caller's stream and is reused across
             // redirect retries. When the load format is reported as gzip, the payload is
             // gzip-compressed on the fly so the upload is never buffered in memory.
-            var bodyStream = new NonDisposingStream(payload);
+            bodyStream = new NonDisposingStream(payload);
             bool gzip =
                 headers.TryGetValue("format", out string? formatHeader)
                 && string.Equals(formatHeader, "gzip", StringComparison.OrdinalIgnoreCase);
@@ -1011,6 +1066,8 @@ public sealed class DotRocksStreamLoadClient : IDisposable
 
     private sealed class NonDisposingStream(Stream inner) : Stream
     {
+        private int _readStarted;
+        public bool HasBeenRead => Volatile.Read(ref _readStarted) != 0;
         public override bool CanRead => inner.CanRead;
 
         public override bool CanSeek => inner.CanSeek;
@@ -1027,15 +1084,26 @@ public sealed class DotRocksStreamLoadClient : IDisposable
 
         public override void Flush() => inner.Flush();
 
-        public override int Read(byte[] buffer, int offset, int count) =>
-            inner.Read(buffer, offset, count);
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            Interlocked.Exchange(ref _readStarted, 1);
+            return inner.Read(buffer, offset, count);
+        }
 
-        public override int Read(Span<byte> buffer) => inner.Read(buffer);
+        public override int Read(Span<byte> buffer)
+        {
+            Interlocked.Exchange(ref _readStarted, 1);
+            return inner.Read(buffer);
+        }
 
         public override ValueTask<int> ReadAsync(
             Memory<byte> buffer,
             CancellationToken cancellationToken = default
-        ) => inner.ReadAsync(buffer, cancellationToken);
+        )
+        {
+            Interlocked.Exchange(ref _readStarted, 1);
+            return inner.ReadAsync(buffer, cancellationToken);
+        }
 
         public override long Seek(long offset, SeekOrigin origin) => inner.Seek(offset, origin);
 

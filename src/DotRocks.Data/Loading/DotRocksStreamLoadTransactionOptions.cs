@@ -1,5 +1,3 @@
-using System.Globalization;
-
 namespace DotRocks.Data.Loading;
 
 /// <summary>
@@ -124,7 +122,6 @@ public sealed class DotRocksStreamLoadTransactionOptions
             return;
         }
 
-        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(value.Value, TimeSpan.Zero);
-        headers[name] = ((int)value.Value.TotalSeconds).ToString(CultureInfo.InvariantCulture);
+        headers[name] = StreamLoadHeaderValues.FormatTimeout(value.Value, name);
     }
 }

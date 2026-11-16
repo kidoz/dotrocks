@@ -274,7 +274,8 @@ public sealed class DotRocksStreamLoadTransaction
             is OperationCanceledException
                 or HttpRequestException
                 or IOException
-                or ObjectDisposedException;
+                or ObjectDisposedException
+                or DotRocksStreamLoadException { IsTransportFailure: true };
 
     private void EnsureState(DotRocksStreamLoadTransactionState requiredState, string operation)
     {

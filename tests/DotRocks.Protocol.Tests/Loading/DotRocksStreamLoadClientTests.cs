@@ -15,6 +15,109 @@ namespace DotRocks.Protocol.Tests.Loading;
 
 public sealed class DotRocksStreamLoadClientTests
 {
+    [Fact]
+    public async Task LoadCancellation_RetainsEffectiveLabelAndCancellation()
+    {
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            TestContext.Current.CancellationToken
+        );
+        using var handler = new RecordingHandler(
+            async (_, token) =>
+            {
+                await cancellation.CancelAsync().ConfigureAwait(true);
+                token.ThrowIfCancellationRequested();
+                return JsonResponse();
+            }
+        );
+        using var http = new HttpClient(handler);
+        using var client = CreateClient(http);
+        using var payload = new MemoryStream([1]);
+        OperationCanceledException exception = await Assert
+            .ThrowsAnyAsync<OperationCanceledException>(() =>
+                client.LoadCsvAsync("db", "table", payload, cancellationToken: cancellation.Token)
+            )
+            .ConfigureAwait(true);
+        Assert.True(exception.CancellationToken.IsCancellationRequested);
+        Assert.Equal(
+            handler.Request!.Headers.GetValues("label").Single(),
+            exception.Data["DotRocks.StreamLoad.Label"]
+        );
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task LoadFailure_ExposesGeneratedLabelWithoutLoggingIt(bool transportFailure)
+    {
+        using var handler = new RecordingHandler(
+            (_, _) =>
+                transportFailure
+                    ? throw new HttpRequestException("private-server-detail")
+                    : Task.FromResult(new HttpResponseMessage(HttpStatusCode.BadRequest))
+        );
+        using var http = new HttpClient(handler);
+        using var client = CreateClient(http);
+        using var payload = new MemoryStream([1]);
+        var exception = await Assert
+            .ThrowsAsync<DotRocksStreamLoadException>(() =>
+                client.LoadCsvAsync(
+                    "db",
+                    "table",
+                    payload,
+                    cancellationToken: TestContext.Current.CancellationToken
+                )
+            )
+            .ConfigureAwait(true);
+        string label = handler.Request!.Headers.GetValues("label").Single();
+        Assert.Equal(label, exception.Label);
+        Assert.DoesNotContain(label, exception.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "private-server-detail",
+            exception.ToString(),
+            StringComparison.Ordinal
+        );
+    }
+
+    [Fact]
+    public async Task Load_NonSeekableStreamCanFollowAnEarlyRedirect()
+    {
+        int calls = 0;
+        using var handler = new RecordingHandler(
+            async (request, token) =>
+            {
+                if (++calls == 1)
+                {
+                    var redirect = new HttpResponseMessage(HttpStatusCode.TemporaryRedirect);
+                    redirect.Headers.Location = new Uri(
+                        "http://be.starrocks.local:8040/api/db/table/_stream_load"
+                    );
+                    return redirect;
+                }
+                Assert.Equal(
+                    "payload",
+                    await request.Content!.ReadAsStringAsync(token).ConfigureAwait(true)
+                );
+                return JsonResponse();
+            }
+        );
+        using var http = new HttpClient(handler);
+        using var client = CreateClient(http);
+        using var payload = new NonSeekableStream(Encoding.UTF8.GetBytes("payload"));
+        Assert.True(
+            (
+                await client
+                    .LoadCsvAsync(
+                        "db",
+                        "table",
+                        payload,
+                        cancellationToken: TestContext.Current.CancellationToken
+                    )
+                    .ConfigureAwait(true)
+            ).IsSuccess
+        );
+        Assert.Equal(2, calls);
+    }
+
     [Theory]
     [InlineData(".")]
     [InlineData("..")]
@@ -643,7 +746,7 @@ public sealed class DotRocksStreamLoadClientTests
     [Fact]
     public async Task LoadCsvAsync_RedirectWithNonSeekablePayload_Throws()
     {
-        using var handler = new RedirectingHandler();
+        using var handler = new RedirectingHandler(readBeforeRedirect: true);
         using var httpClient = new HttpClient(handler);
         using var client = CreateClient(httpClient);
         using var payload = new NonSeekableStream(Encoding.UTF8.GetBytes("1,one\\n"));
@@ -1655,7 +1758,7 @@ public sealed class DotRocksStreamLoadClientTests
 
         Assert.Equal("tx_label", exception.Label);
         Assert.Equal("rollback", exception.Operation);
-        Assert.IsType<HttpRequestException>(exception.InnerException);
+        Assert.IsType<DotRocksStreamLoadException>(exception.InnerException);
         await Assert
             .ThrowsAsync<InvalidOperationException>(async () =>
                 await transaction
@@ -2268,7 +2371,7 @@ public sealed class DotRocksStreamLoadClientTests
         public override long Seek(long offset, SeekOrigin loc) => throw new NotSupportedException();
     }
 
-    private sealed class RedirectingHandler : HttpMessageHandler
+    private sealed class RedirectingHandler(bool readBeforeRedirect = false) : HttpMessageHandler
     {
         public List<HttpRequestMessage> Requests { get; } = [];
 
@@ -2282,6 +2385,12 @@ public sealed class DotRocksStreamLoadClientTests
             Requests.Add(request);
             if (Requests.Count == 1)
             {
+                if (readBeforeRedirect)
+                {
+                    _ = await request
+                        .Content!.ReadAsStringAsync(cancellationToken)
+                        .ConfigureAwait(true);
+                }
                 return new HttpResponseMessage(HttpStatusCode.TemporaryRedirect)
                 {
                     Headers =

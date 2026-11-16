@@ -6,6 +6,29 @@ namespace DotRocks.Protocol.Tests.Loading;
 public sealed class StreamLoadValidationTests
 {
     [Theory]
+    [InlineData(0.1, "1")]
+    [InlineData(1.5, "2")]
+    [InlineData(2.0, "2")]
+    public void Timeouts_RoundUpToServerSeconds(double seconds, string expected)
+    {
+        var load = new DotRocksStreamLoadOptions { Timeout = TimeSpan.FromSeconds(seconds) };
+        Assert.Equal(expected, load.BuildHeaders(DotRocksStreamLoadFormat.Csv)["timeout"]);
+        var transaction = new DotRocksStreamLoadTransactionOptions
+        {
+            Label = "test",
+            Timeout = load.Timeout,
+            IdleTimeout = load.Timeout,
+            PreparedTimeout = load.Timeout,
+        };
+        Assert.Equal(expected, transaction.BuildBeginHeaders("db", "table")["timeout"]);
+        Assert.Equal(
+            expected,
+            transaction.BuildBeginHeaders("db", "table")["idle_transaction_timeout"]
+        );
+        Assert.Equal(expected, transaction.BuildPrepareHeaders("db")["prepared_timeout"]);
+    }
+
+    [Theory]
     [InlineData("Label")]
     [InlineData("Columns")]
     [InlineData("Where")]
@@ -15,7 +38,7 @@ public sealed class StreamLoadValidationTests
     [InlineData("Partitions")]
     public void NonAsciiHeaders_FailWithOptionName(string option)
     {
-        const string value = "private-А";
+        const string value = "private-\u0410";
         var options = new DotRocksStreamLoadOptions();
         switch (option)
         {

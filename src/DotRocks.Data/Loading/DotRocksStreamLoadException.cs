@@ -42,10 +42,18 @@ public sealed class DotRocksStreamLoadException : DotRocksException
         ResponseBody = responseBody;
     }
 
+    internal bool IsTransportFailure { get; init; }
+
     /// <summary>
     /// Gets the HTTP status code, when the request reached the Stream Load endpoint.
     /// </summary>
     public HttpStatusCode? HttpStatusCode { get; }
+
+    /// <summary>
+    /// Gets the effective request label, including an automatically generated label, for
+    /// deliberate outcome reconciliation. The label is not included in the exception message.
+    /// </summary>
+    public string? Label { get; internal set; }
 
     /// <summary>
     /// Gets the parsed Stream Load result, when StarRocks returned one.

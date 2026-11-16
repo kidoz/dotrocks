@@ -17,6 +17,8 @@ version is derived from the release tag at publish time.
 ### Fixed
 - Validate conflicting connection aliases, IPv6 default Stream Load endpoints, printable-ASCII
   HTTP headers, path segments, and special redirect destination addresses before dispatch.
+- Round fractional Stream Load server timeouts up and expose effective labels on failures;
+  retain transaction in-doubt handling and allow unread non-seekable bodies to follow redirects.
 - Restore physical connection pooling after canceling a command and reopening the same
   `DotRocksConnection` instance.
 - Remove the implicit 100-second HTTP timeout from Stream Load uploads and transaction

@@ -122,8 +122,9 @@ public sealed class DotRocksStreamLoadOptions
 
         if (Timeout is not null)
         {
-            headers["timeout"] = ((int)Timeout.Value.TotalSeconds).ToString(
-                CultureInfo.InvariantCulture
+            headers["timeout"] = StreamLoadHeaderValues.FormatTimeout(
+                Timeout.Value,
+                nameof(Timeout)
             );
         }
 

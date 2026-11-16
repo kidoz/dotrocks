@@ -53,9 +53,9 @@ A non-success status throws `DotRocksStreamLoadException`, so a returned `result
 has `IsSuccess == true` — see [Interpreting the result](#interpreting-the-result).
 
 The payload stream is uploaded with **no in-memory buffering** — it is streamed directly
-to the server. If the server redirects, DotRocks replays the stream, so a **non-seekable**
-stream is rejected on redirect (use a seekable stream, or point `Stream Load Endpoint`
-directly at the final BE).
+to the server. A non-seekable stream can follow an early redirect before its body has been
+read. After any body read starts, replay requires a seekable stream; otherwise the redirect
+fails explicitly. A seekable stream is rewound to its original position.
 
 ## Loading JSON
 
@@ -153,11 +153,17 @@ redirects, and response reading. This also applies to ordinary CSV/JSON loads. T
 transaction timeout options are sent to StarRocks and do not impose client-side deadlines.
 Cancellation still raises `OperationCanceledException`; a dispatched transaction commit can
 instead be reported as in doubt, as described below. Cancellation does not prove the load failed.
-Set an explicit `Label` when you need to reconcile an interrupted load, since an automatically
-generated label is not currently exposed on cancellation or transport failure.
-User-supplied HTTP header values must be printable ASCII; invalid values fail before dispatch
-with the option name. Encode separators using the StarRocks header escape syntax. Database and
-table path segments reject controls, slashes, backslashes, and standalone `.` or `..`.
+The effective label, including an automatically generated one, is available on
+`DotRocksStreamLoadException.Label`. On cancellation it is available through
+`exception.Data["DotRocks.StreamLoad.Label"]`; the cancellation exception type and token are
+preserved. Transport errors have sanitized messages and no raw inner exception. These failures
+are never automatically retried. An explicit stable label is still useful across process restarts.
+
+Server timeout headers round positive fractional seconds up, so a sub-second timeout is sent
+as one second. Values above `Int32.MaxValue` seconds are rejected. User-supplied HTTP header
+values must be printable ASCII; invalid values fail before dispatch with the option name.
+Encode separators using the StarRocks header escape syntax. Database and table path segments
+reject controls, slashes, backslashes, and standalone `.` or `..`.
 
 ## Transactional Stream Load (two-phase)
 
