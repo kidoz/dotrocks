@@ -15,7 +15,7 @@ consumers of your project:
 
 ```xml
 <ItemGroup>
-  <PackageReference Include="DotRocks.Analyzers" Version="1.6.1">
+  <PackageReference Include="DotRocks.Analyzers" Version="1.7.0">
     <PrivateAssets>all</PrivateAssets>
     <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
   </PackageReference>
