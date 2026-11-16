@@ -8,6 +8,8 @@ version is derived from the release tag at publish time.
 
 ## [Unreleased]
 
+## [1.6.2] - 2026-11-16
+
 ### Changed
 - Update NuGet dependencies to their latest .NET 10-compatible versions: EF Core and
   dependency injection 10.0.15, gRPC 2.85.0, Microsoft.NET.Test.Sdk 18.12.0, xUnit 4.0.3,
@@ -716,7 +718,8 @@ version is derived from the release tag at publish time.
 - Stream Load refuses to forward credentials over a downgraded (HTTPS→HTTP) redirect.
 - NuGet vulnerability auditing and CodeQL analysis in CI.
 
-[Unreleased]: https://github.com/kidoz/dotrocks/compare/v1.6.1...HEAD
+[Unreleased]: https://github.com/kidoz/dotrocks/compare/v1.6.2...HEAD
+[1.6.2]: https://github.com/kidoz/dotrocks/compare/v1.6.1...v1.6.2
 [1.6.1]: https://github.com/kidoz/dotrocks/compare/v1.6.0...v1.6.1
 [1.6.0]: https://github.com/kidoz/dotrocks/compare/v1.5.5...v1.6.0
 [1.5.5]: https://github.com/kidoz/dotrocks/compare/v1.5.4...v1.5.5
