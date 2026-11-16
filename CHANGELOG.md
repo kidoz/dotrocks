@@ -26,6 +26,8 @@ version is derived from the release tag at publish time.
   assignment, and apply smaller protocol metadata and wire-decimal resource limits.
 - Invalidate rejected Flight bearer tokens for the next independent stateless call without
   replaying the failed operation; expose bounded server details through explicit exception data.
+- Restrict release OIDC and attestation permissions to the package-publishing job; build and test
+  in a separate job with read-only repository permissions.
 - Restore physical connection pooling after canceling a command and reopening the same
   `DotRocksConnection` instance.
 - Remove the implicit 100-second HTTP timeout from Stream Load uploads and transaction
