@@ -93,7 +93,7 @@ new DotRocksStreamLoadOptions { Compression = DotRocksStreamLoadCompression.Gzip
 | `RowDelimiter` | `string?` | null | CSV row delimiter (escaped, e.g. `\n`). |
 | `StrictMode` | `bool?` | null | StarRocks strict mode. |
 | `MaxFilterRatio` | `double?` | null | 0.0–1.0; `NaN` rejected. |
-| `Timeout` | `TimeSpan?` | null | Must be > `Zero`. |
+| `Timeout` | `TimeSpan?` | null | Server load timeout; must be > `Zero`. Not a client request deadline. |
 | `StripOuterArray` | `bool?` | null | JSON only. |
 | `JsonPaths` | `string?` | null | JSON only. |
 | `Partitions` | `IReadOnlyList<string>?` | null | Each non-empty, no `,`. |
@@ -144,6 +144,17 @@ does not retry the request or classify this failure as transient.
 Response bodies are limited to 1 MiB, including error responses and chunked responses.
 An oversized body raises a sanitized exception and is discarded. The load outcome remains
 unknown, so reconcile by label before retrying.
+
+## Timeouts and cancellation
+
+The default HTTP transport has no overall request timeout. `Connection Timeout` bounds each
+HTTP connection attempt; pass a `CancellationToken` with your own deadline to bound upload,
+redirects, and response reading. This also applies to ordinary CSV/JSON loads. The load and
+transaction timeout options are sent to StarRocks and do not impose client-side deadlines.
+Cancellation still raises `OperationCanceledException`; a dispatched transaction commit can
+instead be reported as in doubt, as described below. Cancellation does not prove the load failed.
+Set an explicit `Label` when you need to reconcile an interrupted load, since an automatically
+generated label is not currently exposed on cancellation or transport failure.
 
 ## Transactional Stream Load (two-phase)
 

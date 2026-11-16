@@ -16,6 +16,50 @@ namespace DotRocks.Protocol.Tests.Loading;
 public sealed class DotRocksStreamLoadClientTests
 {
     [Fact]
+    public void DefaultTransport_DoesNotImposeAnUploadDeadline()
+    {
+        using var client = CreateVettingClient("http://127.0.0.1:8030");
+        using HttpClient transport = client.CreateDefaultHttpClient();
+        Assert.Equal(Timeout.InfiniteTimeSpan, transport.Timeout);
+    }
+
+    [Fact]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Reliability",
+        "CA2025:Do not pass IDisposables into unawaited tasks",
+        Justification = "The in-flight request is awaited through ThrowsAnyAsync before the client and cancellation source are disposed."
+    )]
+    public async Task LoadCsvAsync_CallerCancellationRemainsCancellation()
+    {
+        var dispatched = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        using var handler = new RecordingHandler(
+            async (_, token) =>
+            {
+                dispatched.SetResult();
+                await Task.Delay(Timeout.InfiniteTimeSpan, token).ConfigureAwait(true);
+                return JsonResponse();
+            }
+        );
+        using var httpClient = new HttpClient(handler) { Timeout = Timeout.InfiniteTimeSpan };
+        using var client = CreateClient(httpClient);
+        using var payload = new MemoryStream([1]);
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            TestContext.Current.CancellationToken
+        );
+        Task<DotRocksStreamLoadResult> load = client.LoadCsvAsync(
+            "warehouse",
+            "events",
+            payload,
+            cancellationToken: cancellation.Token
+        );
+        await dispatched.Task.WaitAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+        await cancellation.CancelAsync().ConfigureAwait(true);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => load).ConfigureAwait(true);
+    }
+
+    [Fact]
     public async Task LoadCsvAsync_SendsStreamingPutWithBasicAuthAndHeaders()
     {
         using var handler = new RecordingHandler(

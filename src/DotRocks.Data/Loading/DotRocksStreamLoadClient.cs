@@ -650,16 +650,19 @@ public sealed class DotRocksStreamLoadClient : IDisposable
         "CA2000:Dispose objects before losing scope",
         Justification = "HttpClient owns and disposes the SocketsHttpHandler through disposeHandler: true."
     )]
-    private HttpClient CreateDefaultHttpClient()
+    internal HttpClient CreateDefaultHttpClient()
     {
         var handler = new SocketsHttpHandler
         {
             AllowAutoRedirect = false,
+            ConnectTimeout = _options.ConnectionTimeout,
             // Route every connection (initial and redirect hops) through the connect-time SSRF gate
             // so the address the socket actually connects to is the vetted one.
             ConnectCallback = VettedConnectAsync,
         };
-        return new HttpClient(handler, disposeHandler: true);
+        // Server load/transaction timeouts have their own semantics. The caller's token bounds
+        // the upload and response; HttpClient's default 100-second limit must not cut them short.
+        return new HttpClient(handler, disposeHandler: true) { Timeout = Timeout.InfiniteTimeSpan };
     }
 
     private static bool IsRedirect(HttpResponseMessage response) =>

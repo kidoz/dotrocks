@@ -11,6 +11,9 @@ version is derived from the release tag at publish time.
 ### Fixed
 - Restore physical connection pooling after canceling a command and reopening the same
   `DotRocksConnection` instance.
+- Remove the implicit 100-second HTTP timeout from Stream Load uploads and transaction
+  requests. `Connection Timeout` bounds HTTP connection establishment; caller cancellation
+  bounds the overall operation. Load and transaction timeout options remain server settings.
 
 ## [1.6.1] - 2026-10-25
 
