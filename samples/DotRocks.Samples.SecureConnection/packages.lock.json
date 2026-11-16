@@ -5,6 +5,11 @@
       "dotrocks.data": {
         "type": "Project"
       }
+    },
+    "net11.0": {
+      "dotrocks.data": {
+        "type": "Project"
+      }
     }
   }
 }

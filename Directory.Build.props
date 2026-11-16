@@ -4,7 +4,7 @@
     Keep this aligned with .agents/contexts/conventions/STYLE_PROFILE.md.
   -->
   <PropertyGroup Label="Language and analysis">
-    <!-- Pin C# 14 for net10.0 runtime projects and netstandard2.0 analyzers. -->
+    <!-- Pin C# 14 for net10.0/net11.0 runtime projects and netstandard2.0 analyzers. -->
     <LangVersion>14.0</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>

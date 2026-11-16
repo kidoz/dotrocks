@@ -11,6 +11,17 @@
       "dotrocks.data": {
         "type": "Project"
       }
+    },
+    "net11.0": {
+      "Dapper": {
+        "type": "Direct",
+        "requested": "[2.1.89, )",
+        "resolved": "2.1.89",
+        "contentHash": "1VjFE664wnxvuhlgP8kS4PeFFF4jqD3VkbIHW6Zlc52zuibgcz5ICnIHcQXlTp6pURpPNGLV0ZpNe5x9KePJnA=="
+      },
+      "dotrocks.data": {
+        "type": "Project"
+      }
     }
   }
 }

@@ -1,7 +1,7 @@
 # DotRocks
 
 [![Language](https://img.shields.io/badge/language-C%23-512BD4)](https://learn.microsoft.com/dotnet/csharp/)
-[![.NET SDK](https://img.shields.io/badge/.NET%20SDK-10.0.400-512BD4)](https://github.com/kidoz/dotrocks/blob/main/global.json)
+[![.NET SDK](https://img.shields.io/badge/.NET%20SDK-11.0.100-512BD4)](https://github.com/kidoz/dotrocks/blob/main/global.json)
 [![License](https://img.shields.io/badge/license-MIT-blue)](https://github.com/kidoz/dotrocks/blob/main/LICENSE)
 
 **DotRocks for StarRocks** — a native .NET driver, Entity Framework Core provider, and
@@ -37,10 +37,16 @@ driver, and it is not a general-purpose MySQL driver.
 
 ## Requirements
 
-- .NET 10 SDK (pinned via `global.json`)
+- Applications: .NET 10 or .NET 11
+- Building this repository: .NET 11 SDK (pinned via `global.json`) and .NET 10/11 runtimes
 - C# 14
 - StarRocks FE reachable on the MySQL protocol port (default 9030); Stream Load also
   needs the FE HTTP endpoint (default 8030)
+
+Runtime packages contain both `net10.0` and `net11.0` assets. The EF Core provider and design-time
+package use EF Core 10.0.15 on .NET 10 and EF Core 11.0.0 on .NET 11. Keep your application's
+`Microsoft.EntityFrameworkCore.*` packages and `dotnet-ef` tool on the matching major version.
+Roslyn analyzer/code-fix assemblies remain `netstandard2.0` for compiler and IDE compatibility.
 
 ## Documentation
 

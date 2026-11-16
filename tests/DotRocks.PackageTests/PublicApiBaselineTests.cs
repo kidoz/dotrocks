@@ -9,10 +9,10 @@ public sealed class PublicApiBaselineTests
 {
     private static readonly ApiAssembly[] ApiAssemblies =
     [
-        new("DotRocks.Data", "net10.0"),
-        new("DotRocks.FlightSql", "net10.0"),
-        new("DotRocks.EntityFrameworkCore", "net10.0"),
-        new("DotRocks.EntityFrameworkCore.Design", "net10.0"),
+        new("DotRocks.Data", PackageTestFramework.Current),
+        new("DotRocks.FlightSql", PackageTestFramework.Current),
+        new("DotRocks.EntityFrameworkCore", PackageTestFramework.Current),
+        new("DotRocks.EntityFrameworkCore.Design", PackageTestFramework.Current),
         new("DotRocks.Analyzers", "netstandard2.0"),
         new("DotRocks.Analyzers.CodeFixes", "netstandard2.0"),
     ];

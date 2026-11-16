@@ -39,8 +39,11 @@ public sealed class PackageContentTests
 
             Assert.Contains("README.md", entries);
             Assert.Contains("THIRD-PARTY-NOTICES.md", entries);
-            Assert.Contains("lib/net10.0/" + packageId + ".dll", entries);
-            Assert.Contains("lib/net10.0/" + packageId + ".xml", entries);
+            foreach (string framework in PackageTestFramework.Supported)
+            {
+                Assert.Contains($"lib/{framework}/{packageId}.dll", entries);
+                Assert.Contains($"lib/{framework}/{packageId}.xml", entries);
+            }
             await AssertPackageReadmeAsync(archive).ConfigureAwait(true);
             AssertRuntimePackageLayout(packageId, entries);
             Assert.DoesNotContain(
@@ -58,15 +61,18 @@ public sealed class PackageContentTests
             using ZipArchive symbols = await ZipFile
                 .OpenReadAsync(symbolsPath, TestContext.Current.CancellationToken)
                 .ConfigureAwait(true);
-            Assert.Contains(
-                "lib/net10.0/" + packageId + ".pdb",
-                symbols.Entries.Select(entry => entry.FullName)
-            );
+            foreach (string framework in PackageTestFramework.Supported)
+            {
+                Assert.Contains(
+                    $"lib/{framework}/{packageId}.pdb",
+                    symbols.Entries.Select(entry => entry.FullName)
+                );
+                AssertSourceLinkFileExists(packageId, framework);
+            }
             Assert.DoesNotContain(
                 symbols.Entries.Select(entry => entry.FullName),
                 entry => entry.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)
             );
-            AssertSourceLinkFileExists(packageId);
         }
 
         foreach (string packageId in AnalyzerPackageIds)
@@ -137,6 +143,12 @@ public sealed class PackageContentTests
         Assert.Contains("DTR0004", build.Output, StringComparison.Ordinal);
         Assert.DoesNotContain("CS8032", build.Output, StringComparison.Ordinal);
         Assert.DoesNotContain("AD0001", build.Output, StringComparison.Ordinal);
+        CommandResult run = await RunDotnetAsync(
+                "run --project Consumer.csproj --no-build",
+                consumerDirectory
+            )
+            .ConfigureAwait(true);
+        AssertCommandSucceeded(run);
     }
 
     [Fact]
@@ -178,6 +190,40 @@ public sealed class PackageContentTests
         Assert.Equal("README.md", NuspecValue(nuspec, "readme"));
         Assert.Equal("MIT", NuspecValue(nuspec, "license"));
         Assert.Equal("https://github.com/kidoz/dotrocks", NuspecValue(nuspec, "repository", "url"));
+        if (RuntimePackageIds.Contains(packageId))
+        {
+            XElement[] groups = nuspec
+                .Descendants()
+                .Where(element => element.Name.LocalName == "group")
+                .ToArray();
+            Assert.Equal(
+                PackageTestFramework.Supported,
+                groups
+                    .Select(group => group.Attribute("targetFramework")!.Value)
+                    .Order(StringComparer.Ordinal)
+            );
+            if (packageId.StartsWith("DotRocks.EntityFrameworkCore", StringComparison.Ordinal))
+            {
+                foreach (XElement group in groups)
+                {
+                    string expectedVersion =
+                        group.Attribute("targetFramework")!.Value == "net11.0"
+                            ? "11.0.0"
+                            : "10.0.15";
+                    Assert.Contains(
+                        group.Elements(),
+                        dependency =>
+                            dependency
+                                .Attribute("id")
+                                ?.Value.StartsWith(
+                                    "Microsoft.EntityFrameworkCore",
+                                    StringComparison.Ordinal
+                                ) == true
+                            && dependency.Attribute("version")?.Value == expectedVersion
+                    );
+                }
+            }
+        }
         if (expectDependencies)
         {
             Assert.Contains(
@@ -289,7 +335,7 @@ public sealed class PackageContentTests
         return attribute is null ? element?.Value : element?.Attribute(attribute)?.Value;
     }
 
-    private static void AssertSourceLinkFileExists(string packageId)
+    private static void AssertSourceLinkFileExists(string packageId, string framework)
     {
         string root = FindRepositoryRoot();
         string projectName = packageId;
@@ -299,7 +345,7 @@ public sealed class PackageContentTests
             projectName,
             "obj",
             "Release",
-            "net10.0",
+            framework,
             projectName + ".sourcelink.json"
         );
         Assert.True(File.Exists(sourceLinkPath), sourceLinkPath);
@@ -310,7 +356,9 @@ public sealed class PackageContentTests
     private static void AssertRuntimePackageLayout(string packageId, string[] entries)
     {
         Assert.Equal(
-            ["lib/net10.0/" + packageId + ".dll"],
+            PackageTestFramework
+                .Supported.Select(framework => $"lib/{framework}/{packageId}.dll")
+                .ToArray(),
             entries
                 .Where(entry =>
                     entry.StartsWith("lib/", StringComparison.Ordinal)
@@ -518,6 +566,15 @@ public sealed class PackageContentTests
         new XDocument(
             new XElement(
                 "configuration",
+                // Never let a previously cached local 1.0.0 DotRocks package mask this build.
+                new XElement(
+                    "config",
+                    new XElement(
+                        "add",
+                        new XAttribute("key", "globalPackagesFolder"),
+                        new XAttribute("value", "packages")
+                    )
+                ),
                 new XElement(
                     "packageSources",
                     new XElement("clear"),
@@ -558,7 +615,7 @@ public sealed class PackageContentTests
                 new XElement(
                     "PropertyGroup",
                     new XElement("OutputType", "Exe"),
-                    new XElement("TargetFramework", "net10.0"),
+                    new XElement("TargetFramework", PackageTestFramework.Current),
                     new XElement("Nullable", "enable"),
                     new XElement("ImplicitUsings", "enable"),
                     new XElement("TreatWarningsAsErrors", "false")
@@ -639,10 +696,6 @@ public sealed class PackageContentTests
         using var factoryConnection = DotRocksFactory.Instance.CreateConnection();
         factoryConnection!.ConnectionString = builder.ConnectionString;
 
-        _ = new DotRocksStreamLoadClient(
-            "Server=127.0.0.1;User ID=root;Password=secret;Stream Load Endpoint=http://127.0.0.1:8030"
-        );
-
         var flightOptions = new DotRocksFlightSqlOptions(
             new Uri("grpc+tls://127.0.0.1:9408"),
             "root",
@@ -654,8 +707,49 @@ public sealed class PackageContentTests
         }
         using var flightDataSource = new DotRocksFlightSqlDataSource(flightOptions);
 
+        if (typeof(DbContext).Assembly.GetName().Version!.Major != Environment.Version.Major)
+        {
+            throw new InvalidOperationException("The consumer did not resolve the matching EF Core major version.");
+        }
+        using (var context = new QueryContext())
+        {
+            string sql = context.Set<QueryWidget>().Where(widget => widget.Id == 42).ToQueryString();
+            if (!sql.Contains("42", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("EF query translation did not use the provider.");
+            }
+        }
+
+        // Invalid inputs are compiled to verify diagnostics, but are not executed by the smoke test.
+        internal static class DiagnosticConsumer
+        {
+            public static void InsecureStreamLoad()
+            {
+                using var client = new DotRocksStreamLoadClient(
+                    "Server=127.0.0.1;User ID=root;Password=secret;Stream Load Endpoint=http://127.0.0.1:8030"
+                );
+            }
+        }
+
+        internal sealed class QueryContext : DbContext
+        {
+            protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+                => optionsBuilder.UseStarRocks("Server=127.0.0.1;User ID=root");
+
+            protected override void OnModelCreating(ModelBuilder modelBuilder)
+                => modelBuilder.Entity<QueryWidget>().Property(widget => widget.Id).ValueGeneratedNever();
+        }
+
+        internal sealed class QueryWidget
+        {
+            public int Id { get; set; }
+        }
+
         internal sealed class ConsumerContext : DbContext
         {
+            protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+                => optionsBuilder.UseStarRocks("Server=127.0.0.1;User ID=root");
+
             protected override void OnModelCreating(ModelBuilder modelBuilder)
             {
                 modelBuilder.Entity<Widget>().HasKey(widget => widget.Id);
@@ -694,6 +788,13 @@ public sealed class PackageContentTests
             WorkingDirectory = workingDirectory ?? FindRepositoryRoot(),
         };
         process.StartInfo.Environment["DOTNET_CLI_DO_NOT_USE_MSBUILD_SERVER"] = "1";
+        if (workingDirectory is not null)
+        {
+            process.StartInfo.Environment["NUGET_PACKAGES"] = Path.Combine(
+                workingDirectory,
+                "packages"
+            );
+        }
         process.Start();
         string output = await process.StandardOutput.ReadToEndAsync().ConfigureAwait(true);
         string error = await process.StandardError.ReadToEndAsync().ConfigureAwait(true);

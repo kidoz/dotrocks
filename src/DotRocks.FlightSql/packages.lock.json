@@ -87,6 +87,79 @@
       "dotrocks.data": {
         "type": "Project"
       }
+    },
+    "net11.0": {
+      "Apache.Arrow": {
+        "type": "Direct",
+        "requested": "[23.0.0, )",
+        "resolved": "23.0.0",
+        "contentHash": "cU4Zm7byFwnb82Ea9ZRvVnq2nJNf/TF9j+rj/MHlvu9RBYMqYtu4sJaR1JmMh3MmSIuwMafVg7PfJxPAMv9dGw==",
+        "dependencies": {
+          "Apache.Arrow.Scalars": "23.0.0"
+        }
+      },
+      "Apache.Arrow.Flight": {
+        "type": "Direct",
+        "requested": "[23.0.0, )",
+        "resolved": "23.0.0",
+        "contentHash": "WU0yG9x1Xj/Fl/5V8Ti9fo84b5FORWgmjbfpZT1wxh4oUAAVqjngRVdkH5n5pVTeMconQQZ1PdMFUW/KxMrRfw==",
+        "dependencies": {
+          "Apache.Arrow": "23.0.0",
+          "Google.Protobuf": "3.31.1",
+          "Grpc.Net.Client": "2.71.0"
+        }
+      },
+      "Apache.Arrow.Flight.Sql": {
+        "type": "Direct",
+        "requested": "[23.0.0, )",
+        "resolved": "23.0.0",
+        "contentHash": "iJO16XbehY2GZEJd5Gqy4G3mTF9PFWPoi+quhFgw/fsaN3A7ewyiuEcjR6xGAe0SGWeFlyaiWLFSlrs2XQnLkg==",
+        "dependencies": {
+          "Apache.Arrow.Flight": "23.0.0"
+        }
+      },
+      "Grpc.Core.Api": {
+        "type": "Direct",
+        "requested": "[2.85.0, )",
+        "resolved": "2.85.0",
+        "contentHash": "cpYu/nw/QhwHcRZMJbYD8lEllKrdwYMiDS4U3oH61nhYPUMNkcCcef4ulv11svHvTBThYV+ju332N9bCrfe7cQ=="
+      },
+      "Grpc.Net.Client": {
+        "type": "Direct",
+        "requested": "[2.85.0, )",
+        "resolved": "2.85.0",
+        "contentHash": "BPMA5mb96ihVQfXTuIUpC1aie2I0ODBD6QCc0UXYS5zQMK6sJW5yck8NZ2ffvGHfOanWyn2Yg0tJbYY3nV+zIw==",
+        "dependencies": {
+          "Grpc.Net.Common": "2.85.0"
+        }
+      },
+      "Microsoft.CodeAnalysis.PublicApiAnalyzers": {
+        "type": "Direct",
+        "requested": "[5.6.0, )",
+        "resolved": "5.6.0",
+        "contentHash": "W4kJGezNIKLzo0Ak5FAQDFvkMf2U7DtGL4THmHyRSApfKsKt5V+eX/bU0ZLKAt/uf9Bb2o1bi0YDKj/GRB/vYQ=="
+      },
+      "Apache.Arrow.Scalars": {
+        "type": "Transitive",
+        "resolved": "23.0.0",
+        "contentHash": "i53VmQ505ASXsStf7y29Z5qvhN6PGgFGNb6UUU7z1WmbzEgSjKQuIJkKKVbh+K5rtXRiKyr1Ah3Rmvbeb2BEHQ=="
+      },
+      "Google.Protobuf": {
+        "type": "Transitive",
+        "resolved": "3.31.1",
+        "contentHash": "gSnJbUmGiOTdWddPhqzrEscHq9Ls6sqRDPB9WptckyjTUyx70JOOAaDLkFff8gManZNN3hllQ4aQInnQyq/Z/A=="
+      },
+      "Grpc.Net.Common": {
+        "type": "Transitive",
+        "resolved": "2.85.0",
+        "contentHash": "e+RczhQVHb5MacI1oMTLMK6InZLH22POZcE4gsy5SnolsElLaqhSwEhqm+cF0m4Q1JGmlhjf1nbnKh7sBbjJVg==",
+        "dependencies": {
+          "Grpc.Core.Api": "2.85.0"
+        }
+      },
+      "dotrocks.data": {
+        "type": "Project"
+      }
     }
   }
 }

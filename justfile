@@ -1,5 +1,5 @@
 # DotRocks task shortcuts. Run `just` or `just --list` to see recipes.
-# Requires the .NET 10 SDK; Docker is required only for the integration/harness recipes.
+# Requires the .NET 11 SDK and .NET 10/11 runtimes; Docker is required only for the integration/harness recipes.
 
 set shell := ["bash", "-cu"]
 
@@ -8,6 +8,7 @@ fe_host := env_var_or_default("DOTROCKS_HOST", "127.0.0.1")
 fe_port := env_var_or_default("DOTROCKS_PORT", "9030")
 fe_http_port := env_var_or_default("DOTROCKS_FE_HTTP_PORT", "8030")
 config := env_var_or_default("CONFIG", "Release")
+framework := env_var_or_default("FRAMEWORK", "net10.0")
 
 # StarRocks test-server Docker Compose file.
 compose_file := "dev/docker-compose.yml"
@@ -35,7 +36,7 @@ build:
 
 # Run the server-free unit and protocol tests.
 test:
-    dotnet test --solution DotRocks.slnx --configuration {{config}} --no-build
+    dotnet test --solution DotRocks.slnx --configuration {{config}} --no-build --max-parallel-test-modules 1
 
 # Run integration tests against an already-running StarRocks FE.
 integration-test:
@@ -52,10 +53,10 @@ integration-test:
         fi
         export DOTROCKS_STREAM_LOAD_REDIRECT_ORIGINS="$origins"
     fi
-    DOTROCKS_RUN_INTEGRATION=1 DOTROCKS_FE_HTTP_PORT={{fe_http_port}} dotnet test --project tests/DotRocks.Data.IntegrationTests --configuration {{config}} --no-build
-    DOTROCKS_RUN_INTEGRATION=1 dotnet test --project tests/DotRocks.Data.DapperTests --configuration {{config}} --no-build
-    DOTROCKS_RUN_INTEGRATION=1 dotnet test --project tests/DotRocks.EntityFrameworkCore.IntegrationTests --configuration {{config}} --no-build
-    DOTROCKS_RUN_INTEGRATION=1 dotnet test --project tests/DotRocks.FlightSql.IntegrationTests --configuration {{config}} --no-build
+    DOTROCKS_RUN_INTEGRATION=1 DOTROCKS_FE_HTTP_PORT={{fe_http_port}} dotnet test --project tests/DotRocks.Data.IntegrationTests --configuration {{config}} --no-build --max-parallel-test-modules 1
+    DOTROCKS_RUN_INTEGRATION=1 dotnet test --project tests/DotRocks.Data.DapperTests --configuration {{config}} --no-build --max-parallel-test-modules 1
+    DOTROCKS_RUN_INTEGRATION=1 dotnet test --project tests/DotRocks.EntityFrameworkCore.IntegrationTests --configuration {{config}} --no-build --max-parallel-test-modules 1
+    DOTROCKS_RUN_INTEGRATION=1 dotnet test --project tests/DotRocks.FlightSql.IntegrationTests --configuration {{config}} --no-build --max-parallel-test-modules 1
 
 # Produce NuGet packages.
 pack:
@@ -142,16 +143,16 @@ starrocks-down:
 
 # Probe the StarRocks handshake with the compatibility harness.
 harness host=fe_host port=fe_port:
-    dotnet run --project tests/DotRocks.CompatibilityHarness --configuration {{config}} -- {{host}} {{port}}
+    dotnet run --project tests/DotRocks.CompatibilityHarness --configuration {{config}} --framework {{framework}} -- {{host}} {{port}}
 
 # Run the budgeted, server-free BenchmarkDotNet suite (optionally filtered, e.g. `just bench '*Parse*'`).
 bench filter='*':
-    dotnet run --project benchmarks/DotRocks.Benchmarks --configuration Release -- --anyCategories Local --filter '{{filter}}'
+    dotnet run --project benchmarks/DotRocks.Benchmarks --configuration Release --framework net10.0 -- --anyCategories Local --filter '{{filter}}'
 
 # Run the server-backed stress benchmarks against a live StarRocks (start it with `just starrocks-up`).
 # These are observational and not budget-gated. Override the target with DOTROCKS_BENCH_CONNECTION_STRING.
 bench-server filter='*' host=fe_host port=fe_port:
-    DOTROCKS_BENCH_CONNECTION_STRING="${DOTROCKS_BENCH_CONNECTION_STRING:-Server={{host}};Port={{port}};User ID=root;Pooling=true}" dotnet run --project benchmarks/DotRocks.Benchmarks --configuration Release -- --anyCategories ServerBacked --filter '{{filter}}'
+    DOTROCKS_BENCH_CONNECTION_STRING="${DOTROCKS_BENCH_CONNECTION_STRING:-Server={{host}};Port={{port}};User ID=root;Pooling=true}" dotnet run --project benchmarks/DotRocks.Benchmarks --configuration Release --framework net10.0 -- --anyCategories ServerBacked --filter '{{filter}}'
 
 # Build the DocFX documentation site into artifacts/docfx/_site.
 docs:

@@ -40,6 +40,7 @@ jobs:
         uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
         with:
           global-json-file: global.json
+          dotnet-version: 10.0.x
 
       - name: Restore tools
         run: dotnet tool restore
@@ -58,12 +59,12 @@ jobs:
       # unit/protocol/analyzer/packaging suites here.
       - name: Test
         run: |
-          dotnet test --project tests/DotRocks.Protocol.Tests --configuration Release --no-build
-          dotnet test --project tests/DotRocks.FlightSql.Tests --configuration Release --no-build
-          dotnet test --project tests/DotRocks.EntityFrameworkCore.Tests --configuration Release --no-build
-          dotnet test --project tests/DotRocks.Analyzers.Tests --configuration Release --no-build
-          dotnet test --project tests/DotRocks.Benchmarks.Tests --configuration Release --no-build
-          dotnet test --project tests/DotRocks.PackageTests --configuration Release --no-build
+          dotnet test --project tests/DotRocks.Protocol.Tests --configuration Release --no-build --max-parallel-test-modules 1
+          dotnet test --project tests/DotRocks.FlightSql.Tests --configuration Release --no-build --max-parallel-test-modules 1
+          dotnet test --project tests/DotRocks.EntityFrameworkCore.Tests --configuration Release --no-build --max-parallel-test-modules 1
+          dotnet test --project tests/DotRocks.Analyzers.Tests --configuration Release --no-build --max-parallel-test-modules 1
+          dotnet test --project tests/DotRocks.Benchmarks.Tests --configuration Release --no-build --max-parallel-test-modules 1
+          dotnet test --project tests/DotRocks.PackageTests --configuration Release --no-build --max-parallel-test-modules 1
 
   # The budget-gated benchmarks are server-free but take minutes, so they run beside the build
   # job rather than extending it. Without this the catalog in PerformanceBudget.cs is only ever
@@ -86,6 +87,7 @@ jobs:
         uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
         with:
           global-json-file: global.json
+          dotnet-version: 10.0.x
 
       - name: Restore packages
         run: dotnet restore DotRocks.slnx --locked-mode
@@ -99,5 +101,5 @@ jobs:
         env:
           DOTROCKS_BENCHMARK_ALLOCATION_ONLY: 1
         run: >
-          dotnet run --project benchmarks/DotRocks.Benchmarks --configuration Release
+          dotnet run --project benchmarks/DotRocks.Benchmarks --configuration Release --framework net10.0
           -- --anyCategories Local

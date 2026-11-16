@@ -5,9 +5,10 @@ analyzer suite for StarRocks.
 
 ## Prerequisites
 
-- .NET 10 SDK (pinned via `global.json`).
-- All runtime products target `net10.0`; the analyzer packages target `netstandard2.0` as a
-  documented compiler/IDE-host exception. There is no other multi-targeting.
+- .NET 11 SDK (pinned via `global.json`) plus .NET 10 and .NET 11 runtimes.
+- Runtime products, samples, and tests target `net10.0;net11.0`. EF Core
+  packages select 10.0.15 for .NET 10 and 11.0.0 for .NET 11. Analyzer/code-fix assemblies
+  remain `netstandard2.0` for compiler/IDE compatibility; library source remains C# 14.
 
 ## Build, format, and test
 
@@ -16,13 +17,18 @@ dotnet tool restore
 dotnet restore --locked-mode
 dotnet csharpier check .
 dotnet build --configuration Release --no-restore
-dotnet test --configuration Release --no-build
+dotnet test --configuration Release --no-build --max-parallel-test-modules 1
 dotnet pack --configuration Release --no-build
 ```
 
 Integration tests require a live StarRocks and run via `just integration-test` (or the
 `integration.yml` workflow) with `DOTROCKS_RUN_INTEGRATION=1`. Without it they are skipped,
-not silently passed.
+not silently passed. Both frameworks run sequentially against the local fixture to avoid
+sharing database mutations between test processes. CI isolates each framework/server pair.
+Use `dotnet test --framework net11.0` to select one target and
+`FRAMEWORK=net11.0 just harness` to select the compatibility harness runtime.
+The benchmark runner stays on .NET 10 because BenchmarkDotNet 0.15.8 does not recognize
+.NET 11. Existing performance budgets continue to measure .NET 10.
 
 Use the latest stable patch release in each supported StarRocks branch: 3.5, 4.0, and 4.1.
 Check the official [3.5](https://docs.starrocks.io/releasenotes/release-3.5/),

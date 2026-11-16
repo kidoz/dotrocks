@@ -2,7 +2,8 @@
 
 ## Requirements
 
-- .NET 10 SDK, pinned by `global.json`
+- .NET 10 or .NET 11 for applications; building the repository requires the .NET 11 SDK
+  pinned by `global.json` and both runtimes
 - A reachable StarRocks FE (MySQL-protocol query port, default 9030)
 
 Install the packages you use:
@@ -106,8 +107,22 @@ dotnet tool restore
 dotnet restore --locked-mode
 dotnet csharpier check .
 dotnet build --configuration Release --no-restore
-dotnet test --configuration Release --no-build
+dotnet test --configuration Release --no-build --max-parallel-test-modules 1
 ```
 
 Live tests require StarRocks and run with `DOTROCKS_RUN_INTEGRATION=1`; `just integration-test`
 starts from an already-running server configured by the local Docker recipe.
+
+## Choosing the EF Core version
+
+The provider ships matching assets for each target framework:
+
+| Application target | EF Core provider dependencies | Design-time tool |
+|---|---|---|
+| `net10.0` | EF Core 10.0.15 | `dotnet-ef` 10.x |
+| `net11.0` | EF Core 11.0.0 | `dotnet-ef` 11.x |
+
+Align all `Microsoft.EntityFrameworkCore.*` references with the selected major version.
+NuGet selects the matching DotRocks assembly automatically. The driver and Flight SQL APIs
+are the same on both frameworks. Analyzer packages retain their compiler-compatible
+`netstandard2.0` assemblies.

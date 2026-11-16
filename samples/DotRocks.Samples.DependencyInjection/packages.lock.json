@@ -19,6 +19,17 @@
       "dotrocks.data": {
         "type": "Project"
       }
+    },
+    "net11.0": {
+      "Microsoft.Extensions.DependencyInjection": {
+        "type": "Direct",
+        "requested": "[11.0.0, )",
+        "resolved": "11.0.0",
+        "contentHash": "KygQMITBDDPXw7+AAgdwQvVAaTXuDsc1iCAuvhO73ERxKX+d92cdbgZmpoYF7DIUq2hfs/yO2KD87uIreRy3MA=="
+      },
+      "dotrocks.data": {
+        "type": "Project"
+      }
     }
   }
 }

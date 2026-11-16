@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
+    <!-- BenchmarkDotNet 0.15.8 does not recognize .NET 11. Keep performance budgets on .NET 10. -->
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>false</IsPackable>
     <IsPublishable>false</IsPublishable>

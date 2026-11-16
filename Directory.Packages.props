@@ -3,13 +3,27 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
+  <PropertyGroup>
+    <DotRocksEfCoreVersion>10.0.15</DotRocksEfCoreVersion>
+    <DotRocksEfCoreVersion Condition="'$(TargetFramework)' == 'net11.0'"
+      >11.0.0</DotRocksEfCoreVersion>
+  </PropertyGroup>
   <!-- Pin exact package versions; do not use floating versions. -->
   <ItemGroup Label="Testing">
     <PackageVersion Include="Dapper" Version="2.1.89" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.15" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.15" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.15" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.15" />
+    <PackageVersion
+      Include="Microsoft.Extensions.DependencyInjection"
+      Version="$(DotRocksEfCoreVersion)"
+    />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="$(DotRocksEfCoreVersion)" />
+    <PackageVersion
+      Include="Microsoft.EntityFrameworkCore.Design"
+      Version="$(DotRocksEfCoreVersion)"
+    />
+    <PackageVersion
+      Include="Microsoft.EntityFrameworkCore.Relational"
+      Version="$(DotRocksEfCoreVersion)"
+    />
     <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="5.9.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.9.0" />

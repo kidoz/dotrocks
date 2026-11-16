@@ -1184,7 +1184,7 @@ public sealed class DotRocksUsageAnalyzerTests
             "DotRocks.Analyzers.Consumer.csproj"
         );
         return RunDotnetAsync(
-            $"build \"{projectPath}\" --configuration {configuration} /p:AnalyzerFixtureMode={mode}"
+            $"build \"{projectPath}\" --configuration {configuration} --framework net{Environment.Version.Major}.0 /p:AnalyzerFixtureMode={mode}"
         );
     }
 

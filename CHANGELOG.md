@@ -8,6 +8,16 @@ version is derived from the release tag at publish time.
 
 ## [Unreleased]
 
+### Added
+- Support .NET 11 alongside .NET 10 across runtime packages, samples, and test suites.
+  Packages include `net10.0` and `net11.0` assets; analyzer assemblies retain `netstandard2.0`.
+- Support EF Core 11.0.0 on `net11.0`, while retaining EF Core 10.0.15 on `net10.0`.
+  Package tests verify both dependency groups, API surfaces, and runnable consumers.
+
+### Changed
+- Build with the .NET 11.0.100 SDK and retain C# 14 source compatibility. CI installs both
+  runtimes and covers both frameworks in the StarRocks integration matrix.
+
 ## [1.6.2] - 2026-11-16
 
 ### Changed
