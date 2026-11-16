@@ -15,6 +15,9 @@ public sealed class NativeSessionRegressionTests
     [InlineData("START TRANSACTION", false)]
     [InlineData("BEGIN", true)]
     [InlineData("/* transaction */ START TRANSACTION", true)]
+    [InlineData("EXECUTE AS alice WITH NO REVERT", false)]
+    [InlineData("/* identity */ EXECUTE AS alice WITH NO REVERT", true)]
+    [InlineData("CREATE TEMPORARY TABLE t (id INT)", true)]
     [System.Diagnostics.CodeAnalysis.SuppressMessage(
         "Security",
         "CA2100:Review SQL queries for security vulnerabilities",

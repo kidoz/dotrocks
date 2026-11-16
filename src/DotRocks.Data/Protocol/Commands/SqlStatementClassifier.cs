@@ -75,9 +75,17 @@ internal static class SqlStatementClassifier
             || MatchesKeyword(sql, index, "SAVEPOINT")
             || MatchesKeyword(sql, index, "RELEASE")
             || MatchesKeyword(sql, index, "XA")
+            || MatchesKeyword(sql, index, "EXECUTE")
+            || MatchesKeyword(sql, index, "PREPARE")
+            || MatchesKeyword(sql, index, "DEALLOCATE")
+            || (MatchesKeyword(sql, index, "CREATE") && IsTemporary(sql[(index + 6)..]))
+            || (MatchesKeyword(sql, index, "DROP") && IsTemporary(sql[(index + 4)..]))
             || commandText.Contains("/*!", StringComparison.Ordinal)
             || commandText.Contains(":=", StringComparison.Ordinal);
     }
+
+    private static bool IsTemporary(ReadOnlySpan<char> sql) =>
+        MatchesKeyword(sql, SkipLeadingTrivia(sql), "TEMPORARY");
 
     private static int SkipLeadingTrivia(ReadOnlySpan<char> sql)
     {

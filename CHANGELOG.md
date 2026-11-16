@@ -14,6 +14,8 @@ version is derived from the release tag at publish time.
 - Remove the implicit 100-second HTTP timeout from Stream Load uploads and transaction
   requests. `Connection Timeout` bounds HTTP connection establishment; caller cancellation
   bounds the overall operation. Load and transaction timeout options remain server settings.
+- Retire pooled SQL sessions after impersonation, SQL prepared-statement controls, and
+  temporary-table creation or deletion so session state cannot cross leases.
 
 ## [1.6.1] - 2026-10-25
 

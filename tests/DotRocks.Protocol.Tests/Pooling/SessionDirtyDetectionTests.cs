@@ -31,6 +31,16 @@ public sealed class SessionDirtyDetectionTests
     [InlineData("RELEASE SAVEPOINT tenant")]
     [InlineData("XA START 'tenant'")]
     [InlineData("/*! START TRANSACTION */")]
+    [InlineData("EXECUTE AS alice WITH NO REVERT")]
+    [InlineData("/* identity */ execute as alice with no revert")]
+    [InlineData("PREPARE statement FROM 'SELECT 1'")]
+    [InlineData("-- statement\nprepare statement from 'SELECT 1'")]
+    [InlineData("DEALLOCATE PREPARE statement")]
+    [InlineData("/* statement */ deallocate prepare statement")]
+    [InlineData("CREATE TEMPORARY TABLE t (id INT)")]
+    [InlineData("/* table */ create /* comment */ temporary table t (id int)")]
+    [InlineData("DROP TEMPORARY TABLE t")]
+    [InlineData("drop -- comment\n temporary table t")]
     public void IsSessionMutatingStatement_FlagsUseAndSet(string commandText) =>
         Assert.True(SqlStatementClassifier.IsSessionMutating(commandText));
 
@@ -44,6 +54,9 @@ public sealed class SessionDirtyDetectionTests
     [InlineData("")]
     [InlineData("   ")]
     [InlineData("-- USE analytics")]
+    [InlineData("SELECT execute_count, prepare FROM t")]
+    [InlineData("CREATE TABLE temporary_data (id INT)")]
+    [InlineData("DROP TABLE temporary_data")]
     public void IsSessionMutatingStatement_AllowsNonSessionStatements(string commandText) =>
         Assert.False(SqlStatementClassifier.IsSessionMutating(commandText));
 }
