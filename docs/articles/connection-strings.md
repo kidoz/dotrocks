@@ -110,7 +110,9 @@ connection strings that vary per request do not accumulate pool objects over tim
 ## Retries and lifetime
 
 Opening a connection is retried on **transient** failures only (classified via
-`DotRocksException.IsTransient`). A plain server error is never retried.
+`DotRocksException.IsTransient`). A plain server error is never retried. One total
+`Connection Timeout` budget covers pool waiting, connection attempts, and retry delays; it
+does not restart for each attempt. Once that budget expires, no further retry is attempted.
 
 | Keyword | Default | Purpose |
 |---|---|---|
