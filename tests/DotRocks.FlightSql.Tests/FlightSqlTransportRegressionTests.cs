@@ -16,6 +16,58 @@ public sealed partial class FlightSqlTransportTests
     private const string SensitiveValue = "synthetic-private-value";
 
     [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public async Task ExpiredAuthentication_RenewsOnlyForLaterStatelessCalls(
+        bool beginTransaction,
+        bool dedicated
+    )
+    {
+        using IHost host = CreateHost();
+        CancellationToken token = TestContext.Current.CancellationToken;
+        await host.StartAsync(token).ConfigureAwait(true);
+        try
+        {
+            await using var source = new DotRocksFlightSqlDataSource(
+                new DotRocksFlightSqlOptions(GetServerAddress(host), "root", "secret")
+                {
+                    AllowInsecureTransport = true,
+                },
+                allowSessionMutation: dedicated
+            );
+            _ = await source.ExecuteQueryAsync("SELECT 1", token).ConfigureAwait(true);
+            await using DotRocksFlightSqlTransaction? transaction = beginTransaction
+                ? await source.BeginTransactionAsync(token).ConfigureAwait(true)
+                : null;
+            QueryCapture capture = GetQueryCapture(host);
+            capture.TokenExpired = true;
+            RpcException failure = await Assert
+                .ThrowsAsync<RpcException>(() => source.ExecuteQueryAsync("SELECT 1", token))
+                .ConfigureAwait(true);
+            Assert.Equal(StatusCode.Unauthenticated, failure.StatusCode);
+            Assert.Equal(1, capture.Handshakes); // Never replay the failed operation.
+            if (beginTransaction || dedicated)
+            {
+                await Assert
+                    .ThrowsAsync<RpcException>(() => source.ExecuteQueryAsync("SELECT 1", token))
+                    .ConfigureAwait(true);
+                Assert.Equal(1, capture.Handshakes);
+                capture.TokenExpired = false; // Permit cleanup of the original transaction.
+            }
+            else
+            {
+                _ = await source.ExecuteQueryAsync("SELECT 1", token).ConfigureAwait(true);
+                Assert.Equal(2, capture.Handshakes);
+            }
+        }
+        finally
+        {
+            await host.StopAsync(token).ConfigureAwait(true);
+        }
+    }
+
+    [Theory]
     [InlineData("SET query_timeout=123")]
     [InlineData("USE private_database")]
     [InlineData("EXECUTE AS alice WITH NO REVERT")]
@@ -417,6 +469,11 @@ public sealed partial class FlightSqlTransportTests
 
             Assert.Equal(StatusCode.InvalidArgument, exception.StatusCode);
             Assert.DoesNotContain(SensitiveValue, exception.ToString(), StringComparison.Ordinal);
+            Assert.Contains(
+                SensitiveValue,
+                Assert.IsType<string>(exception.Data["DotRocks.ServerMessage"]),
+                StringComparison.Ordinal
+            );
             Assert.Empty(exception.Trailers);
             Assert.Null(exception.InnerException);
             Assert.Null(exception.Status.DebugException);

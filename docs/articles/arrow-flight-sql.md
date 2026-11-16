@@ -224,3 +224,21 @@ parameter binding, transactions, ADO.NET materialization, and EF Core queries. T
 enables FE and BE Flight endpoints and runs Flight reads, EF Core queries, and explicitly routed
 MySQL writes against StarRocks 3.5.21 and 4.1.4. Comparative server-backed benchmarks cover MySQL
 rows, Flight rows, and direct Arrow batches.
+
+## Authentication expiry and error details
+
+If query discovery or an update returns `Unauthenticated`, a shared stateless source invalidates
+the rejected bearer token. The operation still fails; DotRocks does not replay it. The next
+independent call authenticates again. A source that has begun a transaction, or a dedicated
+connection that permits session mutation, never silently replaces its session: recreate it after
+session loss. Existing result tickets and streams are not restarted. `NotFound` is not treated
+as authentication expiry, because it can describe other missing server resources.
+
+RPC errors retain their status code. For deliberate troubleshooting, inspect
+`exception.Data["DotRocks.ServerMessage"]`: it contains up to 4096 characters of server detail
+with control characters removed. It can contain sensitive data; it is excluded from the normal
+exception message and `ToString()`, as are remote trailers and inner exceptions.
+
+Flight timeouts bound query discovery and result streaming separately; the streaming budget
+covers the entire enumeration, including consumer delays. This differs from the SQL protocol's
+per-row-fetch timeout. Choose a sufficient Flight timeout for the whole scan.

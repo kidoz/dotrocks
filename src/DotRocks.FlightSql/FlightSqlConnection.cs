@@ -32,6 +32,7 @@ internal sealed class FlightSqlConnection : IAsyncDisposable
     private readonly TimeSpan _commandTimeout;
     private string? _sessionAuthorization;
     private bool _authenticated;
+    private int _renewalDisabled;
 
     public FlightSqlConnection(
         Uri address,
@@ -98,11 +99,6 @@ internal sealed class FlightSqlConnection : IAsyncDisposable
 
     private async ValueTask<string> AuthenticateAsync(CancellationToken cancellationToken)
     {
-        if (Volatile.Read(ref _authenticated))
-        {
-            return _sessionAuthorization ?? _basicAuthorization;
-        }
-
         await _authenticationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -112,13 +108,42 @@ internal sealed class FlightSqlConnection : IAsyncDisposable
                     .ConfigureAwait(false);
                 Volatile.Write(ref _authenticated, true);
             }
+            return _sessionAuthorization ?? _basicAuthorization;
         }
         finally
         {
             _authenticationGate.Release();
         }
+    }
 
-        return _sessionAuthorization ?? _basicAuthorization;
+    // A dedicated session or any session that has begun a transaction must not silently
+    // lose its state. Such sources must be recreated after authentication expires.
+    internal void DisableSessionRenewal() => Interlocked.Exchange(ref _renewalDisabled, 1);
+
+    internal async Task RejectAuthorizationAsync(Exception exception, Metadata? headers)
+    {
+        if (!FlightSqlErrors.IsUnauthenticated(exception) || headers is null)
+        {
+            return;
+        }
+        string? rejected = FindAuthorization(headers);
+        await _authenticationGate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (
+                Volatile.Read(ref _renewalDisabled) == 0
+                && _sessionAuthorization is not null
+                && _sessionAuthorization == rejected
+            )
+            {
+                _sessionAuthorization = null;
+                _authenticated = false;
+            }
+        }
+        finally
+        {
+            _authenticationGate.Release();
+        }
     }
 
     private async Task<string?> HandshakeAsync(CancellationToken cancellationToken)

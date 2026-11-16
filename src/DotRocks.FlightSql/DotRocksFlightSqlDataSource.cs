@@ -130,6 +130,7 @@ public sealed class DotRocksFlightSqlDataSource : IDisposable, IAsyncDisposable
         {
             ThrowIfDisposed();
             FlightSqlConnection connection = GetConnection(_endpointPolicy.PrimaryAddress);
+            connection.DisableSessionRenewal();
             using CancellationTokenSource timeout = CreateTimeout(
                 _commandTimeout,
                 cancellationToken
@@ -184,22 +185,22 @@ public sealed class DotRocksFlightSqlDataSource : IDisposable, IAsyncDisposable
         CancellationToken cancellationToken
     )
     {
+        FlightSqlConnection? connection = null;
+        Metadata? headers = null;
         try
         {
             ThrowIfDisposed();
             ArgumentException.ThrowIfNullOrWhiteSpace(sql);
             ValidateSessionMutation(sql);
 
-            FlightSqlConnection connection = GetConnection(_endpointPolicy.PrimaryAddress);
+            connection = GetConnection(_endpointPolicy.PrimaryAddress);
             TimeSpan effectiveTimeout = commandTimeout ?? _commandTimeout;
             using CancellationTokenSource timeout = CreateTimeout(
                 effectiveTimeout,
                 cancellationToken
             );
-            var callOptions = new FlightCallOptions
-            {
-                Headers = await connection.CreateHeadersAsync(timeout.Token).ConfigureAwait(false),
-            };
+            headers = await connection.CreateHeadersAsync(timeout.Token).ConfigureAwait(false);
+            var callOptions = new FlightCallOptions { Headers = headers };
             FlightInfo info = await connection
                 .SqlClient.ExecuteAsync(
                     sql,
@@ -219,6 +220,10 @@ public sealed class DotRocksFlightSqlDataSource : IDisposable, IAsyncDisposable
         }
         catch (Exception exception) when (FlightSqlErrors.IsRemoteFailure(exception))
         {
+            if (connection is not null)
+            {
+                await connection.RejectAuthorizationAsync(exception, headers).ConfigureAwait(false);
+            }
             throw FlightSqlErrors.Sanitize(exception);
         }
     }
@@ -230,12 +235,14 @@ public sealed class DotRocksFlightSqlDataSource : IDisposable, IAsyncDisposable
         CancellationToken cancellationToken
     )
     {
+        FlightSqlConnection? connection = null;
+        Metadata? headers = null;
         try
         {
             ThrowIfDisposed();
             ArgumentException.ThrowIfNullOrWhiteSpace(sql);
             ValidateSessionMutation(sql);
-            FlightSqlConnection connection = GetConnection(_endpointPolicy.PrimaryAddress);
+            connection = GetConnection(_endpointPolicy.PrimaryAddress);
             TimeSpan effectiveTimeout = commandTimeout ?? _commandTimeout;
             using CancellationTokenSource timeout = CreateTimeout(
                 effectiveTimeout,
@@ -250,9 +257,7 @@ public sealed class DotRocksFlightSqlDataSource : IDisposable, IAsyncDisposable
             FlightDescriptor descriptor = FlightDescriptor.CreateCommandDescriptor(
                 Any.Pack(update).ToByteArray()
             );
-            Metadata headers = await connection
-                .CreateHeadersAsync(timeout.Token)
-                .ConfigureAwait(false);
+            headers = await connection.CreateHeadersAsync(timeout.Token).ConfigureAwait(false);
             using var call = await connection
                 .Client.StartPut(
                     descriptor,
@@ -277,6 +282,10 @@ public sealed class DotRocksFlightSqlDataSource : IDisposable, IAsyncDisposable
         }
         catch (Exception exception) when (FlightSqlErrors.IsRemoteFailure(exception))
         {
+            if (connection is not null)
+            {
+                await connection.RejectAuthorizationAsync(exception, headers).ConfigureAwait(false);
+            }
             throw FlightSqlErrors.Sanitize(exception);
         }
     }
@@ -460,6 +469,10 @@ public sealed class DotRocksFlightSqlDataSource : IDisposable, IAsyncDisposable
             }
 
             connection = new FlightSqlConnection(address, _userName, _password, _commandTimeout);
+            if (_allowSessionMutation)
+            {
+                connection.DisableSessionRenewal();
+            }
             _connections.Add(address.AbsoluteUri, connection);
             return connection;
         }

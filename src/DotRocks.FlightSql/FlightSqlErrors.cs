@@ -7,6 +7,9 @@ internal static class FlightSqlErrors
     public static bool IsRemoteFailure(Exception exception) =>
         FindRemoteFailure(exception) is not null;
 
+    internal static bool IsUnauthenticated(Exception exception) =>
+        FindRemoteFailure(exception) is RpcException { StatusCode: StatusCode.Unauthenticated };
+
     private static Exception? FindRemoteFailure(Exception exception)
     {
         // Arrow's SQL client wraps discovery RPC errors in InvalidOperationException. Drop that
@@ -27,9 +30,7 @@ internal static class FlightSqlErrors
     public static Exception Sanitize(Exception exception) =>
         FindRemoteFailure(exception) switch
         {
-            RpcException rpc => new RpcException(
-                new Status(rpc.StatusCode, "The Flight SQL operation failed.")
-            ),
+            RpcException rpc => SanitizeRpc(rpc),
             HttpRequestException http => new HttpRequestException(
                 "The Flight SQL HTTP transport failed.",
                 null,
@@ -44,6 +45,20 @@ internal static class FlightSqlErrors
                 nameof(exception)
             ),
         };
+
+    private static RpcException SanitizeRpc(RpcException original)
+    {
+        var sanitized = new RpcException(
+            new Status(original.StatusCode, "The Flight SQL operation failed.")
+        );
+        // Explicit inspection only: Exception.ToString never includes Data. Bound the detail and
+        // remove terminal controls, but treat the remainder as sensitive server-supplied text.
+        string detail = original.Data["DotRocks.ServerMessage"] as string ?? original.Status.Detail;
+        sanitized.Data["DotRocks.ServerMessage"] = new string(
+            detail.Take(4096).Where(character => !char.IsControl(character)).ToArray()
+        );
+        return sanitized;
+    }
 
     public static async Task<bool> ReadNextAsync<T>(
         IAsyncStreamReader<T> reader,

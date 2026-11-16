@@ -773,6 +773,7 @@ public sealed partial class FlightSqlTransportTests
             }
 
             Interlocked.Increment(ref _capture.Handshakes);
+            _capture.TokenExpired = false;
             while (await requestStream.MoveNext(context.CancellationToken).ConfigureAwait(false))
             {
                 // The handshake payload is unused; only the returned token matters.
@@ -1002,6 +1003,10 @@ public sealed partial class FlightSqlTransportTests
         private void RequireAuthorization(ServerCallContext context)
         {
             string? authorization = ReadAuthorization(context);
+            if (_capture.TokenExpired)
+            {
+                throw new RpcException(new Status(StatusCode.Unauthenticated, "Expired token."));
+            }
             if (authorization == SessionAuthorization)
             {
                 Interlocked.Increment(ref _capture.SessionAuthorizedCalls);
@@ -1036,6 +1041,7 @@ public sealed partial class FlightSqlTransportTests
     private sealed class QueryCapture
     {
         public int Handshakes;
+        public bool TokenExpired;
         public int SessionAuthorizedCalls;
         public int BasicAuthorizedCalls;
         public int ClosedSessions;
