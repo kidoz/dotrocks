@@ -4,6 +4,8 @@ using Apache.Arrow.Flight;
 using Apache.Arrow.Flight.Client;
 using Apache.Arrow.Flight.Sql;
 using Arrow.Flight.Protocol.Sql;
+using DotRocks.Data;
+using DotRocks.Data.Protocol.Commands;
 using Google.Protobuf;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
@@ -31,6 +33,7 @@ public sealed class DotRocksFlightSqlDataSource : IDisposable, IAsyncDisposable
     private readonly string _password;
     private readonly string _userName;
     private readonly TimeSpan _commandTimeout;
+    private readonly bool _allowSessionMutation;
     private readonly Lock _sync = new();
     private int _disposed;
 
@@ -39,12 +42,21 @@ public sealed class DotRocksFlightSqlDataSource : IDisposable, IAsyncDisposable
     /// </summary>
     /// <param name="options">The validated frontend, credential, timeout, and endpoint policy.</param>
     public DotRocksFlightSqlDataSource(DotRocksFlightSqlOptions options)
+        : this(options, allowSessionMutation: false) { }
+
+    // Only a connection-owned source has an exclusive session. Public sources can be shared
+    // through both the Arrow API and ADO.NET, so enforce isolation below both entry points.
+    internal DotRocksFlightSqlDataSource(
+        DotRocksFlightSqlOptions options,
+        bool allowSessionMutation
+    )
     {
         ArgumentNullException.ThrowIfNull(options);
         _endpointPolicy = new FlightSqlEndpointPolicy(options);
         _userName = options.UserName;
         _password = options.Password;
         _commandTimeout = options.CommandTimeout;
+        _allowSessionMutation = allowSessionMutation;
         Options = options;
     }
 
@@ -176,6 +188,7 @@ public sealed class DotRocksFlightSqlDataSource : IDisposable, IAsyncDisposable
         {
             ThrowIfDisposed();
             ArgumentException.ThrowIfNullOrWhiteSpace(sql);
+            ValidateSessionMutation(sql);
 
             FlightSqlConnection connection = GetConnection(_endpointPolicy.PrimaryAddress);
             TimeSpan effectiveTimeout = commandTimeout ?? _commandTimeout;
@@ -221,6 +234,7 @@ public sealed class DotRocksFlightSqlDataSource : IDisposable, IAsyncDisposable
         {
             ThrowIfDisposed();
             ArgumentException.ThrowIfNullOrWhiteSpace(sql);
+            ValidateSessionMutation(sql);
             FlightSqlConnection connection = GetConnection(_endpointPolicy.PrimaryAddress);
             TimeSpan effectiveTimeout = commandTimeout ?? _commandTimeout;
             using CancellationTokenSource timeout = CreateTimeout(
@@ -272,6 +286,16 @@ public sealed class DotRocksFlightSqlDataSource : IDisposable, IAsyncDisposable
         TimeSpan? commandTimeout,
         CancellationToken cancellationToken
     ) => ExecuteUpdateAsync(sql, Transaction.NoTransaction, commandTimeout, cancellationToken);
+
+    private void ValidateSessionMutation(string sql)
+    {
+        if (!_allowSessionMutation && SqlStatementClassifier.IsSessionMutating(sql))
+        {
+            throw new DotRocksUnsupportedFeatureException(
+                "Session-mutating SQL requires a dedicated DotRocksFlightSqlDbConnection(options). Shared Flight SQL data sources cannot change session state."
+            );
+        }
+    }
 
     internal Task CommitTransactionAsync(
         Transaction transaction,

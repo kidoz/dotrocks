@@ -61,6 +61,13 @@ read fails only when no trusted location remains. Dispose each record batch afte
 
 ## Sessions and disposal
 
+Shared `DotRocksFlightSqlDataSource` instances reject session-mutating SQL before sending an RPC.
+This applies to direct `ExecuteQueryAsync`/`ExecuteUpdateAsync` calls and connections created with
+`CreateConnection()`. Examples include `SET`, `USE`, `EXECUTE AS`, SQL prepared-statement controls,
+temporary-table DDL, and raw transaction-control statements. Use a dedicated
+`DotRocksFlightSqlDbConnection(options)` for session changes, and the transaction APIs for
+transaction control. Dedicated sessions remain subject to the server's supported Flight operations.
+
 StarRocks creates a frontend session for every authenticated call. DotRocks therefore exchanges the
 credentials once, during the Flight handshake, for a session bearer token that all later calls on
 that channel reuse, and releases the session with the Flight SQL `CloseSession` action on disposal.

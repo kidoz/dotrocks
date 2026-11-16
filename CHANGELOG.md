@@ -16,6 +16,8 @@ version is derived from the release tag at publish time.
   bounds the overall operation. Load and transaction timeout options remain server settings.
 - Retire pooled SQL sessions after impersonation, SQL prepared-statement controls, and
   temporary-table creation or deletion so session state cannot cross leases.
+- Reject session-mutating SQL on shared Flight SQL data sources, through both the Arrow
+  and ADO.NET APIs. Use a dedicated `DotRocksFlightSqlDbConnection(options)` for session changes.
 
 ## [1.6.1] - 2026-10-25
 

@@ -19,6 +19,57 @@ namespace DotRocks.FlightSql.IntegrationTests;
 public sealed class FlightSqlIntegrationTests
 {
     [Fact]
+    public async Task SharedSession_RejectsSettingChangesWhileDedicatedSessionCanChangeThem()
+    {
+        FlightSqlIntegrationEnvironment.SkipUnlessEnabled();
+        CancellationToken token = TestContext.Current.CancellationToken;
+        await using var source = new DotRocksFlightSqlDataSource(
+            FlightSqlIntegrationEnvironment.FlightOptions
+        );
+        await using var shared = source.CreateConnection();
+        await shared.OpenAsync(token).ConfigureAwait(true);
+        await using var sharedRead = shared.CreateCommand();
+        sharedRead.CommandText = "SELECT @@query_timeout";
+        object? initial = await sharedRead.ExecuteScalarAsync(token).ConfigureAwait(true);
+
+        await using var mutation = shared.CreateCommand();
+        mutation.CommandText = "SET query_timeout=123";
+        await Assert
+            .ThrowsAsync<DotRocksUnsupportedFeatureException>(() =>
+                mutation.ExecuteReaderAsync(token)
+            )
+            .ConfigureAwait(true);
+        await Assert
+            .ThrowsAsync<DotRocksUnsupportedFeatureException>(() =>
+                source.ExecuteQueryAsync("SET query_timeout=123", token)
+            )
+            .ConfigureAwait(true);
+
+        await using var dedicated = new DotRocksFlightSqlDbConnection(
+            FlightSqlIntegrationEnvironment.FlightOptions
+        );
+        await dedicated.OpenAsync(token).ConfigureAwait(true);
+        await using var command = dedicated.CreateCommand();
+        // This StarRocks transport accepts SET through query discovery, not DoPut updates.
+        command.CommandText = "SET query_timeout=123";
+        await using (
+            DbDataReader reader = await command.ExecuteReaderAsync(token).ConfigureAwait(true)
+        )
+        {
+            while (await reader.ReadAsync(token).ConfigureAwait(true)) { }
+        }
+        command.CommandText = "SELECT @@query_timeout";
+        Assert.Equal(
+            123,
+            Convert.ToInt32(
+                await command.ExecuteScalarAsync(token).ConfigureAwait(true),
+                CultureInfo.InvariantCulture
+            )
+        );
+        Assert.Equal(initial, await sharedRead.ExecuteScalarAsync(token).ConfigureAwait(true));
+    }
+
+    [Fact]
     public async Task ScalarNullAndSqlErrors_PreserveContractsAgainstStarRocks()
     {
         FlightSqlIntegrationEnvironment.SkipUnlessEnabled();

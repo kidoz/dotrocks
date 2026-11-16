@@ -167,3 +167,9 @@ not a public issue. Include the affected version, a description, and reproductio
 - [Stream Load](stream-load.md)
 - [Observability](observability.md)
 - [`SECURITY.md`](https://github.com/kidoz/dotrocks/blob/main/SECURITY.md)
+
+## SQL session isolation and parameter quoting
+
+Pooled SQL connections are retired after detected session mutations, including impersonation,
+SQL prepared-statement controls, and temporary-table DDL. Shared Flight data sources reject
+these mutations before dispatch; use a dedicated Flight connection for session changes.

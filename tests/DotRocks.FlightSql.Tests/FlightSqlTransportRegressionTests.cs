@@ -15,6 +15,89 @@ public sealed partial class FlightSqlTransportTests
 {
     private const string SensitiveValue = "synthetic-private-value";
 
+    [Theory]
+    [InlineData("SET query_timeout=123")]
+    [InlineData("USE private_database")]
+    [InlineData("EXECUTE AS alice WITH NO REVERT")]
+    [InlineData("CREATE TEMPORARY TABLE private_table (id INT)")]
+    [SuppressMessage(
+        "Security",
+        "CA2100:Review SQL queries for security vulnerabilities",
+        Justification = "Fixed theory inputs exercise session mutation rejection."
+    )]
+    public async Task SharedSession_RejectsMutationsAcrossEverySqlEntryPoint(string sql)
+    {
+        using IHost host = CreateHost();
+        CancellationToken token = TestContext.Current.CancellationToken;
+        await host.StartAsync(token).ConfigureAwait(true);
+        try
+        {
+            await using var source = new DotRocksFlightSqlDataSource(
+                new DotRocksFlightSqlOptions(GetServerAddress(host), "root", "secret")
+                {
+                    AllowInsecureTransport = true,
+                }
+            );
+            await Assert
+                .ThrowsAsync<DotRocksUnsupportedFeatureException>(() =>
+                    source.ExecuteQueryAsync(sql, token)
+                )
+                .ConfigureAwait(true);
+            await Assert
+                .ThrowsAsync<DotRocksUnsupportedFeatureException>(() =>
+                    source.ExecuteUpdateAsync(sql, token)
+                )
+                .ConfigureAwait(true);
+            await using var connection = source.CreateConnection();
+            await connection.OpenAsync(token).ConfigureAwait(true);
+            await using var command = connection.CreateCommand();
+            command.CommandText = sql;
+            await Assert
+                .ThrowsAsync<DotRocksUnsupportedFeatureException>(() =>
+                    command.ExecuteNonQueryAsync(token)
+                )
+                .ConfigureAwait(true);
+            await Assert
+                .ThrowsAsync<DotRocksUnsupportedFeatureException>(() =>
+                    command.ExecuteReaderAsync(token)
+                )
+                .ConfigureAwait(true);
+            Assert.Equal(0, GetQueryCapture(host).Handshakes);
+            Assert.Empty(GetQueryCapture(host).LastQuery);
+            Assert.Empty(GetQueryCapture(host).LastUpdate);
+        }
+        finally
+        {
+            await host.StopAsync(token).ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
+    public async Task OwnedSession_AllowsSessionMutation()
+    {
+        using IHost host = CreateHost();
+        CancellationToken token = TestContext.Current.CancellationToken;
+        await host.StartAsync(token).ConfigureAwait(true);
+        try
+        {
+            await using var connection = new DotRocksFlightSqlDbConnection(
+                new DotRocksFlightSqlOptions(GetServerAddress(host), "root", "secret")
+                {
+                    AllowInsecureTransport = true,
+                }
+            );
+            await connection.OpenAsync(token).ConfigureAwait(true);
+            await using var command = connection.CreateCommand();
+            command.CommandText = "SET query_timeout=123";
+            await command.ExecuteNonQueryAsync(token).ConfigureAwait(true);
+            Assert.Equal("SET query_timeout=123", GetQueryCapture(host).LastUpdate);
+        }
+        finally
+        {
+            await host.StopAsync(token).ConfigureAwait(true);
+        }
+    }
+
     [Fact]
     public async Task MigrationHistory_ClonesCredentialedFlightConnection()
     {

@@ -444,7 +444,7 @@ public sealed class DotRocksFlightSqlDbConnection : DbConnection, ICloneable
     )
     {
         ArgumentNullException.ThrowIfNull(options);
-        return new DotRocksFlightSqlDataSource(options);
+        return new DotRocksFlightSqlDataSource(options, allowSessionMutation: true);
     }
 
     private static void ValidateFallbackMode(DotRocksFlightSqlFallbackMode fallbackMode)
