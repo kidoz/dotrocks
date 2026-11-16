@@ -183,3 +183,7 @@ convention), and the record `ToString()` redacts it as `***`. See
 - [Stream Load](stream-load.md)
 - [EF Core entity mapping](ef-core-entity-mapping.md)
 - [EF Core query translation](ef-core-queries.md)
+
+Aliases are alternative spellings, not precedence rules. Supplying two distinct aliases for the
+same setting (such as `Host` and `Server`, or `SslMode` and `Ssl Mode`) raises an argument error,
+even when their values agree. IPv6 server literals also produce a valid default Stream Load URI.

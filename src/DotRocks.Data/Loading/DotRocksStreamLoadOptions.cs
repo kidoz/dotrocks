@@ -142,12 +142,12 @@ public sealed class DotRocksStreamLoadOptions
 
     private void Validate()
     {
-        ValidateHeaderValue(Label);
-        ValidateHeaderValue(Columns);
-        ValidateHeaderValue(Where);
-        ValidateHeaderValue(ColumnSeparator);
-        ValidateHeaderValue(RowDelimiter);
-        ValidateHeaderValue(JsonPaths);
+        StreamLoadHeaderValues.Validate(Label, nameof(Label));
+        StreamLoadHeaderValues.Validate(Columns, nameof(Columns));
+        StreamLoadHeaderValues.Validate(Where, nameof(Where));
+        StreamLoadHeaderValues.Validate(ColumnSeparator, nameof(ColumnSeparator));
+        StreamLoadHeaderValues.Validate(RowDelimiter, nameof(RowDelimiter));
+        StreamLoadHeaderValues.Validate(JsonPaths, nameof(JsonPaths));
         ValidatePartitions();
 
         if (
@@ -187,7 +187,7 @@ public sealed class DotRocksStreamLoadOptions
                 throw new ArgumentException("Stream Load partition names must not contain ','.");
             }
 
-            ValidateHeaderValue(partition);
+            StreamLoadHeaderValues.Validate(partition, nameof(Partitions));
         }
     }
 
@@ -202,22 +202,6 @@ public sealed class DotRocksStreamLoadOptions
     }
 
     private static string FormatBoolean(bool value) => value ? "true" : "false";
-
-    private static void ValidateHeaderValue(string? value)
-    {
-        if (value is null)
-        {
-            return;
-        }
-
-        if (
-            value.Contains('\r', StringComparison.Ordinal)
-            || value.Contains('\n', StringComparison.Ordinal)
-        )
-        {
-            throw new ArgumentException("Stream Load header values must not contain CR or LF.");
-        }
-    }
 }
 
 internal enum DotRocksStreamLoadFormat

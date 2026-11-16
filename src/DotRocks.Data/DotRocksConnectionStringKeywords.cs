@@ -89,6 +89,21 @@ internal static class DotRocksConnectionStringKeywords
     /// </summary>
     public static void ValidateKeywords(DbConnectionStringBuilder builder)
     {
+        foreach ((string canonical, ImmutableArray<string> aliases) in AliasesByCanonical)
+        {
+            // Some historical spellings differ only by case; those are one key to the BCL parser.
+            int count = aliases
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count(builder.ContainsKey);
+            if (count > 1)
+            {
+                throw new ArgumentException(
+                    $"Multiple aliases for '{canonical}' are not supported.",
+                    nameof(builder)
+                );
+            }
+        }
+
         foreach (string keyword in builder.Keys.Cast<string>())
         {
             if (!AcceptedSpellings.Contains(keyword))

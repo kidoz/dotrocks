@@ -177,3 +177,10 @@ these mutations before dispatch; use a dedicated Flight connection for session c
 The client parameter lexer follows the tested default StarRocks string-literal syntax: single
 and double quotes support backslash escapes and doubled delimiters; backtick identifiers use
 doubled backticks. Alternative SQL modes that change quoting semantics are not modeled.
+
+Stream Load destination checks also reject shared-address space, multicast, reserved IPv4
+ranges, and special destinations embedded in well-known NAT64 or 6to4 addresses. Public versus
+private endpoint policy still applies after decoding those embedded addresses. These checks use
+the [IANA IPv4 special-purpose registry](https://www.iana.org/assignments/iana-ipv4-special-registry/)
+and the address formats in [RFC 6052](https://www.rfc-editor.org/rfc/rfc6052)
+and [RFC 3056](https://www.rfc-editor.org/rfc/rfc3056).

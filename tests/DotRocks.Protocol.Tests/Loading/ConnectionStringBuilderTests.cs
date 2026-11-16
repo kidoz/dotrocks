@@ -8,6 +8,33 @@ namespace DotRocks.Protocol.Tests.Loading;
 
 public sealed class ConnectionStringBuilderTests
 {
+    [Theory]
+    [InlineData("Server=::1", "http://[::1]:8030/")]
+    [InlineData(
+        "Server=::1;Stream Load Endpoint=https://example.test:8443",
+        "https://example.test:8443/"
+    )]
+    public void Ipv6Server_ParsesWithoutBreakingStreamLoadDefault(string value, string endpoint)
+    {
+        Assert.Equal(
+            endpoint,
+            DotRocksConnectionOptions.Parse(value).StreamLoadEndpoint.AbsoluteUri
+        );
+    }
+
+    [Theory]
+    [InlineData("Ssl Mode=Disabled;SslMode=Required")]
+    [InlineData("Server=a;Host=b")]
+    [InlineData("Password=private-one;Pwd=private-two")]
+    [InlineData("Connection Timeout=1;Timeout=2")]
+    public void ConflictingAliases_AreRejectedWithoutEchoingValues(string value)
+    {
+        var exception = Assert.Throws<ArgumentException>(() =>
+            DotRocksConnectionOptions.Parse(value)
+        );
+        Assert.DoesNotContain("private-", exception.ToString(), StringComparison.Ordinal);
+    }
+
     [Fact]
     public void SslMode_DefaultsToPreferredAcrossConstructionAndParsing()
     {

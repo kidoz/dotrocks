@@ -155,6 +155,9 @@ Cancellation still raises `OperationCanceledException`; a dispatched transaction
 instead be reported as in doubt, as described below. Cancellation does not prove the load failed.
 Set an explicit `Label` when you need to reconcile an interrupted load, since an automatically
 generated label is not currently exposed on cancellation or transport failure.
+User-supplied HTTP header values must be printable ASCII; invalid values fail before dispatch
+with the option name. Encode separators using the StarRocks header escape syntax. Database and
+table path segments reject controls, slashes, backslashes, and standalone `.` or `..`.
 
 ## Transactional Stream Load (two-phase)
 

@@ -15,6 +15,39 @@ namespace DotRocks.Protocol.Tests.Loading;
 
 public sealed class DotRocksStreamLoadClientTests
 {
+    [Theory]
+    [InlineData(".")]
+    [InlineData("..")]
+    [InlineData("bad\u0000name")]
+    public async Task Load_RejectsUnsafePathIdentifiersBeforeDispatch(string name)
+    {
+        using var handler = new RecordingHandler(static (_, _) => Task.FromResult(JsonResponse()));
+        using var http = new HttpClient(handler);
+        using var client = CreateClient(http);
+        using var payload = new MemoryStream([1]);
+        await Assert
+            .ThrowsAsync<ArgumentException>(() =>
+                client.LoadCsvAsync(
+                    name,
+                    "table",
+                    payload,
+                    cancellationToken: TestContext.Current.CancellationToken
+                )
+            )
+            .ConfigureAwait(true);
+        await Assert
+            .ThrowsAsync<ArgumentException>(() =>
+                client.LoadCsvAsync(
+                    "database",
+                    name,
+                    payload,
+                    cancellationToken: TestContext.Current.CancellationToken
+                )
+            )
+            .ConfigureAwait(true);
+        Assert.Null(handler.Request);
+    }
+
     [Fact]
     public void DefaultTransport_DoesNotImposeAnUploadDeadline()
     {
@@ -787,6 +820,11 @@ public sealed class DotRocksStreamLoadClientTests
     [InlineData("169.254.169.254")] // IPv4 link-local / cloud metadata
     [InlineData("224.0.0.1")] // IPv4 multicast
     [InlineData("0.0.0.0")] // unspecified
+    [InlineData("0.1.2.3")]
+    [InlineData("100.100.100.200")]
+    [InlineData("255.255.255.255")]
+    [InlineData("64:ff9b::a9fe:a9fe")]
+    [InlineData("2002:a9fe:a9fe::1")]
     [InlineData("::ffff:169.254.169.254")] // IPv4-mapped IPv6 link-local
     [InlineData("fd00:ec2::254")] // IPv6 unique-local: AWS IMDS metadata endpoint
     [InlineData("fc00::1")] // IPv6 unique-local

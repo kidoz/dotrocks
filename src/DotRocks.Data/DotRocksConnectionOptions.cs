@@ -120,11 +120,12 @@ internal sealed record DotRocksConnectionOptions(
             "Ssl Revocation Check",
             DefaultSslRevocationMode
         );
-        Uri streamLoadEndpoint = GetUri(
-            builder,
-            "Stream Load Endpoint",
-            BuildDefaultStreamLoadEndpoint(server)
-        );
+        Uri streamLoadEndpoint = TryGetValue(builder, "Stream Load Endpoint", out object? endpoint)
+            ? new Uri(
+                Convert.ToString(endpoint, CultureInfo.InvariantCulture) ?? string.Empty,
+                UriKind.Absolute
+            )
+            : BuildDefaultStreamLoadEndpoint(server);
         bool allowInsecureStreamLoad = GetBoolean(builder, "Allow Insecure Stream Load", false);
         int maxConnectionRetries = GetInt32(
             builder,
@@ -373,7 +374,7 @@ internal sealed record DotRocksConnectionOptions(
     }
 
     internal static Uri BuildDefaultStreamLoadEndpoint(string server) =>
-        new($"http://{server}:{DefaultStreamLoadPort}", UriKind.Absolute);
+        new UriBuilder(Uri.UriSchemeHttp, server, DefaultStreamLoadPort).Uri;
 
     // Serializes this record back to its canonical connection-string form; only the password
     // rendering varies by caller (real value, "***", or omitted), so it is the single parameter.

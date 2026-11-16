@@ -867,6 +867,23 @@ public sealed class DotRocksStreamLoadClient : IDisposable
         {
             address = address.MapToIPv4();
         }
+        else if (address.AddressFamily == AddressFamily.InterNetworkV6)
+        {
+            byte[] bytes = address.GetAddressBytes();
+            // RFC 6052 well-known NAT64 prefix and RFC 3056 6to4 embed an IPv4 destination.
+            if (
+                bytes
+                    .AsSpan(0, 12)
+                    .SequenceEqual(new byte[] { 0, 0x64, 0xff, 0x9b, 0, 0, 0, 0, 0, 0, 0, 0 })
+            )
+            {
+                return ClassifyAddress(new IPAddress(bytes.AsSpan(12, 4)));
+            }
+            if (bytes[0] == 0x20 && bytes[1] == 0x02)
+            {
+                return ClassifyAddress(new IPAddress(bytes.AsSpan(2, 4)));
+            }
+        }
 
         if (IPAddress.IsLoopback(address))
         {
@@ -896,7 +913,11 @@ public sealed class DotRocksStreamLoadClient : IDisposable
             // IPv4 link-local 169.254.0.0/16 (includes the 169.254.169.254 cloud-metadata address)
             // and multicast 224.0.0.0/4. RFC 1918 private ranges are deliberately NOT blocked,
             // since real StarRocks BE nodes commonly live on private addresses.
-            if ((octets[0] == 169 && octets[1] == 254) || octets[0] is >= 224 and <= 239)
+            if (
+                (octets[0] == 169 && octets[1] == 254)
+                || octets[0] is 0 or >= 224
+                || (octets[0] == 100 && octets[1] is >= 64 and <= 127)
+            )
             {
                 return HostClass.Blocked;
             }
@@ -928,9 +949,17 @@ public sealed class DotRocksStreamLoadClient : IDisposable
             throw new ArgumentException("Value must not be empty.", parameterName);
         }
 
-        if (value.Contains('/', StringComparison.Ordinal))
+        if (
+            value is "." or ".."
+            || value.Any(char.IsControl)
+            || value.Contains('/', StringComparison.Ordinal)
+            || value.Contains('\\', StringComparison.Ordinal)
+        )
         {
-            throw new ArgumentException("Value must not contain path separators.", parameterName);
+            throw new ArgumentException(
+                "Value must not contain path separators, dot segments, or control characters.",
+                parameterName
+            );
         }
     }
 

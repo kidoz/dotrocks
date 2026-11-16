@@ -44,7 +44,7 @@ public sealed class DotRocksStreamLoadTransactionOptions
             );
         }
 
-        ValidateHeaderValue(Label);
+        StreamLoadHeaderValues.Validate(Label, nameof(Label));
         return Label;
     }
 
@@ -92,6 +92,7 @@ public sealed class DotRocksStreamLoadTransactionOptions
 
     private Dictionary<string, string> BuildCommonHeaders(string databaseName)
     {
+        StreamLoadHeaderValues.Validate(databaseName, nameof(databaseName));
         var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["label"] = GetRequiredLabel(),
@@ -108,7 +109,7 @@ public sealed class DotRocksStreamLoadTransactionOptions
 
     private static void AddHeader(Dictionary<string, string> headers, string name, string value)
     {
-        ValidateHeaderValue(value);
+        StreamLoadHeaderValues.Validate(value, name);
         headers[name] = value;
     }
 
@@ -125,18 +126,5 @@ public sealed class DotRocksStreamLoadTransactionOptions
 
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(value.Value, TimeSpan.Zero);
         headers[name] = ((int)value.Value.TotalSeconds).ToString(CultureInfo.InvariantCulture);
-    }
-
-    private static void ValidateHeaderValue(string value)
-    {
-        if (
-            value.Contains('\r', StringComparison.Ordinal)
-            || value.Contains('\n', StringComparison.Ordinal)
-        )
-        {
-            throw new ArgumentException(
-                "Stream Load transaction header values must not contain CR or LF."
-            );
-        }
     }
 }
