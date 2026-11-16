@@ -8,6 +8,8 @@ version is derived from the release tag at publish time.
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-11-16
+
 ### Added
 - Support .NET 11 alongside .NET 10 across runtime packages, samples, and test suites.
   Packages include `net10.0` and `net11.0` assets; analyzer assemblies retain `netstandard2.0`.
@@ -728,7 +730,8 @@ version is derived from the release tag at publish time.
 - Stream Load refuses to forward credentials over a downgraded (HTTPS→HTTP) redirect.
 - NuGet vulnerability auditing and CodeQL analysis in CI.
 
-[Unreleased]: https://github.com/kidoz/dotrocks/compare/v1.6.2...HEAD
+[Unreleased]: https://github.com/kidoz/dotrocks/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/kidoz/dotrocks/compare/v1.6.2...v1.7.0
 [1.6.2]: https://github.com/kidoz/dotrocks/compare/v1.6.1...v1.6.2
 [1.6.1]: https://github.com/kidoz/dotrocks/compare/v1.6.0...v1.6.1
 [1.6.0]: https://github.com/kidoz/dotrocks/compare/v1.5.5...v1.6.0
