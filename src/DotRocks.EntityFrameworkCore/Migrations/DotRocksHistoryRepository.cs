@@ -19,8 +19,8 @@ internal sealed class DotRocksHistoryRepository(HistoryRepositoryDependencies de
     : HistoryRepository(dependencies),
         IHistoryRepository
 {
-    // StarRocks documents 1049 as "an invalid database is specified" and refuses login when the
-    // connection's default database does not exist.
+    // StarRocks uses both the MySQL-compatible 1049 and native 5501 (observed on 4.1.6)
+    // for an unknown default database. Authentication and other errors must still propagate.
     private const int UnknownDatabaseErrorCode = 1049;
 
     public override LockReleaseBehavior LockReleaseBehavior => LockReleaseBehavior.Explicit;
@@ -181,7 +181,7 @@ internal sealed class DotRocksHistoryRepository(HistoryRepositoryDependencies de
     // the migrator treat applied migrations as pending, and StarRocks has no unique constraint to
     // stop that re-apply.
     internal static bool IsUnknownDatabase(int? serverErrorCode) =>
-        serverErrorCode == UnknownDatabaseErrorCode;
+        serverErrorCode is UnknownDatabaseErrorCode or 5501;
 
     private static bool TryOpen(DbConnection connection)
     {

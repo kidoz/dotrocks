@@ -11,6 +11,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Migrations.Design;
 using Microsoft.EntityFrameworkCore.Migrations.Internal;
 using Microsoft.EntityFrameworkCore.Migrations.Operations;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -691,9 +692,11 @@ public sealed class DotRocksMigrationsTests
 
     [Theory]
     [InlineData(1049, true)]
+    [InlineData(5501, true)]
+    [InlineData(5502, false)]
     [InlineData(1045, false)]
     [InlineData(null, false)]
-    public void HistoryRepository_IsUnknownDatabase_MatchesOnlyError1049(
+    public void HistoryRepository_IsUnknownDatabase_MatchesOnlyMissingDatabaseCodes(
         int? serverErrorCode,
         bool isUnknownDatabase
     )
@@ -702,6 +705,29 @@ public sealed class DotRocksMigrationsTests
             isUnknownDatabase,
             DotRocksHistoryRepository.IsUnknownDatabase(serverErrorCode)
         );
+    }
+
+    [Fact]
+    [SuppressMessage(
+        "Usage",
+        "CA1849:Call async methods when in an async method",
+        Justification = "Tests synchronous and asynchronous database existence contracts."
+    )]
+    public async Task DatabaseCreator_Exists_PropagatesConnectionFailures()
+    {
+        var optionsBuilder = new DbContextOptionsBuilder<UnitContext>();
+        optionsBuilder.UseStarRocks(
+            "Server=127.0.0.1;Port=1;User ID=root;Connection Timeout=1;Pooling=false"
+        );
+        using var context = new UnitContext(optionsBuilder.Options);
+        var creator = context.GetService<IRelationalDatabaseCreator>();
+        Assert.Throws<DotRocksException>(() => creator.Exists());
+        await Assert
+            .ThrowsAsync<DotRocksException>(() =>
+                creator.ExistsAsync(TestContext.Current.CancellationToken)
+            )
+            .ConfigureAwait(true);
+        Assert.False(creator.CanConnect());
     }
 
     [Fact]

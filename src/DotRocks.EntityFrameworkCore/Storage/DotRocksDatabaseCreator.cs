@@ -1,6 +1,7 @@
 using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
 using DotRocks.Data;
+using DotRocks.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage;
 
 namespace DotRocks.EntityFrameworkCore.Storage;
@@ -14,7 +15,9 @@ internal sealed class DotRocksDatabaseCreator(IRelationalConnection connection)
     : IDatabaseCreator,
         IRelationalDatabaseCreator
 {
-    public bool CanConnect()
+    public bool CanConnect() => Probe(existenceOnly: false);
+
+    private bool Probe(bool existenceOnly)
     {
         try
         {
@@ -26,13 +29,17 @@ internal sealed class DotRocksDatabaseCreator(IRelationalConnection connection)
 
             return true;
         }
-        catch (Exception ex) when (IsConnectionFailure(ex))
+        catch (Exception ex)
+            when (IsConnectionFailure(ex) && (!existenceOnly || IsMissingDatabase(ex)))
         {
             return false;
         }
     }
 
-    public async Task<bool> CanConnectAsync(CancellationToken cancellationToken = default)
+    public Task<bool> CanConnectAsync(CancellationToken cancellationToken = default) =>
+        ProbeAsync(false, cancellationToken);
+
+    private async Task<bool> ProbeAsync(bool existenceOnly, CancellationToken cancellationToken)
     {
         try
         {
@@ -46,7 +53,8 @@ internal sealed class DotRocksDatabaseCreator(IRelationalConnection connection)
 
             return true;
         }
-        catch (Exception ex) when (IsConnectionFailure(ex))
+        catch (Exception ex)
+            when (IsConnectionFailure(ex) && (!existenceOnly || IsMissingDatabase(ex)))
         {
             return false;
         }
@@ -92,14 +100,15 @@ internal sealed class DotRocksDatabaseCreator(IRelationalConnection connection)
         throw CreateUnsupportedException();
     }
 
-    // StarRocks rejects login when the connection's default database does not exist, so for a
-    // database-scoped connection "can connect" is equivalent to "the database exists". Probing
-    // information_schema is both unnecessary and unsafe here (it would issue a command that
-    // violates the active migration transaction's command-enlistment guard).
-    public bool Exists() => CanConnect();
+    // Only an unknown database means absence; authentication and transport failures must remain errors.
+    public bool Exists() => Probe(existenceOnly: true);
 
     public Task<bool> ExistsAsync(CancellationToken cancellationToken = default) =>
-        CanConnectAsync(cancellationToken);
+        ProbeAsync(true, cancellationToken);
+
+    private static bool IsMissingDatabase(Exception exception) =>
+        exception is DotRocksException error
+        && DotRocksHistoryRepository.IsUnknownDatabase(error.ServerErrorCode);
 
     public string GenerateCreateScript() => throw CreateUnsupportedException();
 
