@@ -8,6 +8,10 @@ version is derived from the release tag at publish time.
 
 ## [Unreleased]
 
+### Fixed
+- Restore physical connection pooling after canceling a command and reopening the same
+  `DotRocksConnection` instance.
+
 ## [1.6.1] - 2026-10-25
 
 ### Fixed

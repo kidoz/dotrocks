@@ -186,6 +186,9 @@ public sealed class DotRocksConnection : DbConnection, ICloneable
             throw new InvalidOperationException("The connection is already open.");
         }
 
+        // Discard belongs to the previous lease. An aborted command must not poison every
+        // subsequent open/close cycle on this logical connection.
+        Interlocked.Exchange(ref _discardPhysicalConnection, 0);
         _state = ConnectionState.Connecting;
         using var timeout = new CancellationTokenSource(_options.ConnectionTimeout);
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(

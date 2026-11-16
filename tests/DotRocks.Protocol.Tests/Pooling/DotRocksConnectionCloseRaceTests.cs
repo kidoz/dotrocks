@@ -8,6 +8,83 @@ namespace DotRocks.Protocol.Tests.Pooling;
 
 public sealed class DotRocksConnectionCloseRaceTests
 {
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ReopenAfterCancellation_ReusesSubsequentCleanLease(bool pooling)
+    {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var server = FakeStarRocksServer.Start(
+            async stream =>
+            {
+                await FakeStarRocksServer.CompleteAuthenticationAsync(stream).ConfigureAwait(true);
+                await FakeStarRocksServer
+                    .ReadCommandAndStallMidResultSetAsync(stream, release.Task, "1")
+                    .ConfigureAwait(true);
+            },
+            ServeCleanLeaseAsync,
+            HoldConnectionOpenAsync
+        );
+        string connectionString =
+            server.ConnectionString + $";Pooling={pooling};Maximum Pool Size=1";
+        DotRocksConnectionOptions options = DotRocksConnectionOptions.Parse(connectionString);
+        try
+        {
+            using var connection = new DotRocksConnection(connectionString);
+            await connection.OpenAsync(ct).ConfigureAwait(true);
+            using (var command = connection.CreateCommand())
+            {
+                command.CommandText = "SELECT value FROM stalled";
+                command.CommandTimeout = 0;
+                using var reader = await command.ExecuteReaderAsync(ct).ConfigureAwait(true);
+                Assert.True(await reader.ReadAsync(ct).ConfigureAwait(true));
+                Task<bool> stalledRead = reader.ReadAsync(ct);
+                command.Cancel();
+                await Assert
+                    .ThrowsAnyAsync<OperationCanceledException>(() => stalledRead)
+                    .ConfigureAwait(true);
+            }
+            release.TrySetResult();
+
+            await connection.OpenAsync(ct).ConfigureAwait(true);
+            using (var command = connection.CreateCommand())
+            {
+                command.CommandText = "SELECT 1";
+                Assert.Equal("1", await command.ExecuteScalarAsync(ct).ConfigureAwait(true));
+            }
+            await connection.CloseAsync().ConfigureAwait(true);
+            if (pooling)
+            {
+                Assert.Equal(1, DotRocksConnectionPool.GetPool(options).IdleCount);
+            }
+            await connection.OpenAsync(ct).ConfigureAwait(true);
+            await connection.CloseAsync().ConfigureAwait(true);
+            Assert.Equal(pooling ? 2 : 3, server.ConnectionCount);
+        }
+        finally
+        {
+            release.TrySetResult();
+            DotRocksConnectionPool.Clear(options);
+        }
+    }
+
+    private static async Task ServeCleanLeaseAsync(NetworkStream stream)
+    {
+        await FakeStarRocksServer.CompleteAuthenticationAsync(stream).ConfigureAwait(true);
+        await FakeStarRocksServer
+            .ReadCommandAndReplyResultSetAsync(stream, "1")
+            .ConfigureAwait(true);
+        // Keep the socket alive so liveness polling cannot mask the regression.
+        var buffer = new byte[1];
+        Assert.Equal(
+            0,
+            await stream
+                .ReadAsync(buffer, TestContext.Current.CancellationToken)
+                .ConfigureAwait(true)
+        );
+    }
+
     [Fact]
     public async Task CloseAndAbort_ConcurrentCalls_ReturnThePoolLeaseOnce()
     {
