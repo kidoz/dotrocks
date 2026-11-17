@@ -436,7 +436,25 @@ internal sealed class FakeStarRocksServer : IDisposable
                         "The fake StarRocks server received an unexpected connection."
                     );
             using NetworkStream stream = client.GetStream();
-            await handler(stream).ConfigureAwait(true);
+            try
+            {
+                await handler(stream).ConfigureAwait(true);
+            }
+            catch (Exception exception) when (IsExpectedClientDisconnect(exception))
+            {
+                // A test may intentionally close a connection while its result set is still being
+                // written. That surfaces as a broken pipe or reset; it is client teardown, not a
+                // scripted handler failure. Keep accepting so later connections are still served.
+            }
         }
     }
+
+    // Only connection-level teardown is suppressed here. Assertion and InvalidOperationException
+    // failures raised by scripted handlers still fault the accept loop and surface from Dispose.
+    private static bool IsExpectedClientDisconnect(Exception exception) =>
+        exception
+            is IOException
+                or SocketException
+                or ObjectDisposedException
+                or OperationCanceledException;
 }
